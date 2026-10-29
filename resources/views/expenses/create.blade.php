@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Add expense')">
-    <x-page-head :title="__('Add expense')" :subtitle="__('Log each spend with who was paid and why. Spends within the daily limit are approved straight away; anything over goes to the owner.')" />
+    <x-page-head :back="route('expenses.index')" :title="__('Add expense')" :subtitle="__('Log each spend with who was paid and why. Spends within the daily limit are approved straight away; anything over goes to the owner.')" />
     <form method="POST" action="{{ route('expenses.store') }}" enctype="multipart/form-data" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">

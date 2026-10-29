@@ -54,6 +54,11 @@ class Purchase extends Model
             : null;
     }
 
+    public function resendUrl(): string
+    {
+        return route('purchases.create');
+    }
+
     public function approvalKind(): string
     {
         return __('Purchase');

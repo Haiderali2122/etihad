@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Give loan')">
-    <x-page-head :title="__('Give loan')" :subtitle="__('Repaid from salary in monthly instalments. Any month\'s instalment can be changed on that month\'s payroll.')" />
+    <x-page-head :back="($employeeId ? route('employees.show', $employeeId) : route('loans.index'))" :title="__('Give loan')" :subtitle="__('Repaid from salary in monthly instalments. Any month\'s instalment can be changed on that month\'s payroll.')" />
     <form method="POST" action="{{ route('loans.store') }}" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">
@@ -11,7 +11,7 @@
             <div class="field"><label>{{ __('Repaid in') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" id="months" style="font-size:22px">—</div></div></div>
             <x-field name="note" :label="__('Reason / note')" full />
         </div></div>
-        <div class="form-actions"><a class="btn" href="{{ route('loans.index') }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save loan') }}</button></div>
+        <div class="form-actions"><a class="btn" href="{{ ($employeeId ? route('employees.show', $employeeId) : route('loans.index')) }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save loan') }}</button></div>
     </form>
     @push('scripts')
         <script>

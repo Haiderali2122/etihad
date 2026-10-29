@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Foreman advance sheet')">
-    <x-page-head :title="__('Foreman advance sheet')" :subtitle="__('Cash given to a foreman. List who he handed it to; each amount becomes that person\'s advance. Whatever is left stays as the foreman\'s own advance.')" />
+    <x-page-head :back="route('salary-advances.index')" :title="__('Foreman advance sheet')" :subtitle="__('Cash given to a foreman. List who he handed it to; each amount becomes that person\'s advance. Whatever is left stays as the foreman\'s own advance.')" />
 
     @if ($foremen->isEmpty())
         <div class="card"><div class="empty"><b>{{ __('No foremen yet') }}</b>{{ __('Tick “Foreman” on an employee\'s record first.') }}</div></div>

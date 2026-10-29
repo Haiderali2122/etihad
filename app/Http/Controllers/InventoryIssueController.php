@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Http\Requests\StoreInventoryIssueRequest;
+use App\Models\Employee;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
@@ -22,16 +24,49 @@ class InventoryIssueController extends Controller
                 ->filter(fn (InventoryCategory $c) => $c->items->isNotEmpty()),
             'itemId' => $request->integer('item') ?: null,
             'machines' => Machine::query()->orderBy('code')->get(),
+            'employees' => Employee::query()->active()->orderBy('name')->get(),
         ]);
     }
 
     public function store(StoreInventoryIssueRequest $request): RedirectResponse
     {
-        $issue = InventoryIssue::create($request->validated() + ['created_by' => $request->user()->id]);
+        $data = $request->validated();
+        if (blank($data['issued_to'] ?? null)) {
+            $data['issued_to'] = Employee::query()->whereKey($data['employee_id'])->value('name');
+        }
+
+        $issue = InventoryIssue::create($data + ['created_by' => $request->user()->id]);
         $issue->load('item');
 
-        return redirect()->route('inventory.index', ['tab' => 'issues'])->with('status', __(':qty :unit :item moved out to :to.', [
+        $message = __(':qty :unit :item moved out to :to.', [
             'qty' => InventoryItem::qty($issue->quantity), 'unit' => $issue->item->unit, 'item' => $issue->item->name, 'to' => $issue->issued_to,
+        ]);
+
+        return redirect()->route('inventory.index', ['tab' => 'issues'])
+            ->with('status', $issue->isPending() ? $message.' '.__('Sent to the owner for approval.') : $message);
+    }
+
+    /**
+     * End of shift: record what came back. It returns to stock; the rest counts as used.
+     */
+    public function settle(Request $request, InventoryIssue $inventoryIssue): RedirectResponse
+    {
+        abort_if($inventoryIssue->isSettled() || $inventoryIssue->status === ApprovalStatus::Rejected, 409, __('This entry is already closed.'));
+
+        $data = $request->validate([
+            'returned_quantity' => ['required', 'numeric', 'min:0', 'max:'.(float) $inventoryIssue->quantity],
+        ]);
+
+        $inventoryIssue->forceFill([
+            'returned_quantity' => $data['returned_quantity'],
+            'settled_at' => now(),
+            'settled_by' => $request->user()->id,
+        ])->save();
+        $inventoryIssue->load('item');
+
+        return back()->with('status', __(':used :unit :item used; :back :unit back in stock.', [
+            'used' => InventoryItem::qty($inventoryIssue->used()), 'back' => InventoryItem::qty($inventoryIssue->returned_quantity),
+            'unit' => $inventoryIssue->item->unit, 'item' => $inventoryIssue->item->name,
         ]));
     }
 }

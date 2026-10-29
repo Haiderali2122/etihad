@@ -4,6 +4,7 @@
     $qty = fn ($v) => \App\Models\InventoryItem::qty($v);
     $stages = WorkOrderStage::cases();
     $at = array_search($order->stage, $stages, true);
+    $blocker = $order->paper_issue_id && $next ? $order->advanceBlocker() : null;
 @endphp
 <x-layouts.app :title="$order->number">
     <x-page-head :title="$order->number.' · '.$order->bookName()" :subtitle="__(':copies copies · :forms forms · :where', ['copies' => number_format($order->copies), 'forms' => $qty($order->forms), 'where' => $order->printedAt()])">
@@ -14,8 +15,13 @@
                 @if (! $order->paper_issue_id)
                     <form method="POST" action="{{ route('work-orders.destroy', $order) }}" onsubmit="return confirm(@js(__('Delete :n?', ['n' => $order->number])))">@csrf @method('DELETE')<button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button></form>
                 @endif
-                @if ($next && $order->paper_issue_id)
-                    <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit"><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
+                @if ($order->paper_issue_id && (in_array($order->stage, [WorkOrderStage::Folding, WorkOrderStage::Binding], true) || ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'outsource')))
+                    <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit" @disabled($blocker)><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
+                @endif
+            @endcan
+            @can('dispatch.manage')
+                @if ($order->stage === WorkOrderStage::Ready && $order->canBeLoaded())
+                    <a class="btn primary" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>
                 @endif
             @endcan
         </x-slot:actions>
@@ -31,7 +37,24 @@
                 <div @class(['stg', 'done' => $order->paper_issue_id && $i < $at, 'on' => $i === $at])><i>{{ $i + 1 }}</i><span>{{ $s->label() }}</span></div>
             @endforeach
         </div>
+        @if ($blocker && ! ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'in_house'))
+            <div class="meta" style="margin-top:10px"><b>{{ __('Next step') }}:</b> {{ $blocker }}</div>
+        @endif
     </div></div>
+
+    @if ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'in_house' && $order->paper_issue_id)
+        @can('orders.manage')
+            <form method="POST" action="{{ route('work-orders.advance', $order) }}" class="card form-card">
+                @csrf @method('PATCH')
+                <div class="card-h"><div><h3>{{ __('Printing done') }}</h3><div class="sub">{{ __('Enter the good copies that came off :machine to move the order to folding.', ['machine' => $order->printedAt()]) }}</div></div></div>
+                <div class="card-b"><div class="form">
+                    <x-field name="printed_copies" type="number" min="1" :label="__('Printed copies')" :value="$order->copies" required />
+                    <x-field name="printed_on" type="date" :label="__('Printing finished on')" :value="today()->toDateString()" required />
+                </div></div>
+                <div class="form-actions"><button class="btn primary" type="submit"><x-icon name="chev" />{{ __('Move to :stage', ['stage' => WorkOrderStage::Folding->label()]) }}</button></div>
+            </form>
+        @endcan
+    @endif
 
     <div class="grid g4">
         <x-kpi icon="paper" :label="__('Paper')" :foot="$order->paperType->label().' · '.$order->party->name">{{ number_format($order->rims_needed) }}<small>{{ __('rims') }}</small></x-kpi>
@@ -47,6 +70,7 @@
                 <div class="stat-line"><span>{{ __('Ordered') }}</span><b>{{ $order->ordered_on->format('j M Y') }}</b></div>
                 <div class="stat-line"><span>{{ __('Due') }}</span><b>{{ $order->due_on?->format('j M Y') ?? '—' }}</b></div>
                 <div class="stat-line"><span>{{ __('Buyer') }}</span><b>{{ $order->buyer?->name ?? '—' }}</b></div>
+                @if ($order->printed_on)<div class="stat-line"><span>{{ __('Printed') }}</span><b>{{ $order->printed_on->format('j M Y') }} · {{ number_format($order->printed_copies) }} {{ __('copies') }}</b></div>@endif
                 <div class="stat-line"><span>{{ __('Paper issued') }}</span><b>{{ $order->paperIssue ? $order->paperIssue->issued_on->format('j M Y').' · '.number_format($order->paperIssue->quantity).' '.__('rims') : __('Not yet') }}</b></div>
                 <div class="stat-line"><span>{{ __('Entered by') }}</span><b>{{ $order->creator?->name ?? '—' }}</b></div>
                 @if ($order->note)<div class="stat-line"><span>{{ __('Note') }}</span><b>{{ $order->note }}</b></div>@endif
@@ -103,8 +127,8 @@
                     <td>{{ $job->job_on->format('j M Y') }}</td>
                     <td class="meta" dir="ltr">{{ $job->formula() }}</td>
                     <td class="r num"><b>Rs {{ number_format($job->amount) }}</b></td>
-                    <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge></td>
-                    <td class="r">@can('contractors.manage')@unless ($job->isDone())<form method="POST" action="{{ route('contractor-jobs.done', $job) }}">@csrf @method('PATCH')<button class="btn sm" type="submit"><x-icon name="check" />{{ __('Done') }}</button></form>@endunless @endcan</td>
+                    <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge>@if ($job->done_on)<div class="meta">{{ $job->done_on->format('j M Y') }}</div>@endif</td>
+                    <td class="r">@can('contractors.manage')@unless ($job->isDone())<form method="POST" action="{{ route('contractor-jobs.done', $job) }}" class="filters" style="flex-wrap:nowrap;justify-content:flex-end">@csrf @method('PATCH')<input class="select" type="date" name="done_on" value="{{ today()->toDateString() }}" min="{{ $job->job_on->toDateString() }}" max="{{ today()->toDateString() }}" required aria-label="{{ __('Finished on') }}"><button class="btn sm" type="submit"><x-icon name="check" />{{ __('Done') }}</button></form>@endunless @endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="7"><div class="empty">{{ __('No folding or binding given out yet') }}</div></td></tr>
@@ -115,7 +139,7 @@
 
     <div class="grid g-half">
         <div class="card">
-            <div class="card-h"><div><h3>{{ __('Dispatch') }}</h3></div>@can('dispatch.manage')@if ($order->paper_issue_id)<a class="btn sm" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>@endif @endcan</div>
+            <div class="card-h"><div><h3>{{ __('Dispatch') }}</h3></div>@can('dispatch.manage')@if ($order->canBeLoaded())<a class="btn sm" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>@endif @endcan</div>
             <div class="card-b">
                 @forelse ($order->dispatches as $d)
                     <a class="stat-line" href="{{ route('dispatches.show', $d) }}" style="color:inherit;text-decoration:none"><span>{{ $d->number }} · {{ $d->dispatched_on->format('j M') }} · {{ $d->buyer->name }}</span><b>{{ number_format($d->copies) }} {{ __('copies') }}</b></a>

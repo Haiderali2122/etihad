@@ -6,7 +6,7 @@
     <div class="grid g3">
         <x-kpi icon="users" tone="bad" :label="__('Owed on loans')">Rs {{ number_format($outstanding) }}</x-kpi>
         <x-kpi icon="cal" :label="__('Instalments due each month')">Rs {{ number_format($monthlyDue) }}</x-kpi>
-        <x-kpi icon="check" tone="good" :label="__('Open loans')">{{ $show === 'open' ? $loans->count() : '—' }}</x-kpi>
+        <x-kpi icon="check" tone="good" :label="__('Open loans')">{{ $show === 'open' ? $loans->filter(fn ($l) => $l->status->value === 'approved')->count() : '—' }}</x-kpi>
     </div>
 
     <div class="card">

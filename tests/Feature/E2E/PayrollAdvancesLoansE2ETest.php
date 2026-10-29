@@ -365,7 +365,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
     public function test_cash_repayment_reduces_next_instalment_and_override_is_capped_at_balance(): void
     {
         $employee = Employee::factory()->create(['monthly_salary' => 30000]);
-        $loan = Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 5000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-09-01', 'created_by' => $this->owner->id]);
+        $loan = Loan::factory()->create(['employee_id' => $employee->id, 'issued_on' => '2026-08-01', 'amount' => 5000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-09-01', 'created_by' => $this->owner->id]);
 
         $this->actingAs($this->owner)->post(route('loans.repay', $loan), ['paid_on' => '2026-08-15', 'amount' => 5001])->assertSessionHasErrors('amount');
         $this->actingAs($this->owner)->post(route('loans.repay', $loan), ['paid_on' => '2026-08-15', 'amount' => 0])->assertSessionHasErrors('amount');
@@ -532,7 +532,9 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         // Same month again (different day) is ignored; next month is allowed.
         $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-30', 'amounts' => [$a->id => 1000]]);
         $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-10-01', 'amounts' => [$a->id => 1000]]);
-        $this->assertSame(16000, $a->outstandingAdvances());
+        $this->assertSame(16000, (int) SalaryAdvance::query()->where('employee_id', $a->id)->sum('amount'));
+        // Still waiting for the owner, so nothing comes off salary yet.
+        $this->assertSame(0, $a->outstandingAdvances());
 
         $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22', 'amounts' => [$b->id => -5]])->assertSessionHasErrors('amounts.'.$b->id);
         $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['amounts' => [$b->id => 5]])->assertSessionHasErrors('given_on');

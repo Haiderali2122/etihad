@@ -8,6 +8,7 @@ use App\Models\PaperType;
 use App\Models\Party;
 use App\Support\PaperStock;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class PaperStockController extends Controller
@@ -28,13 +29,13 @@ class PaperStockController extends Controller
                 ->when($paperTypeId, fn ($q) => $q->where('paper_type_id', $paperTypeId))
                 ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
                 ->latest('received_at')->paginate(25, ['*'], 'page')->withQueryString(),
-            'issues' => PaperIssue::query()->with(['party', 'paperType'])
+            'issues' => PaperIssue::query()->with(['party', 'paperType', 'employee', 'machine'])
                 ->when($paperTypeId, fn ($q) => $q->where('paper_type_id', $paperTypeId))
                 ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
                 ->latest('issued_on')->latest('id')->paginate(25, ['*'], 'page')->withQueryString(),
             'receivedThisWeek' => (int) PaperReceipt::query()->notRejected()->where('received_at', '>=', $weekStart)->sum('quantity'),
             'trucksThisWeek' => PaperReceipt::query()->notRejected()->where('received_at', '>=', $weekStart)->count(),
-            'issuedThisWeek' => (int) PaperIssue::query()->where('issued_on', '>=', $weekStart)->sum('quantity'),
+            'issuedThisWeek' => (int) PaperIssue::query()->notRejected()->where('issued_on', '>=', $weekStart)->sum(DB::raw('quantity - returned_quantity')),
             'paperTypes' => PaperType::query()->orderBy('code')->get(),
             'parties' => Party::query()->whereHas('paperReceipts')->orderBy('name')->get(),
             'filters' => ['paper_type_id' => $paperTypeId, 'party_id' => $partyId],

@@ -333,7 +333,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         $this->actingAs($this->owner);
 
         $this->get(route('work-orders.show', $order))->assertSee(route('contractor-jobs.done', $job));
-        $this->from(route('work-orders.show', $order))->patch(route('contractor-jobs.done', $job))->assertRedirect(route('work-orders.show', $order));
+        $this->from(route('work-orders.show', $order))->patch(route('contractor-jobs.done', $job), ['done_on' => today()->toDateString()])->assertRedirect(route('work-orders.show', $order));
 
         $this->assertTrue($job->refresh()->isDone());
         $this->get(route('work-orders.show', $order))->assertDontSee(route('contractor-jobs.done', $job));

@@ -1,6 +1,6 @@
 <x-layouts.app :title="__('Buyers')">
     <x-page-head :title="__('Buyers')" :subtitle="__('Who the books go to: copies supplied, and advances still to be adjusted.')">
-        <x-slot:actions>@can('parties.manage')<a class="btn primary" href="{{ route('parties.create') }}"><x-icon name="plus" />{{ __('Add buyer') }}</a>@endcan</x-slot:actions>
+        <x-slot:actions>@can('parties.manage')<a class="btn primary" href="{{ route('parties.create', ['kind' => 'buyer']) }}"><x-icon name="plus" />{{ __('Add buyer') }}</a>@endcan</x-slot:actions>
     </x-page-head>
     <div class="card"><div class="tbl-wrap"><table>
         <thead><tr><th>{{ __('Buyer') }}</th><th class="r">{{ __('Loads') }}</th><th class="r">{{ __('Copies supplied') }}</th><th>{{ __('Last load') }}</th><th class="r">{{ __('Advance left') }}</th></tr></thead>

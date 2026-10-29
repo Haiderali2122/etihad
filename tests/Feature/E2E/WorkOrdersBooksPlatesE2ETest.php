@@ -3,10 +3,12 @@
 namespace Tests\Feature\E2E;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\ContractorJobKind;
 use App\Enums\PartyKind;
 use App\Enums\WorkOrderStage;
 use App\Models\Book;
 use App\Models\BookFormat;
+use App\Models\ContractorJob;
 use App\Models\Godown;
 use App\Models\Machine;
 use App\Models\OutsidePrintReceipt;
@@ -296,11 +298,28 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->assertSame(1, PaperIssue::query()->count());
 
         $show = route('work-orders.show', $order);
-        foreach ([WorkOrderStage::Folding, WorkOrderStage::Binding, WorkOrderStage::Ready, WorkOrderStage::Dispatched] as $stage) {
+        // Loading is not offered before binding.
+        $this->actingAs($this->manager)->get($show)->assertDontSee(route('dispatches.create', ['order' => $order->id]), false);
+
+        // Each stage needs its own work recorded before the order moves on.
+        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order), ['printed_copies' => 18000, 'printed_on' => today()->toDateString()])
+            ->assertRedirect($show)->assertSessionHas('status', 'WO-1001 moved to Folding.');
+        foreach ([[ContractorJobKind::Folding, WorkOrderStage::Binding], [ContractorJobKind::Binding, WorkOrderStage::Ready]] as [$kind, $stage]) {
+            $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))->assertSessionHasErrors('stage');
+            ContractorJob::factory()->create(['work_order_id' => $order->id, 'kind' => $kind, 'state' => 'done', 'done_on' => today()]);
             $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))
                 ->assertRedirect($show)->assertSessionHas('status', "WO-1001 moved to {$stage->label()}.");
             $this->assertSame($stage, $order->refresh()->stage);
         }
+
+        // Ready orders leave only by loading; the last load closes the order.
+        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))->assertSessionHasErrors('stage');
+        $this->actingAs($this->manager)->get($show)->assertSee(route('dispatches.create', ['order' => $order->id]), false);
+        $this->actingAs($this->owner)->post(route('dispatches.store'), [
+            'dispatched_on' => today()->toDateString(), 'buyer_id' => Party::factory()->kind(PartyKind::Buyer)->create()->id,
+            'work_order_id' => $order->id, 'bundles' => 360, 'copies_per_bundle' => 50,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(WorkOrderStage::Dispatched, $order->refresh()->stage);
 
         $this->actingAs($this->manager)->patch(route('work-orders.advance', $order))->assertStatus(409);
         $this->assertSame(629, $this->stock(), 'Moving through stages must not issue paper again.');
@@ -709,7 +728,8 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
 
         // 3 plates × Rs 12.50 = Rs 37.50 → 38
         $this->post(route('plate-jobs.store'), ['party_id' => $processor->id, 'work_order_id' => $order->id, 'job_on' => today()->toDateString(), 'plates' => 3, 'rate' => 12.5])
-            ->assertRedirect(route('plate-jobs.index'))->assertSessionHas('status', 'Plate job saved.');
+            // Entered for an order, so it goes back to that order.
+            ->assertRedirect(route('work-orders.show', $order))->assertSessionHas('status', 'Plate job saved.');
         $job = PlateJob::query()->sole();
         $this->assertSame(38, $job->amount);
         $this->assertSame($this->manager->id, $job->created_by);

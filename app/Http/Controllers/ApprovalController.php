@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\ContractorPayment;
 use App\Models\Expense;
 use App\Models\ForemanSheet;
+use App\Models\InventoryIssue;
 use App\Models\Loan;
 use App\Models\MachineRepair;
+use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
 use App\Models\Purchase;
 use App\Models\SalaryAdvance;
+use App\Models\User;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +37,8 @@ class ApprovalController extends Controller
         'loan' => Loan::class,
         'work-order' => WorkOrder::class,
         'contractor-payment' => ContractorPayment::class,
+        'paper-issue' => PaperIssue::class,
+        'inventory-issue' => InventoryIssue::class,
     ];
 
     public function index(): View
@@ -74,6 +79,41 @@ class ApprovalController extends Controller
     }
 
     /**
+     * Open the usual form filled in from an entry the owner sent back, so it can be corrected and entered again.
+     * Saving it marks the old entry as resent; the old one stays on record as sent back.
+     */
+    public function resend(Request $request, string $type, int $id): RedirectResponse
+    {
+        abort_unless(isset(self::Types[$type]), 404);
+
+        $entry = self::Types[$type]::query()->sentBackOpen()->findOrFail($id);
+        abort_unless($entry->created_by === $request->user()->id, 403, __('Only the person who entered it can correct and resend it.'));
+
+        $request->session()->put('resending', ['class' => $entry::class, 'id' => $entry->id]);
+
+        return redirect($entry->resendUrl())
+            ->withInput($entry->resendInput())
+            ->with('status', __('Correct the details and save to send it to the owner again. Owner\'s note: :note', ['note' => $entry->review_note ?: '—']));
+    }
+
+    /**
+     * Entries this person made that the owner sent back and that have not been entered again yet.
+     *
+     * @return Collection<int, array{type: string, model: Model}>
+     */
+    public function sentBackFor(User $user): Collection
+    {
+        return collect(self::Types)
+            ->flatMap(fn (string $class, string $type) => $class::query()->sentBackOpen()->where('created_by', $user->id)
+                // A foreman sheet's advances are sent back together with the sheet.
+                ->when($class === SalaryAdvance::class, fn ($q) => $q->whereNull('foreman_sheet_id'))
+                ->get()
+                ->map(fn (Model $model) => ['type' => $type, 'model' => $model]))
+            ->sortByDesc(fn (array $item) => $item['model']->reviewed_at)
+            ->values();
+    }
+
+    /**
      * Every waiting entry across modules, newest first.
      *
      * @return Collection<int, array{type: string, model: Model}>
@@ -90,6 +130,8 @@ class ApprovalController extends Controller
             Loan::class => ['employee', 'creator'],
             WorkOrder::class => ['bookFormat.book', 'machine', 'press', 'party', 'creator'],
             ContractorPayment::class => ['contractor', 'workOrder', 'creator'],
+            PaperIssue::class => ['party', 'paperType', 'creator'],
+            InventoryIssue::class => ['item', 'machine', 'creator'],
         ];
 
         return collect(self::Types)

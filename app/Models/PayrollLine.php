@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * One employee's salary for a payroll month.
  */
-#[Fillable(['payroll_run_id', 'employee_id', 'monthly_salary', 'days_in_month', 'present_days', 'absent_days', 'leave_days', 'off_days', 'unmarked_days', 'overtime_hours', 'overtime_amount', 'absence_deduction', 'bonus', 'advances_deducted', 'loan_deducted', 'other_deduction', 'net_pay', 'note'])]
+#[Fillable(['payroll_run_id', 'employee_id', 'monthly_salary', 'days_in_month', 'present_days', 'absent_days', 'leave_days', 'off_days', 'unmarked_days', 'overtime_hours', 'overtime_amount', 'absence_deduction', 'bonus', 'advances_deducted', 'loan_deducted', 'loan_overridden', 'other_deduction', 'net_pay', 'note'])]
 class PayrollLine extends Model
 {
     /** @use HasFactory<PayrollLineFactory> */
@@ -26,6 +26,7 @@ class PayrollLine extends Model
             'leave_days' => 'float',
             'off_days' => 'float',
             'overtime_hours' => 'float',
+            'loan_overridden' => 'boolean',
         ];
     }
 

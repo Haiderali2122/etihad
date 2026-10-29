@@ -81,19 +81,30 @@ class ReportController extends Controller
     /**
      * @return Collection<int, array<string, string|int>>
      */
+    /**
+     * Approved repair payments plus approved cash expenses tagged to each machine, as on the dashboard and machine pages.
+     */
     private function machineSpend(Carbon $from, Carbon $to): Collection
     {
-        return MachineRepair::query()->approved()->with('machine')
-            ->whereBetween('repaired_on', [$from, $to])
-            ->get()
-            ->groupBy(fn (MachineRepair $r) => "{$r->machine->code} {$r->machine->name}")
-            ->map(fn (Collection $rows, string $name) => [
+        $repairs = MachineRepair::query()->approved()->with('machine')->whereBetween('repaired_on', [$from, $to])->get()
+            ->groupBy(fn (MachineRepair $r) => "{$r->machine->code} {$r->machine->name}");
+        $expenses = Expense::query()->approved()->with('machine')->whereNotNull('machine_id')->whereBetween('spent_on', [$from, $to])->get()
+            ->groupBy(fn (Expense $e) => "{$e->machine->code} {$e->machine->name}");
+
+        return $repairs->keys()->merge($expenses->keys())->unique()->map(function (string $name) use ($repairs, $expenses): array {
+            $bills = $repairs->get($name, collect());
+            $cash = (int) $expenses->get($name, collect())->sum('amount');
+
+            return [
                 __('Machine') => $name,
-                __('Bills') => $rows->count(),
-                __('Discount (Rs)') => (int) $rows->sum('discount'),
-                __('Paid (Rs)') => (int) $rows->sum('amount_paid'),
-            ])
-            ->sortByDesc(__('Paid (Rs)'))
+                __('Bills') => $bills->count(),
+                __('Discount (Rs)') => (int) $bills->sum('discount'),
+                __('Paid (Rs)') => (int) $bills->sum('amount_paid'),
+                __('Cash expenses (Rs)') => $cash,
+                __('Total (Rs)') => (int) $bills->sum('amount_paid') + $cash,
+            ];
+        })
+            ->sortByDesc(__('Total (Rs)'))
             ->values();
     }
 
@@ -104,15 +115,15 @@ class ReportController extends Controller
     {
         $received = PaperReceipt::query()->notRejected()->with('paperType')->whereBetween('received_at', [$from, $to])->get()
             ->groupBy(fn (PaperReceipt $r) => $r->paperType->label());
-        $issued = PaperIssue::query()->with('paperType')->whereBetween('issued_on', [$from, $to])->get()
+        $issued = PaperIssue::query()->notRejected()->with('paperType')->whereBetween('issued_on', [$from, $to])->get()
             ->groupBy(fn (PaperIssue $i) => $i->paperType->label());
 
         return $received->keys()->merge($issued->keys())->unique()->sort()->map(fn (string $paper) => [
             __('Paper') => $paper,
             __('Received') => (int) ($received->get($paper)?->sum('quantity') ?? 0),
-            __('In-house') => (int) ($issued->get($paper)?->where('kind.value', 'in_house')->sum('quantity') ?? 0),
-            __('Outsource') => (int) ($issued->get($paper)?->where('kind.value', 'outsource')->sum('quantity') ?? 0),
-            __('Returned') => (int) ($issued->get($paper)?->where('kind.value', 'return')->sum('quantity') ?? 0),
+            __('In-house') => (int) ($issued->get($paper)?->where('kind.value', 'in_house')->sum(fn (PaperIssue $i) => $i->used()) ?? 0),
+            __('Outsource') => (int) ($issued->get($paper)?->where('kind.value', 'outsource')->sum(fn (PaperIssue $i) => $i->used()) ?? 0),
+            __('Returned') => (int) ($issued->get($paper)?->where('kind.value', 'return')->sum(fn (PaperIssue $i) => $i->used()) ?? 0),
         ])->values();
     }
 

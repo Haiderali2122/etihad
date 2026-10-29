@@ -2,7 +2,7 @@
     <x-page-head :title="$buyer->name" :subtitle="collect([$buyer->phone, $buyer->address])->filter()->join(' · ')">
         <x-slot:actions>
             <a class="btn" href="{{ route('buyers.index') }}">{{ __('Back') }}</a>
-            @can('dispatch.manage')<a class="btn primary" href="{{ route('dispatches.create') }}"><x-icon name="truck" />{{ __('New loading') }}</a>@endcan
+            @can('dispatch.manage')<a class="btn primary" href="{{ route('dispatches.create', ['buyer' => $buyer->id]) }}"><x-icon name="truck" />{{ __('New loading') }}</a>@endcan
         </x-slot:actions>
     </x-page-head>
     @if ($errors->any())<div class="flash err" role="alert"><x-icon name="alert" />{{ $errors->first() }}</div>@endif

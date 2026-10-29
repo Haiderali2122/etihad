@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Enums\ApprovalStatus;
+use App\Models\Employee;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
+use App\Models\Machine;
 use App\Models\Party;
 use App\Models\Purchase;
 use App\Models\Role;
@@ -161,5 +163,62 @@ class InventoryTest extends TestCase
         $this->actingAs($viewer)->get(route('inventory-categories.index'))->assertForbidden();
         $this->actingAs($viewer)->get(route('inventory-items.create'))->assertForbidden();
         $this->actingAs($viewer)->get(route('purchases.create'))->assertForbidden();
+    }
+
+    public function test_material_given_to_an_employee_waits_for_approval_and_comes_back_at_end_of_shift(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        $item = Purchase::factory()->create(['quantity' => 20, 'created_by' => $owner->id])->item;
+        $employee = Employee::factory()->create(['name' => 'Tariq Mehmood']);
+        $machine = Machine::factory()->create();
+
+        $this->actingAs($manager)->post(route('inventory-issues.store'), [
+            'issued_on' => today()->toDateString(), 'inventory_item_id' => $item->id, 'quantity' => 5,
+            'employee_id' => $employee->id, 'machine_id' => $machine->id,
+        ])->assertSessionHasNoErrors();
+
+        $issue = InventoryIssue::query()->sole();
+        $this->assertSame('Tariq Mehmood', $issue->issued_to);
+        $this->assertSame(ApprovalStatus::Pending, $issue->status);
+        // Held out of stock while it waits, so it cannot be given twice.
+        $this->assertSame(15.0, $item->refresh()->balance());
+        $this->actingAs($owner)->get(route('approvals.index'))->assertSee('Material moved out');
+
+        $this->actingAs($owner)->patch(route('approvals.update', ['inventory-issue', $issue->id]), ['decision' => 'approve'])->assertSessionHasNoErrors();
+        $this->assertSame(ApprovalStatus::Approved, $issue->refresh()->status);
+
+        $this->actingAs($manager)->patch(route('inventory-issues.settle', $issue), ['returned_quantity' => 6])->assertSessionHasErrors('returned_quantity');
+        $this->actingAs($manager)->patch(route('inventory-issues.settle', $issue), ['returned_quantity' => 1.5])->assertSessionHasNoErrors();
+
+        $this->assertSame(3.5, $issue->refresh()->used());
+        $this->assertSame(16.5, $item->refresh()->balance());
+        $this->actingAs($manager)->patch(route('inventory-issues.settle', $issue), ['returned_quantity' => 0])->assertStatus(409);
+        $this->actingAs($owner)->get(route('inventory-items.show', $item))->assertOk()->assertSee('back at end of shift');
+    }
+
+    public function test_material_sent_back_by_the_owner_returns_to_stock(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $item = Purchase::factory()->create(['quantity' => 10, 'created_by' => $owner->id])->item;
+
+        $this->actingAs(User::factory()->create())->post(route('inventory-issues.store'), [
+            'issued_on' => today()->toDateString(), 'inventory_item_id' => $item->id, 'quantity' => 4, 'issued_to' => 'Binding section',
+        ])->assertSessionHasNoErrors();
+        $issue = InventoryIssue::query()->sole();
+        $this->assertSame(6.0, $item->refresh()->balance());
+
+        $this->actingAs($owner)->patch(route('approvals.update', ['inventory-issue', $issue->id]), ['decision' => 'reject', 'note' => 'Not needed'])->assertSessionHasNoErrors();
+
+        $this->assertSame(10.0, $item->refresh()->balance());
+    }
+
+    public function test_material_needs_an_employee_or_a_name(): void
+    {
+        $item = Purchase::factory()->create(['quantity' => 10])->item;
+
+        $this->actingAs(User::factory()->owner()->create())->post(route('inventory-issues.store'), [
+            'issued_on' => today()->toDateString(), 'inventory_item_id' => $item->id, 'quantity' => 1,
+        ])->assertSessionHasErrors('issued_to');
     }
 }

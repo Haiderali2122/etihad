@@ -175,7 +175,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $this->actingAs($owner)->post(route('machine-repairs.store'), [
             'repaired_on' => '2026-10-20', 'machine_id' => $machine->id, 'party_id' => $mechanic->id,
             'kind' => RepairKind::NewPart->value, 'description' => 'New roller', 'bill_amount' => 12000,
-            'discount' => 500, 'amount_paid' => 11800, 'invoice_no' => 'INV-9',
+            'discount' => 500, 'amount_paid' => 11500, 'invoice_no' => 'INV-9',
             'attachment' => UploadedFile::fake()->image('bill.jpg'),
         ])->assertRedirect(route('machines.show', $machine))->assertSessionHas('status', 'Repair saved.');
 
@@ -186,7 +186,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         Storage::disk('public')->assertExists($repair->attachment);
 
         $this->actingAs($owner)->get(route('machines.show', $machine))->assertOk()
-            ->assertSee('Rs 11,800')
+            ->assertSee('Rs 11,500')
             ->assertSee('Invoice INV-9');
     }
 
@@ -252,7 +252,8 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             ->assertViewHas('machines', function ($machines) {
                 $m = $machines->sole();
 
-                return (int) $m->month_spend === 3000 && (int) $m->total_spend === 11000;
+                // Approved repairs only (the pending and sent-back bills do not count), as on the machine page and dashboard.
+                return (int) $m->month_repairs + (int) $m->month_expenses === 1000 && (int) $m->total_repairs + (int) $m->total_expenses === 9000;
             });
 
         // Show page KPI counts approved bills only.
@@ -340,14 +341,14 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             ->assertViewHas('cashGiven', 100000)
             ->assertViewHas('cashSpent', 31500)
             ->assertViewHas('cashInHand', 68500)
-            ->assertViewHas('machineSpend', 9500 + 2000 + 1500)
+            ->assertViewHas('machineSpend', 9500 + 1500)
             ->assertViewHas('machinesUnderRepair', 1)
             ->assertViewHas('paperTypeCount', 1)
             ->assertViewHas('lowStock', fn ($low) => $low->count() === 1)
             ->assertViewHas('heads', fn (array $heads) => count($heads) === 1 && $heads[0]['amount'] === 31500)
             ->assertViewHas('weekly', fn (array $w) => count($w['labels']) === 8 && $w['received'][7] === 500 && $w['issued'][7] === 120)
             ->assertViewHas('feed', fn (array $feed) => count($feed) === 6)
-            ->assertSee('Rs 13,000')
+            ->assertSee('Rs 11,000')
             ->assertSee('Rs 68,500');
     }
 
@@ -363,7 +364,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
 
         $this->actingAs($owner)->get(route('dashboard'))->assertOk()->assertViewHas('machineSpend', 1000);
         $this->actingAs($owner)->get(route('machines.index'))->assertOk()
-            ->assertViewHas('machines', fn ($machines) => (int) $machines->sole()->month_spend === 1000);
+            ->assertViewHas('machines', fn ($machines) => (int) $machines->sole()->month_repairs === 1000);
     }
 
     public function test_dashboard_feed_escapes_user_input(): void
@@ -448,7 +449,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             ->assertViewHas('purchases_by_supplier', fn ($rows) => $rows->sole() === ['Name' => 'Ink House', 'Bills' => 2, 'Amount (Rs)' => 3000])
             ->assertViewHas('purchases_by_category', fn ($rows) => $rows->sole() === ['Name' => 'Inks', 'Bills' => 2, 'Amount (Rs)' => 3000])
             ->assertViewHas('expenses_by_head', fn ($rows) => $rows->sole() === ['Head' => 'Tea', 'Entries' => 2, 'Amount (Rs)' => 500])
-            ->assertViewHas('machine_spend', fn ($rows) => $rows->sole() === ['Machine' => 'P-01 Offset', 'Bills' => 2, 'Discount (Rs)' => 150, 'Paid (Rs)' => 1350])
+            ->assertViewHas('machine_spend', fn ($rows) => $rows->sole() === ['Machine' => 'P-01 Offset', 'Bills' => 2, 'Discount (Rs)' => 150, 'Paid (Rs)' => 1350, 'Cash expenses (Rs)' => 0, 'Total (Rs)' => 1350])
             ->assertViewHas('paper_movement', fn ($rows) => $rows->sole()['Received'] === 700
                 && $rows->sole()['In-house'] === 100 && $rows->sole()['Outsource'] === 40 && $rows->sole()['Returned'] === 7);
 
@@ -456,7 +457,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8')
             ->assertDownload('machine_spend_20261001_20261031.csv'));
-        $this->assertSame([['Machine', 'Bills', 'Discount (Rs)', 'Paid (Rs)'], ['P-01 Offset', '2', '150', '1350']], $rows);
+        $this->assertSame([['Machine', 'Bills', 'Discount (Rs)', 'Paid (Rs)', 'Cash expenses (Rs)', 'Total (Rs)'], ['P-01 Offset', '2', '150', '1350', '0', '1350']], $rows);
 
         // A single-day range on the last day of the month still includes that day.
         $this->actingAs($owner)->get(route('reports.index', ['from' => '2026-10-31', 'to' => '2026-10-31']))->assertOk()
@@ -681,7 +682,8 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             if (! in_array('GET', $route->methods(), true) || ! $route->getName() || Str::startsWith($route->uri(), ['_', 'up', 'storage', 'sanctum'])) {
                 continue;
             }
-            if (in_array($route->getName(), ['logout'], true)) {
+            // Resending needs an entry the signed-in user had sent back; it has its own tests.
+            if (in_array($route->getName(), ['logout', 'approvals.resend'], true)) {
                 continue;
             }
 

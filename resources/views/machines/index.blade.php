@@ -14,8 +14,8 @@
                     <dt>{{ __('Type') }}</dt><dd>{{ $machine->type->label() }}</dd>
                     <dt>{{ __('Model') }}</dt><dd>{{ $machine->model ?: '—' }}</dd>
                     <dt>{{ __('Last repair') }}</dt><dd>{{ $last ? $last->description.', '.$last->repaired_on->format('j M') : '—' }}</dd>
-                    <dt>{{ __('Spend this month') }}</dt><dd class="num">Rs {{ number_format($machine->month_spend ?? 0) }}</dd>
-                    <dt>{{ __('Spend all time') }}</dt><dd class="num">Rs {{ number_format($machine->total_spend ?? 0) }}</dd>
+                    <dt>{{ __('Spend this month') }}</dt><dd class="num">Rs {{ number_format((int) $machine->month_repairs + (int) $machine->month_expenses) }}</dd>
+                    <dt>{{ __('Spend all time') }}</dt><dd class="num">Rs {{ number_format((int) $machine->total_repairs + (int) $machine->total_expenses) }}</dd>
                 </dl>
             </a>
         @empty

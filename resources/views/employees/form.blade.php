@@ -1,5 +1,5 @@
 <x-layouts.app :title="$employee->exists ? __('Edit employee') : __('Add employee')">
-    <x-page-head :title="$employee->exists ? __('Edit employee') : __('Add employee')" :subtitle="__('Staff are records, not logins.')" />
+    <x-page-head :back="$employee->exists ? route('employees.show', $employee) : route('employees.index')" :title="$employee->exists ? __('Edit employee') : __('Add employee')" :subtitle="__('Staff are records, not logins.')" />
     <form method="POST" action="{{ $employee->exists ? route('employees.update', $employee) : route('employees.store') }}" class="card form-card">
         @csrf
         @if ($employee->exists) @method('PUT') @endif

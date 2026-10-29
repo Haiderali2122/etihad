@@ -13,7 +13,8 @@ use Illuminate\Support\Collection;
  * Running paper balance by type/size and party.
  *
  * Receipts count as soon as the truck is unloaded (waiting or approved); a receipt the owner
- * sends back drops out of stock. Every issue — in-house, outsource or return — is a deduction.
+ * sends back drops out of stock. Every issue — in-house, outsource or return — is a deduction, likewise while it
+ * waits and gone once sent back; rims returned from a machine at the end of a shift come back into stock.
  */
 class PaperStock
 {
@@ -33,9 +34,10 @@ class PaperStock
             ->keyBy(fn ($row) => "{$row->paper_type_id}-{$row->party_id}");
 
         $issued = PaperIssue::query()
+            ->where('status', '!=', ApprovalStatus::Rejected)
             ->when($paperTypeId, fn ($q) => $q->where('paper_type_id', $paperTypeId))
             ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
-            ->selectRaw('paper_type_id, party_id, SUM(quantity) as issued')
+            ->selectRaw('paper_type_id, party_id, SUM(quantity - returned_quantity) as issued')
             ->groupBy('paper_type_id', 'party_id')
             ->get()
             ->keyBy(fn ($row) => "{$row->paper_type_id}-{$row->party_id}");

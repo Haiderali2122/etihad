@@ -98,7 +98,7 @@ class Employee extends Model
      */
     public function outstandingAdvances(): int
     {
-        return (int) $this->advances()->notRejected()->whereNull('payroll_run_id')->sum('amount');
+        return (int) $this->advances()->approved()->whereNull('payroll_run_id')->sum('amount');
     }
 
     /**
@@ -106,7 +106,7 @@ class Employee extends Model
      */
     public function loanBalance(): int
     {
-        return (int) $this->loans()->notRejected()->get()->sum(fn (Loan $loan) => $loan->balance());
+        return (int) $this->loans()->approved()->get()->sum(fn (Loan $loan) => $loan->balance());
     }
 
     public function localName(): string

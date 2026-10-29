@@ -36,7 +36,9 @@ class StorePaperIssueRequest extends FormRequest
             'book_format_id' => ['nullable', 'exists:book_formats,id'],
             'book_name' => ['nullable', 'string', 'max:120'],
             'copies' => ['nullable', 'integer', 'min:1'],
-            'issued_to' => ['required', 'string', 'max:120'],
+            'issued_to' => [Rule::requiredIf(fn () => $this->input('kind') !== PaperIssueKind::InHouse->value || ! $this->filled('machine_id')), 'nullable', 'string', 'max:120'],
+            'employee_id' => ['nullable', Rule::exists('employees', 'id')->where('is_active', true)],
+            'machine_id' => ['nullable', 'exists:machines,id'],
             'wastage_percent' => ['nullable', 'numeric', 'min:0', 'max:50'],
             'note' => ['nullable', 'string', 'max:255'],
         ];

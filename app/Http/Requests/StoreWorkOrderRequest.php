@@ -41,7 +41,7 @@ class StoreWorkOrderRequest extends FormRequest
             'machine_id' => ['nullable', 'required_if:mode,in_house', 'exists:machines,id'],
             'press_id' => ['nullable', 'required_if:mode,outsource', Rule::exists('parties', 'id')->where('kind', PartyKind::Press->value)],
             'buyer_id' => ['nullable', Rule::exists('parties', 'id')->where('kind', PartyKind::Buyer->value)],
-            'due_on' => ['nullable', 'date'],
+            'due_on' => ['nullable', 'date', 'after_or_equal:ordered_on'],
             'note' => ['nullable', 'string', 'max:255'],
         ];
     }

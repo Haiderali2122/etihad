@@ -1,4 +1,4 @@
-@props(['title', 'subtitle' => null])
+@props(['title', 'subtitle' => null, 'back' => null])
 <div class="page-head">
     <div>
         <h1>{{ $title }}</h1>
@@ -6,7 +6,12 @@
             <p>{{ $subtitle }}</p>
         @endif
     </div>
-    @isset($actions)
-        <div class="actions">{{ $actions }}</div>
-    @endisset
+    @if ($back || isset($actions))
+        <div class="actions">
+            @if ($back)
+                <a class="btn" href="{{ $back }}">{{ __('Back') }}</a>
+            @endif
+            {{ $actions ?? '' }}
+        </div>
+    @endif
 </div>

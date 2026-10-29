@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Log repair')">
-    <x-page-head :title="__('Log repair')" :subtitle="__('Record the part, the vendor, the bill and any discount. Attach the invoice photo.')" />
+    <x-page-head :back="($machineId ? route('machines.show', $machineId) : route('machines.index'))" :title="__('Log repair')" :subtitle="__('Record the part, the vendor, the bill and any discount. Attach the invoice photo.')" />
     <form method="POST" action="{{ route('machine-repairs.store') }}" enctype="multipart/form-data" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">
@@ -15,7 +15,7 @@
             <x-field name="amount_paid" type="number" min="0" :label="__('Amount paid (Rs)')" required :hint="__('Bill minus discount, plus any loading or extra charges')" />
             <x-field name="attachment" type="file" :label="__('Invoice photo')" />
         </div></div>
-        <div class="form-actions"><a class="btn" href="{{ route('machines.index') }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save repair') }}</button></div>
+        <div class="form-actions"><a class="btn" href="{{ ($machineId ? route('machines.show', $machineId) : route('machines.index')) }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save repair') }}</button></div>
     </form>
     @push('scripts')
         <script>

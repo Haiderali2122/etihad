@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Http\Requests\StoreLoanRequest;
 use App\Models\Employee;
 use App\Models\Loan;
@@ -18,7 +19,7 @@ class LoanController extends Controller
         $show = in_array($request->query('show'), ['open', 'cleared', 'all'], true) ? $request->query('show') : 'open';
         $loans = Loan::query()->with('employee')->withSum('repayments', 'amount')->latest('issued_on')->get()
             ->filter(fn (Loan $l) => match ($show) {
-                'open' => ! $l->isCleared(),
+                'open' => ! $l->isCleared() && $l->status !== ApprovalStatus::Rejected,
                 'cleared' => $l->isCleared(),
                 default => true,
             })->values();
@@ -26,8 +27,8 @@ class LoanController extends Controller
         return view('loans.index', [
             'loans' => $loans,
             'show' => $show,
-            'outstanding' => Loan::query()->notRejected()->withSum('repayments', 'amount')->get()->sum(fn (Loan $l) => $l->balance()),
-            'monthlyDue' => Loan::query()->notRejected()->withSum('repayments', 'amount')->get()
+            'outstanding' => Loan::query()->approved()->withSum('repayments', 'amount')->get()->sum(fn (Loan $l) => $l->balance()),
+            'monthlyDue' => Loan::query()->approved()->withSum('repayments', 'amount')->get()
                 ->filter(fn (Loan $l) => ! $l->isCleared())->sum(fn (Loan $l) => min($l->monthly_instalment, $l->balance())),
         ]);
     }
@@ -64,11 +65,16 @@ class LoanController extends Controller
     /**
      * A cash repayment outside payroll.
      */
+    /**
+     * Cash paid back outside payroll, only on a loan the owner has approved and not dated before the loan was given.
+     */
     public function repay(Request $request, Loan $loan): RedirectResponse
     {
+        abort_unless($loan->status === ApprovalStatus::Approved, 409, __('Cash repayments can be recorded once the owner approves this loan.'));
+
         $loan->loadSum('repayments', 'amount');
         $data = $request->validate([
-            'paid_on' => ['required', 'date'],
+            'paid_on' => ['required', 'date', 'after_or_equal:'.$loan->issued_on->toDateString(), 'before_or_equal:today'],
             'amount' => ['required', 'integer', 'min:1', 'max:'.$loan->balance()],
             'note' => ['nullable', 'string', 'max:255'],
         ]);

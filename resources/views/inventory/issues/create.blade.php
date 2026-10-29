@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Move out of inventory')">
-    <x-page-head :title="__('Move out of inventory')" :subtitle="__('Record items leaving the store: ink to a machine, glue to the binders, plates to the press.')" />
+    <x-page-head :back="route('inventory.index', ['tab' => 'issues'])" :title="__('Move out of inventory')" :subtitle="__('Record items leaving the store: ink to a machine, glue to the binders, plates to the press. At the end of the shift, enter what came back on the Moved out tab.')" />
 
     @if ($categories->isEmpty())
         <div class="card"><div class="empty"><b>{{ __('Nothing in stock to move out') }}</b>{{ __('Record a purchase first.') }}</div></div>
@@ -26,9 +26,10 @@
                 <x-field name="quantity" type="number" step="0.01" min="0.01" :label="__('Quantity going out')" required />
                 <div class="field"><label>&nbsp;</label><div id="stockcheck"></div></div>
                 <x-field name="issued_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                <x-field name="issued_to" :label="__('Given to')" required list="issueTargets" :hint="__('Person, machine or department')" />
-                <datalist id="issueTargets">@foreach ($machines as $m)<option value="{{ __('Machine') }} {{ $m->code }}">@endforeach</datalist>
+                <x-field name="employee_id" :label="__('Given to employee')" :options="$employees->mapWithKeys(fn ($e) => [$e->id => $e->name.($e->designation ? ' · '.$e->designation : '')])" :placeholder="__('Not to an employee')" />
                 <x-field name="machine_id" :label="__('For machine (optional)')" :options="$machines->mapWithKeys(fn ($m) => [$m->id => $m->code.' '.$m->name])" :placeholder="__('Not for a machine')" />
+                <x-field name="issued_to" :label="__('Given to')" list="issueTargets" :hint="__('Department or person not on the staff list. Leave empty to use the employee\'s name.')" />
+                <datalist id="issueTargets">@foreach ($machines as $m)<option value="{{ __('Machine') }} {{ $m->code }}">@endforeach</datalist>
                 <x-field name="reference" :label="__('Work order / reference')" placeholder="WO-1042" />
                 <x-field name="note" :label="__('Note')" full />
             </div></div>

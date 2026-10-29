@@ -13,7 +13,7 @@ class PartyController extends Controller
 {
     public function index(Request $request): View
     {
-        $kind = is_string($request->query('kind')) ? PartyKind::tryFrom($request->query('kind')) : null;
+        $kind = $this->kindFrom($request->query('kind'));
 
         return view('parties.index', [
             'parties' => Party::query()
@@ -25,27 +25,50 @@ class PartyController extends Controller
         ]);
     }
 
-    public function create(): View
+    /**
+     * ?kind= presets the type (e.g. "Add buyer" from the Buyers screen) and ?return= is the page to go back to,
+     * so adding a buyer from a loading or a plate processor from a plate job returns to that form.
+     */
+    public function create(Request $request): View
     {
-        return view('parties.form', ['party' => new Party(['is_active' => true])]);
+        $kind = $this->kindFrom($request->query('kind'));
+
+        return view('parties.form', [
+            'party' => new Party(['is_active' => true, 'kind' => $kind]),
+            'returnTo' => $this->safeReturnUrl($request->query('return'))
+                ?? ($kind === PartyKind::Buyer ? route('buyers.index') : route('parties.index', array_filter(['kind' => $kind?->value]))),
+        ]);
     }
 
     public function store(PartyRequest $request): RedirectResponse
     {
-        Party::create($request->validated() + ['is_active' => $request->boolean('is_active')]);
+        $party = Party::create($request->validated() + ['is_active' => $request->boolean('is_active')]);
 
-        return redirect()->route('parties.index')->with('status', __('Party saved.'));
+        return redirect($this->safeReturnUrl($request->input('return_to')) ?? route('parties.index'))
+            ->with('status', $party->kind === PartyKind::Buyer ? __('Buyer saved.') : __('Party saved.'));
     }
 
-    public function edit(Party $party): View
+    /**
+     * Opened from a type tab, the form returns to that tab.
+     */
+    public function edit(Request $request, Party $party): View
     {
-        return view('parties.form', ['party' => $party]);
+        return view('parties.form', [
+            'party' => $party,
+            'returnTo' => $this->safeReturnUrl($request->query('return'))
+                ?? route('parties.index', array_filter(['kind' => $this->kindFrom($request->query('tab'))?->value])),
+        ]);
     }
 
     public function update(PartyRequest $request, Party $party): RedirectResponse
     {
         $party->update($request->validated() + ['is_active' => $request->boolean('is_active')]);
 
-        return redirect()->route('parties.index')->with('status', __('Party saved.'));
+        return redirect($this->safeReturnUrl($request->input('return_to')) ?? route('parties.index'))->with('status', __('Party saved.'));
+    }
+
+    private function kindFrom(mixed $value): ?PartyKind
+    {
+        return is_string($value) ? PartyKind::tryFrom($value) : null;
     }
 }

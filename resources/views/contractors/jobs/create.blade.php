@@ -1,5 +1,6 @@
+@php $back = $order ? route('work-orders.show', $order) : ($contractorId ? route('contractors.show', $contractorId) : route('contractors.index')); @endphp
 <x-layouts.app :title="__('Give job')">
-    <x-page-head :title="__('Give folding or binding job')" :subtitle="__('The amount is worked out from the forms, copies and rates.')" />
+    <x-page-head :back="$back" :title="__('Give folding or binding job')" :subtitle="__('The amount is worked out from the forms, copies and rates.')" />
     @if ($contractors->isEmpty())
         <div class="card"><div class="empty"><b>{{ __('No contractors yet') }}</b><a href="{{ route('contractors.create') }}">{{ __('Add a contractor first.') }}</a></div></div>
     @else
@@ -21,12 +22,11 @@
                 <x-field name="copies" type="number" min="1" :label="__('Copies')" :value="$order?->copies" required />
                 <x-field name="folding_rate" type="number" step="0.01" min="0" :label="__('Folding rate (per 1,000 forms)')" />
                 <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form')" />
-                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate per copy')" />
-                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate per copy')" />                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                 <div class="field full"><div class="calc"><div class="lbl">{{ __('Amount') }}</div><div class="big num" id="jobAmount">Rs 0</div><div class="eq" id="jobEq" dir="ltr"></div></div></div>
                 <x-field name="note" :label="__('Note')" full />
             </div></div>
-            <div class="form-actions"><a class="btn" href="{{ url()->previous() }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save job') }}</button></div>
+            <div class="form-actions"><a class="btn" href="{{ $back }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save job') }}</button></div>
         </form>
         @push('scripts')
             <script>
@@ -59,7 +59,9 @@
                     order.addEventListener('change', fill); contractor.addEventListener('change', fill);
                     kind.addEventListener('change', () => { toggle(); calc(); });
                     [forms, copies, fold, perForm, perCopy].forEach(el => el.addEventListener('input', calc));
-                    toggle(); fill();
+                    // After a validation error keep what was typed; otherwise start from the order and contractor.
+                    toggle();
+                    @json(session()->hasOldInput()) ? calc() : fill();
                 })();
             </script>
         @endpush

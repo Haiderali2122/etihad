@@ -54,6 +54,11 @@ class MachineRepair extends Model
         return $this->belongsTo(Party::class, 'party_id');
     }
 
+    public function resendUrl(): string
+    {
+        return route('machine-repairs.create', ['machine' => $this->machine_id]);
+    }
+
     public function approvalKind(): string
     {
         return $this->kind === RepairKind::NewPart ? __('Part purchase') : __('Repair bill');

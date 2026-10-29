@@ -18,7 +18,8 @@ class RoleFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->unique()->jobTitle(),
+            // Faker's job titles include "Manager", which the migrations already create.
+            'name' => fake()->unique()->jobTitle().' '.fake()->unique()->numberBetween(1, 999999),
             'permissions' => [],
             'is_super' => false,
         ];

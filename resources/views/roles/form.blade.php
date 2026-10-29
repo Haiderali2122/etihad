@@ -1,6 +1,6 @@
 @php $granted = old('permissions', $role->permissions ?? []); @endphp
 <x-layouts.app :title="$role->exists ? __('Edit role') : __('Add role')">
-    <x-page-head :title="$role->exists ? __('Edit role') : __('Add role')" :subtitle="__('Tick what people with this role may do. Screens they cannot use are hidden from their menu.')" />
+    <x-page-head :back="route('roles.index')" :title="$role->exists ? __('Edit role') : __('Add role')" :subtitle="__('Tick what people with this role may do. Screens they cannot use are hidden from their menu.')" />
 
     <form method="POST" action="{{ $role->exists ? route('roles.update', $role) : route('roles.store') }}" class="card" style="max-width:980px">
         @csrf

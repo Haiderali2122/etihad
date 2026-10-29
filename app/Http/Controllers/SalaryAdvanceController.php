@@ -24,12 +24,12 @@ class SalaryAdvanceController extends Controller
 
         return view('advances.index', [
             'advances' => SalaryAdvance::query()->with(['employee', 'foremanSheet.foreman', 'payrollRun'])
-                ->when($show === 'open', fn ($q) => $q->whereNull('payroll_run_id'))
+                ->when($show === 'open', fn ($q) => $q->notRejected()->whereNull('payroll_run_id'))
                 ->when($show === 'deducted', fn ($q) => $q->whereNotNull('payroll_run_id'))
                 ->when($employeeId, fn ($q) => $q->where('employee_id', $employeeId))
                 ->latest('given_on')->latest('id')->paginate(30)->withQueryString(),
-            'openTotal' => (int) SalaryAdvance::query()->notRejected()->whereNull('payroll_run_id')->sum('amount'),
-            'monthTotal' => (int) SalaryAdvance::query()->notRejected()->where('given_on', '>=', now()->startOfMonth())->sum('amount'),
+            'openTotal' => (int) SalaryAdvance::query()->approved()->whereNull('payroll_run_id')->sum('amount'),
+            'monthTotal' => (int) SalaryAdvance::query()->approved()->where('given_on', '>=', now()->startOfMonth())->sum('amount'),
             'employees' => Employee::query()->orderBy('name')->get(),
             'show' => $show,
             'employeeId' => $employeeId,

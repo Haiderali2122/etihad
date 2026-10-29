@@ -5,7 +5,7 @@
     }
 @endphp
 <x-layouts.app :title="$book->exists ? __('Edit book') : __('Add book')">
-    <x-page-head :title="$book->exists ? __('Edit book') : __('Add book')" :subtitle="__('Forms (فارمے) per copy drive the rims needed: forms × copies ÷ 500 sheets, plus wastage.')" />
+    <x-page-head :back="$book->exists ? route('books.show', $book) : route('books.index')" :title="$book->exists ? __('Edit book') : __('Add book')" :subtitle="__('Forms (فارمے) per copy drive the rims needed: forms × copies ÷ 500 sheets, plus wastage.')" />
 
     <form method="POST" action="{{ $book->exists ? route('books.update', $book) : route('books.store') }}" class="card" style="max-width:1100px">
         @csrf

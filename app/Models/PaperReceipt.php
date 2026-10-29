@@ -65,6 +65,24 @@ class PaperReceipt extends Model
             : null;
     }
 
+    public function resendUrl(): string
+    {
+        return route('paper-receipts.create');
+    }
+
+    public function resendInput(): array
+    {
+        return ['received_at' => $this->received_at->format('Y-m-d\TH:i')] + $this->baseResendInput();
+    }
+
+    /**
+     * The corrected receipt keeps the slip number, so the sent-back one gives it up.
+     */
+    public function releaseForResend(): void
+    {
+        $this->forceFill(['slip_no' => $this->slip_no.' ('.__('sent back').' #'.$this->id.')'])->saveQuietly();
+    }
+
     public function approvalKind(): string
     {
         return __('Paper receipt');

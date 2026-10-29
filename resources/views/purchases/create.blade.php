@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Add purchase')">
-    <x-page-head :title="__('Add purchase')" :subtitle="__('Stock in: attach a photo of the bill. Amount is worked out from quantity × rate.')">
+    <x-page-head :back="route('inventory.index', ['tab' => 'purchases'])" :title="__('Add purchase')" :subtitle="__('Stock in: attach a photo of the bill. Amount is worked out from quantity × rate.')">
         @can('inventory.manage')
             <x-slot:actions><a class="btn" href="{{ route('inventory-items.create') }}"><x-icon name="plus" />{{ __('New item') }}</a></x-slot:actions>
         @endcan

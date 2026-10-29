@@ -56,6 +56,22 @@ class ForemanSheet extends Model
         return $this->hasMany(SalaryAdvance::class);
     }
 
+    public function resendUrl(): string
+    {
+        return route('foreman-sheets.create', ['foreman' => $this->foreman_id]);
+    }
+
+    /**
+     * The sheet with the people the foreman handed cash to; whatever he kept is worked out again on save.
+     */
+    public function resendInput(): array
+    {
+        return $this->baseResendInput() + [
+            'lines' => $this->advances()->where('employee_id', '!=', $this->foreman_id)->get()
+                ->map(fn (SalaryAdvance $advance) => ['employee_id' => $advance->employee_id, 'amount' => $advance->amount])->values()->all(),
+        ];
+    }
+
     public function approvalKind(): string
     {
         return __('Foreman advance sheet');

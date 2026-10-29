@@ -695,7 +695,7 @@ class PaperInventoryE2ETest extends TestCase
         $this->actingAs($clerk)->post(route('inventory-issues.store'), [
             'issued_on' => today()->toDateString(), 'inventory_item_id' => $item->id, 'quantity' => 12.75, 'issued_to' => 'Machine P-01', 'reference' => 'WO-1',
         ])->assertRedirect(route('inventory.index', ['tab' => 'issues']))
-            ->assertSessionHas('status', '12.75 kg Black ink moved out to Machine P-01.');
+            ->assertSessionHas('status', '12.75 kg Black ink moved out to Machine P-01. Sent to the owner for approval.');
 
         $this->assertSame(12.25, $item->refresh()->balance());
         $this->assertSame('ok', $item->level());

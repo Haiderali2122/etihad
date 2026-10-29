@@ -61,6 +61,24 @@ class Loan extends Model
         return $this->balance() === 0;
     }
 
+    /**
+     * A loan that already has money paid back against it cannot be sent back.
+     */
+    public function rejectionBlocker(): ?string
+    {
+        return $this->repayments()->exists() ? __('Repayments are already recorded against this loan, so it cannot be sent back.') : null;
+    }
+
+    public function resendUrl(): string
+    {
+        return route('loans.create', ['employee' => $this->employee_id]);
+    }
+
+    public function resendInput(): array
+    {
+        return ['first_instalment_month' => $this->first_instalment_month->format('Y-m')] + $this->baseResendInput();
+    }
+
     public function approvalKind(): string
     {
         return __('Staff loan');

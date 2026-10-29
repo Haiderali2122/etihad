@@ -3,7 +3,7 @@
         'purchases_by_supplier' => __('Purchases by supplier'),
         'purchases_by_category' => __('Purchases by item category'),
         'expenses_by_head' => __('Cash spent by head'),
-        'machine_spend' => __('Machine repair spend'),
+        'machine_spend' => __('Machine spend (repairs and cash expenses)'),
         'paper_movement' => __('Paper in and out'),
     ];
 @endphp

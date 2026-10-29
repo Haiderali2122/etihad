@@ -2,6 +2,7 @@
     <x-page-head :title="$machine->code.' '.$machine->name" :subtitle="$machine->type->label().($machine->model ? ' · '.$machine->model : '')">
         <x-slot:actions>
             <x-badge :tone="$machine->status->tone()">{{ $machine->status->label() }}</x-badge>
+            <a class="btn" href="{{ route('machines.index') }}">{{ __('Back') }}</a>
             @can('machines.manage')<a class="btn" href="{{ route('machines.edit', $machine) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
             @can('machines.repair')<a class="btn primary" href="{{ route('machine-repairs.create', ['machine' => $machine->id]) }}"><x-icon name="wrench" />{{ __('Log repair') }}</a>@endcan
         </x-slot:actions>

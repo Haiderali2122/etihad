@@ -99,19 +99,36 @@
             {{ $purchases->links() }}
         @else
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Note') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
-                    <tr>
+                    <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
                         <td><a class="main" href="{{ route('inventory-items.show', $i->item) }}" style="color:inherit;text-decoration:none">{{ $i->item->localName() }}</a><div class="meta">{{ $i->item->category->localName() }}</div></td>
                         <td>{{ $i->issued_on->format('j M Y') }}</td>
                         <td class="r num"><b>{{ InventoryItem::qty($i->quantity) }}</b> {{ $i->item->unit }}</td>
                         <td>{{ $i->issued_to }}@if ($i->machine)<div class="meta">{{ $i->machine->code }} {{ $i->machine->name }}</div>@endif</td>
-                        <td>{{ $i->reference ?: '—' }}</td>
-                        <td>{{ $i->note ?: '—' }}</td>
+                        <td>{{ $i->reference ?: '—' }}@if ($i->note)<div class="meta">{{ $i->note }}</div>@endif</td>
+                        <td><x-badge :tone="$i->status->tone()">{{ $i->status->label() }}</x-badge>@if ($i->review_note)<div class="meta">{{ $i->review_note }}</div>@endif</td>
+                        <td>
+                            @if ($i->isSettled())
+                                <span class="num">{{ __('Used :used, back :back', ['used' => InventoryItem::qty($i->used()), 'back' => InventoryItem::qty($i->returned_quantity)]) }}</span>
+                            @elseif ($i->status->value !== 'rejected')
+                                @can('inventory.issue')
+                                    <form method="POST" action="{{ route('inventory-issues.settle', $i) }}" class="filters" style="flex-wrap:nowrap">
+                                        @csrf @method('PATCH')
+                                        <input class="select" style="width:90px" type="number" name="returned_quantity" min="0" max="{{ (float) $i->quantity }}" step="0.01" placeholder="{{ __('Qty back') }}" required aria-label="{{ __('Quantity back at end of shift') }}">
+                                        <button class="btn sm" type="submit">{{ __('Close') }}</button>
+                                    </form>
+                                @else
+                                    <span class="muted">{{ __('Not closed yet') }}</span>
+                                @endcan
+                            @else
+                                —
+                            @endif
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6"><div class="empty"><b>{{ __('Nothing moved out yet') }}</b></div></td></tr>
+                    <tr><td colspan="7"><div class="empty"><b>{{ __('Nothing moved out yet') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

@@ -58,6 +58,18 @@ class SalaryAdvance extends Model
         return $this->payroll_run_id !== null;
     }
 
+    public function resendUrl(): string
+    {
+        return $this->kind === AdvanceKind::MidMonth ? route('salary-advances.mid-month', ['date' => $this->given_on->toDateString()]) : route('salary-advances.create', ['employee' => $this->employee_id]);
+    }
+
+    public function resendInput(): array
+    {
+        return $this->kind === AdvanceKind::MidMonth
+            ? ['given_on' => $this->given_on->format('Y-m-d'), 'amounts' => [$this->employee_id => $this->amount]]
+            : $this->baseResendInput();
+    }
+
     public function approvalKind(): string
     {
         return $this->kind->label();

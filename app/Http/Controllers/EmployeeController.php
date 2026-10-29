@@ -20,7 +20,7 @@ class EmployeeController extends Controller
         $employees = Employee::query()->with('foreman')
             ->when($status !== 'all', fn ($q) => $q->where('is_active', $status === 'active'))
             ->when($search, fn ($q) => $q->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%")->orWhere('designation', 'like', "%{$search}%")))
-            ->withSum(['advances as open_advances' => fn ($q) => $q->notRejected()->whereNull('payroll_run_id')], 'amount')
+            ->withSum(['advances as open_advances' => fn ($q) => $q->approved()->whereNull('payroll_run_id')], 'amount')
             ->orderBy('name')
             ->get();
 

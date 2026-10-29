@@ -1,5 +1,5 @@
 <x-layouts.app :title="$machine->exists ? __('Edit machine') : __('Add machine')">
-    <x-page-head :title="$machine->exists ? __('Edit machine') : __('Add machine')" />
+    <x-page-head :back="$machine->exists ? route('machines.show', $machine) : route('machines.index')" :title="$machine->exists ? __('Edit machine') : __('Add machine')" />
     <form method="POST" action="{{ $machine->exists ? route('machines.update', $machine) : route('machines.store') }}" class="card form-card">
         @csrf
         @if ($machine->exists) @method('PUT') @endif

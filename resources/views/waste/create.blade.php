@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Record waste')">
-    <x-page-head :title="__('Record waste')" />
+    <x-page-head :back="($orderId ? route('work-orders.show', $orderId) : route('waste.index'))" :title="__('Record waste')" />
     <form method="POST" action="{{ route('waste.store') }}" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">
@@ -14,7 +14,7 @@
             <x-field name="sold_to" :label="__('Sold to')" />
             <x-field name="note" :label="__('Note')" />
         </div></div>
-        <div class="form-actions"><a class="btn" href="{{ route('waste.index') }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save') }}</button></div>
+        <div class="form-actions"><a class="btn" href="{{ ($orderId ? route('work-orders.show', $orderId) : route('waste.index')) }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save') }}</button></div>
     </form>
     @push('scripts')
         <script>

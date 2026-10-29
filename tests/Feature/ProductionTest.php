@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Enums\ContractorJobKind;
 use App\Enums\PartyKind;
 use App\Enums\WorkOrderStage;
+use App\Http\Controllers\ApprovalController;
 use App\Models\BookFormat;
 use App\Models\BuyerEntry;
 use App\Models\Contractor;
@@ -80,6 +81,10 @@ class ProductionTest extends TestCase
         $this->assertNotNull($order->paper_issue_id);
         $this->assertSame(629, $this->balance());
         $this->assertSame('WO-1001', $order->paperIssue->reference);
+        // The order was approved, so its paper issue does not wait a second time.
+        $this->assertSame(ApprovalStatus::Approved, $order->paperIssue->status);
+        $this->assertSame($owner->id, $order->paperIssue->reviewed_by);
+        $this->assertSame(0, app(ApprovalController::class)->pendingItems()->where('type', 'paper-issue')->count());
     }
 
     public function test_an_owner_order_issues_paper_straight_away(): void
@@ -122,12 +127,40 @@ class ProductionTest extends TestCase
         $this->actingAs($owner)->post(route('work-orders.store'), $this->order());
         $order = WorkOrder::query()->sole();
 
-        foreach ([WorkOrderStage::Folding, WorkOrderStage::Binding, WorkOrderStage::Ready, WorkOrderStage::Dispatched] as $expected) {
-            $this->actingAs($owner)->patch(route('work-orders.advance', $order));
-            $this->assertSame($expected, $order->refresh()->stage);
-        }
+        $contractor = Contractor::factory()->create();
+        $advance = fn (array $data = []) => $this->actingAs($owner)->patch(route('work-orders.advance', $order), $data);
+        $giveAndFinish = function (ContractorJobKind $kind) use ($owner, $order, $contractor): void {
+            $this->actingAs($owner)->post(route('contractor-jobs.store'), [
+                'contractor_id' => $contractor->id, 'work_order_id' => $order->id, 'kind' => $kind->value, 'job_on' => today()->toDateString(),
+                'forms' => 10, 'copies' => 18000, 'folding_rate' => 20, 'form_rate' => 0.5, 'copy_rate' => 3,
+            ])->assertSessionHasNoErrors();
+            $job = ContractorJob::query()->where('kind', $kind)->sole();
+            $this->actingAs($owner)->patch(route('contractor-jobs.done', $job), ['done_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        };
 
-        $this->actingAs($owner)->patch(route('work-orders.advance', $order))->assertStatus(409);
+        // Printing done asks how many copies were printed, and when.
+        $advance()->assertSessionHasErrors(['printed_copies', 'printed_on']);
+        $this->assertSame(WorkOrderStage::Printing, $order->refresh()->stage);
+        $advance(['printed_copies' => 18100, 'printed_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(WorkOrderStage::Folding, $order->refresh()->stage);
+        $this->assertSame(18100, $order->printed_copies);
+
+        // Folding and binding move on only once their contractor job is given and done.
+        $advance()->assertSessionHasErrors('stage');
+        $this->assertSame(WorkOrderStage::Folding, $order->refresh()->stage);
+        $giveAndFinish(ContractorJobKind::Folding);
+        $advance()->assertSessionHasNoErrors();
+        $this->assertSame(WorkOrderStage::Binding, $order->refresh()->stage);
+
+        $advance()->assertSessionHasErrors('stage');
+        $giveAndFinish(ContractorJobKind::Binding);
+        $advance()->assertSessionHasNoErrors();
+        $this->assertSame(WorkOrderStage::Ready, $order->refresh()->stage);
+
+        // Ready orders are dispatched only by loading them.
+        $advance()->assertSessionHasErrors('stage');
+        $this->assertSame(WorkOrderStage::Ready, $order->refresh()->stage);
+        $this->actingAs($owner)->get(route('work-orders.show', $order))->assertSee(route('dispatches.create', ['order' => $order->id]), false);
         $this->actingAs($owner)->get(route('work-orders.show', $order))->assertOk();
         $this->actingAs($owner)->get(route('work-orders.index'))->assertOk()->assertSee($order->number);
     }
@@ -216,6 +249,23 @@ class ProductionTest extends TestCase
             ->assertSessionHasNoErrors();
     }
 
+    public function test_add_buyer_opens_a_buyer_form_and_returns_to_buyers(): void
+    {
+        $owner = User::factory()->owner()->create();
+
+        $this->actingAs($owner)->get(route('buyers.index'))->assertSee(route('parties.create', ['kind' => 'buyer']), false);
+        $this->actingAs($owner)->get(route('parties.create', ['kind' => 'buyer']))->assertOk()
+            ->assertSee(__('Add buyer'))->assertDontSee(__('Add party'))
+            ->assertSee('<option value="buyer" selected', false);
+
+        $this->actingAs($owner)->post(route('parties.store'), ['name' => 'Ilmi Kitab Khana', 'kind' => 'buyer', 'is_active' => 1, 'return_to' => route('buyers.index')])
+            ->assertRedirect(route('buyers.index'));
+        $this->assertSame(PartyKind::Buyer, Party::query()->where('name', 'Ilmi Kitab Khana')->sole()->kind);
+
+        $this->actingAs($owner)->post(route('parties.store'), ['name' => 'Al-Noor Mills', 'kind' => 'paper', 'is_active' => 1])
+            ->assertRedirect(route('parties.index'));
+    }
+
     public function test_plate_bills_can_be_cleared(): void
     {
         $manager = User::factory()->create();
@@ -247,5 +297,70 @@ class ProductionTest extends TestCase
         $this->actingAs($viewer)->get(route('contractor-jobs.create'))->assertForbidden();
         $this->actingAs($viewer)->get(route('dispatches.create'))->assertForbidden();
         $this->actingAs($viewer)->get(route('waste.create'))->assertForbidden();
+    }
+
+    public function test_load_is_offered_only_from_binding_and_opens_with_the_order_and_buyer(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $buyer = Party::factory()->kind(PartyKind::Buyer)->create();
+        $this->actingAs($owner)->post(route('work-orders.store'), $this->order(['buyer_id' => $buyer->id]));
+        $order = WorkOrder::query()->sole();
+        $loadUrl = route('dispatches.create', ['order' => $order->id]);
+
+        $this->actingAs($owner)->get(route('work-orders.show', $order))->assertDontSee($loadUrl, false);
+        $order->forceFill(['stage' => WorkOrderStage::Binding])->save();
+        $this->actingAs($owner)->get(route('work-orders.show', $order))->assertSee($loadUrl, false);
+
+        $this->actingAs($owner)->get($loadUrl)->assertOk()
+            ->assertViewHas('order', fn ($o) => $o?->is($order))
+            ->assertViewHas('buyerId', $buyer->id)
+            ->assertViewHas('orders', fn ($orders) => $orders->contains('id', $order->id))
+            ->assertViewHas('back', route('work-orders.show', $order));
+        $this->actingAs($owner)->get(route('dispatches.create', ['buyer' => $buyer->id]))->assertViewHas('buyerId', $buyer->id)->assertViewHas('back', route('buyers.show', $buyer));
+    }
+
+    public function test_due_date_cannot_be_before_the_order_date(): void
+    {
+        $this->actingAs(User::factory()->owner()->create())
+            ->post(route('work-orders.store'), $this->order(['due_on' => today()->subDay()->toDateString()]))
+            ->assertSessionHasErrors('due_on');
+    }
+
+    public function test_plate_job_and_job_forms_go_back_to_the_order(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $this->actingAs($owner)->post(route('work-orders.store'), $this->order());
+        $order = WorkOrder::query()->sole();
+
+        $this->actingAs($owner)->get(route('plate-jobs.create', ['order' => $order->id]))->assertViewHas('back', route('work-orders.show', $order));
+        $this->actingAs($owner)->get(route('contractor-jobs.create', ['order' => $order->id]))->assertSee(route('work-orders.show', $order), false);
+        $this->actingAs($owner)->get(route('waste.create', ['order' => $order->id]))->assertSee(route('work-orders.show', $order), false);
+    }
+
+    public function test_job_cannot_be_finished_before_it_was_given(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $job = ContractorJob::factory()->create(['job_on' => today()->toDateString()]);
+
+        $this->actingAs($owner)->patch(route('contractor-jobs.done', $job), ['done_on' => today()->subDay()->toDateString()])->assertSessionHasErrors('done_on');
+        $this->actingAs($owner)->patch(route('contractor-jobs.done', $job), ['done_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(today()->toDateString(), $job->refresh()->done_on->toDateString());
+    }
+
+    public function test_parties_keep_the_type_tab_and_return_address(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $press = Party::factory()->kind(PartyKind::Press)->create();
+
+        $this->actingAs($owner)->get(route('parties.index', ['kind' => 'press']))
+            ->assertSee(route('parties.create', ['kind' => 'press']), false)
+            ->assertSee(route('parties.edit', ['party' => $press, 'tab' => 'press']), false);
+        $this->actingAs($owner)->put(route('parties.update', $press), [
+            'name' => $press->name, 'kind' => 'press', 'is_active' => 1, 'return_to' => route('parties.index', ['kind' => 'press']),
+        ])->assertRedirect(route('parties.index', ['kind' => 'press']));
+
+        // A return address outside the app is ignored.
+        $this->actingAs($owner)->post(route('parties.store'), ['name' => 'Kamran Plates', 'kind' => 'plates', 'is_active' => 1, 'return_to' => 'https://example.com/x'])
+            ->assertRedirect(route('parties.index'));
     }
 }

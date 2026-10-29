@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\PaperReceipt;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -24,7 +25,8 @@ class StorePaperReceiptRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'slip_no' => ['required', 'string', 'max:30', 'unique:paper_receipts,slip_no'],
+            // A corrected copy of a sent-back receipt may keep that receipt's slip number.
+            'slip_no' => ['required', 'string', 'max:30', Rule::unique('paper_receipts', 'slip_no')->ignore(PaperReceipt::beingResent()?->id)],
             'received_at' => ['required', 'date'],
             'party_id' => ['required', 'exists:parties,id'],
             'paper_type_id' => ['required', 'exists:paper_types,id'],

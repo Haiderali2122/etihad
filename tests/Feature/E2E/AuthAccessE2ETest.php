@@ -15,9 +15,11 @@ use App\Models\ExpenseHead;
 use App\Models\ForemanSheet;
 use App\Models\Godown;
 use App\Models\InventoryCategory;
+use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
 use App\Models\Loan;
 use App\Models\Machine;
+use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
@@ -43,7 +45,7 @@ class AuthAccessE2ETest extends TestCase
      *
      * @var list<string>
      */
-    private const OpenRoutes = ['login', 'locale', 'logout', 'dashboard', 'purchases.index'];
+    private const OpenRoutes = ['login', 'locale', 'logout', 'dashboard', 'purchases.index', 'approvals.resend'];
 
     /** @var list<string> */
     private array $skipped = [];
@@ -515,8 +517,10 @@ class AuthAccessE2ETest extends TestCase
                     'godown' => Godown::factory()->create(),
                     'inventory_category' => InventoryCategory::factory()->create(),
                     'inventory_item' => InventoryItem::factory()->create(),
+                    'inventoryIssue' => InventoryIssue::factory()->create(),
                     'loan' => Loan::factory()->create(),
                     'machine' => Machine::factory()->create(),
+                    'paperIssue' => PaperIssue::factory()->create(),
                     'paper_receipt' => PaperReceipt::factory()->create(),
                     'paper_type' => PaperType::factory()->create(),
                     'party' => Party::factory()->create(),

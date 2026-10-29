@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * - Folding: (forms × copies ÷ 1000) × folding rate
  * - Binding: ((forms × rate per form) + binding rate) × copies
  */
-#[Fillable(['contractor_id', 'work_order_id', 'kind', 'job_on', 'forms', 'copies', 'folding_rate', 'form_rate', 'copy_rate', 'amount', 'state', 'note', 'created_by'])]
+#[Fillable(['contractor_id', 'work_order_id', 'kind', 'job_on', 'forms', 'copies', 'folding_rate', 'form_rate', 'copy_rate', 'amount', 'state', 'done_on', 'note', 'created_by'])]
 class ContractorJob extends Model
 {
     /** @use HasFactory<ContractorJobFactory> */
@@ -26,6 +26,7 @@ class ContractorJob extends Model
     {
         return [
             'kind' => ContractorJobKind::class,
+            'done_on' => 'date',
             'job_on' => 'date',
             'forms' => 'decimal:2',
             'copies' => 'integer',

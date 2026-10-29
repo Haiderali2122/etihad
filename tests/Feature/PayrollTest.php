@@ -9,6 +9,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\ForemanSheet;
 use App\Models\Loan;
+use App\Models\LoanRepayment;
 use App\Models\PayrollRun;
 use App\Models\SalaryAdvance;
 use App\Models\Setting;
@@ -148,6 +149,46 @@ class PayrollTest extends TestCase
         $this->assertSame(500, $line->bonus);
     }
 
+    public function test_a_loan_given_after_the_draft_is_picked_up_on_recalculate(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $employee = Employee::factory()->create(['monthly_salary' => 30000]);
+        $run = app(PayrollCalculator::class)->prepare($this->month, $owner);
+        $this->assertSame(0, $run->lines->sole()->loan_deducted);
+
+        Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 10000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-09-01', 'created_by' => $owner->id]);
+        $this->actingAs($owner)->post(route('payroll.recalculate', $run))->assertRedirect(route('payroll.show', $run));
+
+        $line = $run->lines()->sole();
+        $this->assertSame(2000, $line->loan_deducted);
+        $this->assertSame(28000, $line->net_pay);
+
+        $this->actingAs($owner)->get(route('payroll.slips', $run))->assertOk()->assertSee('− 2,000');
+    }
+
+    public function test_advances_and_loans_waiting_for_approval_are_not_deducted(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        $employee = Employee::factory()->create(['monthly_salary' => 30000]);
+        $advance = SalaryAdvance::factory()->create(['employee_id' => $employee->id, 'given_on' => '2026-09-22', 'amount' => 5000, 'created_by' => $manager->id]);
+        $loan = Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 10000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-09-01', 'created_by' => $manager->id]);
+        $this->assertSame(ApprovalStatus::Pending, $advance->status);
+        $this->assertSame(ApprovalStatus::Pending, $loan->status);
+
+        $line = app(PayrollCalculator::class)->prepare($this->month, $owner)->lines->sole();
+        $this->assertSame(0, $line->advances_deducted);
+        $this->assertSame(0, $line->loan_deducted);
+        $this->assertSame(30000, $line->net_pay);
+
+        $advance->approve($owner);
+        $loan->approve($owner);
+        $line = app(PayrollCalculator::class)->prepare($this->month, $owner)->lines->sole();
+        $this->assertSame(5000, $line->advances_deducted);
+        $this->assertSame(2000, $line->loan_deducted);
+        $this->assertSame(23000, $line->net_pay);
+    }
+
     public function test_manager_prepares_but_only_the_owner_finalizes(): void
     {
         $manager = User::factory()->create();
@@ -173,9 +214,11 @@ class PayrollTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $sheet = ForemanSheet::query()->sole();
-        $this->assertSame(3000, $a->outstandingAdvances());
-        $this->assertSame(5000, $foreman->outstandingAdvances());
+        $this->assertSame(3000, (int) $sheet->advances->where('employee_id', $a->id)->sum('amount'));
+        $this->assertSame(5000, (int) $sheet->advances->where('employee_id', $foreman->id)->sum('amount'));
         $this->assertTrue($sheet->advances->every(fn ($adv) => $adv->status === ApprovalStatus::Pending));
+        // Waiting for the owner, so nothing is owed against salary yet.
+        $this->assertSame(0, $a->outstandingAdvances());
 
         $this->actingAs($owner)->get(route('approvals.index'))->assertSee($foreman->name);
         $this->actingAs($owner)->patch(route('approvals.update', ['foreman-sheet', $sheet->id]), ['decision' => 'reject', 'note' => 'Wrong amounts']);
@@ -204,7 +247,8 @@ class PayrollTest extends TestCase
         $post();
         $post();
 
-        $this->assertSame(15000, $employee->outstandingAdvances());
+        $this->assertSame(1, SalaryAdvance::query()->where('employee_id', $employee->id)->count());
+        $this->assertSame(15000, (int) SalaryAdvance::query()->where('employee_id', $employee->id)->sum('amount'));
     }
 
     public function test_attendance_day_sheet_saves_status_and_overtime(): void
@@ -270,5 +314,55 @@ class PayrollTest extends TestCase
         $this->assertSame(1.0, $line->present_days);
         $this->assertSame(1.0, $line->overtime_hours);
         $this->assertSame(500, $line->advances_deducted);
+    }
+
+    public function test_loan_first_instalment_cannot_be_before_the_loan_and_instalment_not_above_it(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $employee = Employee::factory()->create();
+        $payload = ['employee_id' => $employee->id, 'issued_on' => '2026-10-10', 'amount' => 10000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-09'];
+
+        $this->actingAs($owner)->post(route('loans.store'), $payload)->assertSessionHasErrors('first_instalment_month');
+        $this->actingAs($owner)->post(route('loans.store'), ['monthly_instalment' => 12000, 'first_instalment_month' => '2026-10'] + $payload)->assertSessionHasErrors('monthly_instalment');
+        $this->actingAs($owner)->post(route('loans.store'), ['first_instalment_month' => '2026-10'] + $payload)->assertSessionHasNoErrors();
+    }
+
+    public function test_cash_repayment_needs_an_approved_loan_and_blocks_sending_it_back(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        $loan = Loan::factory()->create(['issued_on' => '2026-10-05', 'amount' => 10000, 'monthly_instalment' => 2000, 'first_instalment_month' => '2026-11-01', 'created_by' => $manager->id]);
+
+        $this->actingAs($manager)->post(route('loans.repay', $loan), ['paid_on' => '2026-10-20', 'amount' => 1000])->assertStatus(409);
+        $this->actingAs($manager)->get(route('loans.show', $loan))->assertSee('once the owner approves this loan');
+
+        $loan->approve($owner);
+        $this->actingAs($manager)->post(route('loans.repay', $loan), ['paid_on' => '2026-10-01', 'amount' => 1000])->assertSessionHasErrors('paid_on');
+        $this->actingAs($manager)->post(route('loans.repay', $loan), ['paid_on' => '2026-10-20', 'amount' => 1000])->assertSessionHasNoErrors();
+        $this->assertSame(9000, $loan->refresh()->balance());
+
+        // An older loan that somehow has repayments while pending cannot be sent back.
+        $pending = Loan::factory()->create(['created_by' => $manager->id]);
+        LoanRepayment::factory()->create(['loan_id' => $pending->id, 'amount' => 500]);
+        $this->actingAs($owner)->patch(route('approvals.update', ['loan', $pending->id]), ['decision' => 'reject', 'note' => 'No'])->assertSessionHasErrors('decision');
+    }
+
+    public function test_rejected_loans_and_advances_leave_the_open_lists_and_totals_count_approved_only(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        $employee = Employee::factory()->create(['name' => 'Zahid Hussain']);
+        Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 8000, 'created_by' => $owner->id]);
+        Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 3000, 'created_by' => $manager->id]);
+        Loan::factory()->create(['employee_id' => $employee->id, 'amount' => 5000, 'created_by' => $manager->id])->reject($owner, 'No');
+        SalaryAdvance::factory()->create(['employee_id' => $employee->id, 'amount' => 4000, 'created_by' => $owner->id]);
+        SalaryAdvance::factory()->create(['employee_id' => $employee->id, 'amount' => 1500, 'created_by' => $manager->id]);
+        SalaryAdvance::factory()->create(['employee_id' => $employee->id, 'amount' => 900, 'created_by' => $manager->id])->reject($owner, 'No');
+
+        $this->actingAs($owner)->get(route('loans.index'))->assertViewHas('outstanding', 8000)
+            ->assertViewHas('loans', fn ($loans) => $loans->count() === 2);
+        $this->actingAs($owner)->get(route('salary-advances.index'))->assertViewHas('openTotal', 4000)
+            ->assertViewHas('advances', fn ($advances) => $advances->total() === 2);
+        $this->actingAs($owner)->get(route('employees.index'))->assertViewHas('employees', fn ($e) => (int) $e->sole()->open_advances === 4000);
     }
 }

@@ -1,6 +1,6 @@
 @php $current = old('color', $head->color); @endphp
 <x-layouts.app :title="$head->exists ? __('Edit expense head') : __('Add expense head')">
-    <x-page-head :title="$head->exists ? __('Edit expense head') : __('Add expense head')" />
+    <x-page-head :back="route('expense-heads.index')" :title="$head->exists ? __('Edit expense head') : __('Add expense head')" />
     <form method="POST" action="{{ $head->exists ? route('expense-heads.update', $head) : route('expense-heads.store') }}" class="card form-card">
         @csrf
         @if ($head->exists) @method('PUT') @endif

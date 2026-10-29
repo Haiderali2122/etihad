@@ -98,14 +98,27 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * Move the order to its next stage.
+     * Move the order to its next stage once that stage's work is recorded. Finishing in-house printing
+     * asks for the printed copies and the date here.
      */
-    public function advance(WorkOrder $workOrder): RedirectResponse
+    public function advance(Request $request, WorkOrder $workOrder): RedirectResponse
     {
         $next = $workOrder->stage->next();
-        abort_unless($next && ! $workOrder->isPending(), 409, __('This order cannot move on yet.'));
+        abort_unless($next && ! $workOrder->isPending() && $workOrder->paper_issue_id, 409, __('This order cannot move on yet.'));
 
-        $workOrder->update(['stage' => $next]);
+        if ($workOrder->stage === WorkOrderStage::Printing && $workOrder->mode === PrintMode::InHouse) {
+            $data = $request->validate([
+                'printed_copies' => ['required', 'integer', 'min:1'],
+                'printed_on' => ['required', 'date', 'after_or_equal:'.$workOrder->ordered_on->toDateString(), 'before_or_equal:today'],
+            ]);
+            $workOrder->forceFill($data);
+        }
+
+        if ($blocker = $workOrder->advanceBlocker()) {
+            return back()->withErrors(['stage' => $blocker]);
+        }
+
+        $workOrder->forceFill(['stage' => $next])->save();
 
         return back()->with('status', __(':number moved to :stage.', ['number' => $workOrder->number, 'stage' => $next->label()]));
     }

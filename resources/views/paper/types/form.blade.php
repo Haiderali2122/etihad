@@ -1,5 +1,5 @@
 <x-layouts.app :title="$paperType->exists ? __('Edit paper type') : __('Add paper type')">
-    <x-page-head :title="$paperType->exists ? __('Edit paper type') : __('Add paper type')" />
+    <x-page-head :back="route('paper-types.index')" :title="$paperType->exists ? __('Edit paper type') : __('Add paper type')" />
     <form method="POST" action="{{ $paperType->exists ? route('paper-types.update', $paperType) : route('paper-types.store') }}" class="card form-card">
         @csrf
         @if ($paperType->exists) @method('PUT') @endif

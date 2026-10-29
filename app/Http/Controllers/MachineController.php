@@ -11,14 +11,21 @@ use Illuminate\View\View;
 
 class MachineController extends Controller
 {
+    /**
+     * Spend everywhere is approved repair payments plus approved cash expenses tagged to the machine,
+     * the same as the dashboard and the machine page.
+     */
     public function index(): View
     {
         $monthStart = now()->startOfMonth();
+        $month = [$monthStart, $monthStart->copy()->endOfMonth()];
 
         return view('machines.index', [
             'machines' => Machine::query()
-                ->withSum(['repairs as month_spend' => fn ($q) => $q->notRejected()->whereBetween('repaired_on', [$monthStart, $monthStart->copy()->endOfMonth()])], 'amount_paid')
-                ->withSum(['repairs as total_spend' => fn ($q) => $q->notRejected()], 'amount_paid')
+                ->withSum(['repairs as month_repairs' => fn ($q) => $q->approved()->whereBetween('repaired_on', $month)], 'amount_paid')
+                ->withSum(['expenses as month_expenses' => fn ($q) => $q->approved()->whereBetween('spent_on', $month)], 'amount')
+                ->withSum(['repairs as total_repairs' => fn ($q) => $q->approved()], 'amount_paid')
+                ->withSum(['expenses as total_expenses' => fn ($q) => $q->approved()], 'amount')
                 ->with(['repairs' => fn ($q) => $q->latest('repaired_on')->limit(1)])
                 ->orderBy('code')
                 ->get(),
@@ -30,7 +37,7 @@ class MachineController extends Controller
         return view('machines.show', [
             'machine' => $machine,
             'repairs' => $machine->repairs()->with(['part', 'vendor'])->latest('repaired_on')->latest('id')->get(),
-            'expenses' => $machine->expenses()->with('head')->notRejected()->latest('spent_on')->get(),
+            'expenses' => $machine->expenses()->with('head')->approved()->latest('spent_on')->get(),
         ]);
     }
 

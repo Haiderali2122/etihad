@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\ApprovalStatus;
 use App\Models\BookFormat;
+use App\Models\Employee;
 use App\Models\Godown;
+use App\Models\Machine;
 use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
@@ -162,5 +164,54 @@ class PaperStockTest extends TestCase
         $this->assertNull($issue->copies);
         $this->assertSame('0.00', $issue->wastage_percent);
         $this->assertSame(460, app(PaperStock::class)->available($type->id, $party->id));
+    }
+
+    public function test_in_house_paper_records_employee_and_machine_waits_for_approval_and_returns_at_end_of_shift(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        $type = PaperType::factory()->create();
+        $party = Party::factory()->create();
+        PaperReceipt::factory()->for($type)->for($party)->create(['quantity' => 100]);
+        $machine = Machine::factory()->create(['code' => 'P-02']);
+        $employee = Employee::factory()->create();
+
+        $this->actingAs($manager)->post(route('paper-issues.store'), [
+            'issued_on' => today()->toDateString(), 'kind' => 'in_house', 'party_id' => $party->id, 'paper_type_id' => $type->id,
+            'quantity' => 40, 'machine_id' => $machine->id, 'employee_id' => $employee->id,
+        ])->assertSessionHasNoErrors();
+
+        $issue = PaperIssue::query()->sole();
+        $this->assertSame('Machine P-02', $issue->issued_to);
+        $this->assertSame($employee->id, $issue->employee_id);
+        $this->assertSame(ApprovalStatus::Pending, $issue->status);
+        $this->assertSame(60, app(PaperStock::class)->available($type->id, $party->id));
+
+        $this->actingAs($owner)->patch(route('approvals.update', ['paper-issue', $issue->id]), ['decision' => 'approve'])->assertSessionHasNoErrors();
+        $this->actingAs($manager)->patch(route('paper-issues.settle', $issue), ['returned_quantity' => 7])->assertSessionHasNoErrors();
+
+        $this->assertSame(33, $issue->refresh()->used());
+        $this->assertSame(67, app(PaperStock::class)->available($type->id, $party->id));
+        $this->actingAs($owner)->get(route('paper.index', ['tab' => 'issues']))->assertOk()->assertSee('Used 33, back 7');
+    }
+
+    public function test_outsourced_paper_sent_back_by_the_owner_returns_to_stock_and_cannot_be_closed_by_shift(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $type = PaperType::factory()->create();
+        $party = Party::factory()->create();
+        PaperReceipt::factory()->for($type)->for($party)->create(['quantity' => 100]);
+
+        $this->actingAs(User::factory()->create())->post(route('paper-issues.store'), [
+            'issued_on' => today()->toDateString(), 'kind' => 'outsource', 'party_id' => $party->id, 'paper_type_id' => $type->id,
+            'quantity' => 30, 'issued_to' => 'Al-Noor Press',
+        ])->assertSessionHasNoErrors();
+        $issue = PaperIssue::query()->sole();
+        $this->assertSame(70, app(PaperStock::class)->available($type->id, $party->id));
+        $this->actingAs($owner)->patch(route('paper-issues.settle', $issue), ['returned_quantity' => 5])->assertStatus(409);
+
+        $this->actingAs($owner)->patch(route('approvals.update', ['paper-issue', $issue->id]), ['decision' => 'reject', 'note' => 'Wrong press'])->assertSessionHasNoErrors();
+
+        $this->assertSame(100, app(PaperStock::class)->available($type->id, $party->id));
     }
 }

@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('New work order')">
-    <x-page-head :title="__('New work order :n', ['n' => $number])" :subtitle="__('Rims are worked out from the book\'s formats and checked against stock before you save.')" />
+    <x-page-head :back="route('work-orders.index')" :title="__('New work order :n', ['n' => $number])" :subtitle="__('Rims are worked out from the book\'s formats and checked against stock before you save.')" />
 
     @if ($books->isEmpty())
         <div class="card"><div class="empty"><b>{{ __('No books yet') }}</b><a href="{{ route('books.create') }}">{{ __('Add a book with its formats first.') }}</a></div></div>

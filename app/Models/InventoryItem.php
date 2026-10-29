@@ -9,10 +9,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Something the press keeps in stock, e.g. "Black ink" counted in kg.
- * Stock in = purchases that weren't sent back; stock out = items moved out.
+ * Stock in = purchases that weren't sent back; stock out = items moved out and not sent back, less what
+ * came back at the end of the shift.
  *
  * @property float|null $stock_in
  * @property float|null $stock_out
@@ -42,7 +44,7 @@ class InventoryItem extends Model
     public function scopeWithStock(Builder $query): void
     {
         $query->withSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')
-            ->withSum('issues as stock_out', 'quantity');
+            ->withSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
     }
 
     /**
@@ -73,7 +75,7 @@ class InventoryItem extends Model
     {
         if (! array_key_exists('stock_in', $this->attributes)) {
             $this->loadSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')
-                ->loadSum('issues as stock_out', 'quantity');
+                ->loadSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
         }
 
         return round((float) $this->stock_in - (float) $this->stock_out, 2);

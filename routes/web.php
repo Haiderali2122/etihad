@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor(['create', 'store'], 'can:paper.receive')
         ->middlewareFor('show', 'can:paper.view');
     Route::resource('paper-issues', PaperIssueController::class)->only(['create', 'store'])->middleware('can:paper.issue');
+    Route::patch('paper-issues/{paperIssue}/settle', [PaperIssueController::class, 'settle'])->middleware('can:paper.issue')->name('paper-issues.settle');
     Route::resource('godowns', GodownController::class)->except('show')->middleware('can:godowns.manage');
     Route::resource('paper-types', PaperTypeController::class)->except(['show', 'destroy'])->middleware('can:paper.types');
 
@@ -113,6 +114,7 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor('show', 'can:purchases.view')
         ->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'can:inventory.manage');
     Route::resource('inventory-issues', InventoryIssueController::class)->only(['create', 'store'])->middleware('can:inventory.issue');
+    Route::patch('inventory-issues/{inventoryIssue}/settle', [InventoryIssueController::class, 'settle'])->middleware('can:inventory.issue')->name('inventory-issues.settle');
     Route::redirect('purchases', 'inventory?tab=purchases')->name('purchases.index');
     Route::resource('purchases', PurchaseController::class)->only(['create', 'store'])->middleware('can:purchases.create');
 
@@ -168,6 +170,10 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('reports', [ReportController::class, 'index'])->middleware('can:reports.view')->name('reports.index');
+
+    // Whoever entered something the owner sent back can open it again, corrected, in the usual form.
+    Route::get('sent-back/{type}/{id}/resend', [ApprovalController::class, 'resend'])->name('approvals.resend')
+        ->whereIn('type', array_keys(ApprovalController::Types))->whereNumber('id');
 
     Route::middleware('can:approve')->group(function () {
         Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');

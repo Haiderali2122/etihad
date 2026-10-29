@@ -28,7 +28,10 @@ class WasteEntryController extends Controller
     public function create(Request $request): View
     {
         return view('waste.create', [
-            'orders' => WorkOrder::query()->with('bookFormat.book')->where('stage', '!=', 'waiting')->latest('id')->take(60)->get(),
+            // The latest orders, plus the one this form was opened from even if it is older.
+            'orders' => WorkOrder::query()->with('bookFormat.book')->where('stage', '!=', 'waiting')->latest('id')->take(60)->get()
+                ->concat(WorkOrder::query()->with('bookFormat.book')->where('stage', '!=', 'waiting')->whereKey($request->integer('order'))->get())
+                ->unique('id')->values(),
             'orderId' => $request->integer('order') ?: null,
             'stages' => WasteStage::cases(),
             'disposals' => WasteDisposal::cases(),

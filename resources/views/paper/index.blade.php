@@ -83,20 +83,38 @@
             {{ $receipts->links() }}
         @else
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
-                    <tr>
+                    <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
                         <td>{{ $i->issued_on->format('j M Y') }}</td>
                         <td><x-badge :tone="$i->kind->tone()">{{ $i->kind->label() }}</x-badge></td>
                         <td><div class="main">{{ $i->reference ?: '—' }}</div><div class="meta">{{ $i->book_name }}@if ($i->copies) · {{ __(':n copies', ['n' => number_format($i->copies)]) }}@endif</div></td>
                         <td>{{ $i->paperType->code }}<div class="meta">{{ $i->paperType->label() }}</div></td>
                         <td>{{ $i->party->name }}</td>
-                        <td>{{ $i->issued_to }}</td>
+                        <td>{{ $i->issued_to }}@if ($i->employee || $i->machine)<div class="meta">{{ collect([$i->machine?->code, $i->employee?->name])->filter()->implode(' · ') }}</div>@endif</td>
                         <td class="r num"><b>{{ number_format($i->quantity) }}</b>@if ((float) $i->wastage_percent > 0)<div class="meta">{{ __('incl. :p% wastage', ['p' => rtrim(rtrim($i->wastage_percent, '0'), '.')]) }}</div>@endif</td>
+                        <td><x-badge :tone="$i->status->tone()">{{ $i->status->label() }}</x-badge>@if ($i->review_note)<div class="meta">{{ $i->review_note }}</div>@endif</td>
+                        <td>
+                            @if ($i->isSettled())
+                                <span class="num">{{ __('Used :used, back :back', ['used' => number_format($i->used()), 'back' => number_format($i->returned_quantity)]) }}</span>
+                            @elseif ($i->canBeSettled())
+                                @can('paper.issue')
+                                    <form method="POST" action="{{ route('paper-issues.settle', $i) }}" class="filters" style="flex-wrap:nowrap">
+                                        @csrf @method('PATCH')
+                                        <input class="select" style="width:80px" type="number" name="returned_quantity" min="0" max="{{ $i->quantity }}" step="1" placeholder="{{ __('Rims back') }}" required aria-label="{{ __('Rims back at end of shift') }}">
+                                        <button class="btn sm" type="submit">{{ __('Close') }}</button>
+                                    </form>
+                                @else
+                                    <span class="muted">{{ __('Not closed yet') }}</span>
+                                @endcan
+                            @else
+                                —
+                            @endif
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7"><div class="empty"><b>{{ __('No paper issued yet') }}</b></div></td></tr>
+                    <tr><td colspan="9"><div class="empty"><b>{{ __('No paper issued yet') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

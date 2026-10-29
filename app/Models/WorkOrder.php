@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\ContractorJobKind;
 use App\Enums\PaperIssueKind;
 use App\Enums\PrintMode;
 use App\Enums\WorkOrderStage;
@@ -31,6 +32,8 @@ class WorkOrder extends Model
         return [
             'ordered_on' => 'date',
             'due_on' => 'date',
+            'printed_on' => 'date',
+            'printed_copies' => 'integer',
             'copies' => 'integer',
             'forms' => 'decimal:2',
             'wastage_percent' => 'decimal:2',
@@ -75,7 +78,11 @@ class WorkOrder extends Model
 
     public function issuePaperAndStart(): void
     {
-        $issue = PaperIssue::create([
+        // The order itself was approved, so its paper issue is too.
+        $issue = (new PaperIssue)->forceFill([
+            'status' => ApprovalStatus::Approved,
+            'reviewed_by' => $this->reviewed_by,
+            'reviewed_at' => $this->reviewed_at ?? now(),
             'issued_on' => now()->toDateString(),
             'kind' => $this->mode === PrintMode::Outsource ? PaperIssueKind::Outsource : PaperIssueKind::InHouse,
             'party_id' => $this->party_id,
@@ -86,9 +93,11 @@ class WorkOrder extends Model
             'book_name' => $this->bookName(),
             'copies' => $this->copies,
             'issued_to' => $this->printedAt(),
+            'machine_id' => $this->mode === PrintMode::InHouse ? $this->machine_id : null,
             'wastage_percent' => $this->wastage_percent,
             'created_by' => $this->reviewed_by ?? $this->created_by,
         ]);
+        $issue->save();
 
         $this->forceFill(['paper_issue_id' => $issue->id, 'stage' => WorkOrderStage::Printing])->saveQuietly();
     }
@@ -120,11 +129,64 @@ class WorkOrder extends Model
     }
 
     /**
-     * Rims sent out less what came back unused.
+     * Rims sent out less what came back unused: leftovers from the outside press, or rims returned
+     * from the machine at the end of the shift.
      */
     public function rimsUsed(): int
     {
-        return $this->rims_needed - (int) $this->outsideReceipts()->sum('leftover_rims');
+        return $this->rims_needed - (int) $this->outsideReceipts()->sum('leftover_rims') - (int) ($this->paperIssue?->returned_quantity ?? 0);
+    }
+
+    /**
+     * Copies that came off the press: entered when in-house printing is finished, or received back from the outside press.
+     */
+    public function printedCopies(): int
+    {
+        return $this->mode === PrintMode::Outsource
+            ? (int) $this->outsideReceipts()->sum('printed_copies')
+            : (int) $this->printed_copies;
+    }
+
+    public function copiesLeftToLoad(): int
+    {
+        return max(0, $this->copies - (int) $this->dispatches()->sum('copies'));
+    }
+
+    /**
+     * Books can be loaded from binding onwards, while copies are left.
+     */
+    public function canBeLoaded(): bool
+    {
+        return in_array($this->stage, Dispatch::orderStages(), true) && $this->copiesLeftToLoad() > 0;
+    }
+
+    /**
+     * Why the order cannot move to its next stage yet, or null when it can. Each stage needs its own work recorded first:
+     * printing needs the printed copies, folding and binding need their contractor jobs given out and finished,
+     * and dispatch happens only by loading the books.
+     */
+    public function advanceBlocker(): ?string
+    {
+        $jobsDone = function (ContractorJobKind $kind): ?string {
+            $jobs = $this->contractorJobs()->where('kind', $kind)->get();
+
+            return match (true) {
+                $jobs->isEmpty() => __('Give the :work job to a contractor first.', ['work' => mb_strtolower($kind->label())]),
+                $jobs->contains(fn (ContractorJob $job) => ! $job->isDone()) => __('Mark the :work job as done first.', ['work' => mb_strtolower($kind->label())]),
+                default => null,
+            };
+        };
+
+        return match ($this->stage) {
+            WorkOrderStage::Waiting => __('Waiting for the owner\'s approval.'),
+            WorkOrderStage::Printing => $this->mode === PrintMode::Outsource && $this->printedCopies() === 0
+                ? __('Record the printed work received from the outside press first.')
+                : null,
+            WorkOrderStage::Folding => $jobsDone(ContractorJobKind::Folding),
+            WorkOrderStage::Binding => $jobsDone(ContractorJobKind::Binding),
+            WorkOrderStage::Ready => __('Load the books to dispatch them; the order closes once every copy is loaded.'),
+            WorkOrderStage::Dispatched => __('This order is already dispatched.'),
+        };
     }
 
     /**
@@ -223,6 +285,11 @@ class WorkOrder extends Model
     public function wasteEntries(): HasMany
     {
         return $this->hasMany(WasteEntry::class);
+    }
+
+    public function resendUrl(): string
+    {
+        return route('work-orders.create');
     }
 
     public function approvalKind(): string

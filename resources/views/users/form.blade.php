@@ -1,5 +1,5 @@
 <x-layouts.app :title="$user->exists ? __('Edit user') : __('Add user')">
-    <x-page-head :title="$user->exists ? __('Edit user') : __('Add user')" :subtitle="$user->exists ? $user->email : __('The person signs in with this email and password.')" />
+    <x-page-head :back="route('users.index')" :title="$user->exists ? __('Edit user') : __('Add user')" :subtitle="$user->exists ? $user->email : __('The person signs in with this email and password.')" />
 
     <form method="POST" action="{{ $user->exists ? route('users.update', $user) : route('users.store') }}" class="card form-card" autocomplete="off">
         @csrf

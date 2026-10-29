@@ -23,8 +23,8 @@ class DashboardController extends Controller
         $cashGiven = (int) CashFloat::query()->sum('amount');
         $cashSpent = (int) Expense::query()->notRejected()->whereIn('user_id', CashFloat::query()->select('user_id'))->sum('amount');
 
-        $machineSpend = (int) MachineRepair::query()->notRejected()->whereBetween('repaired_on', [$monthStart, $monthEnd])->sum('amount_paid')
-            + (int) Expense::query()->notRejected()->whereNotNull('machine_id')->whereBetween('spent_on', [$monthStart, $monthEnd])->sum('amount');
+        $machineSpend = (int) MachineRepair::query()->approved()->whereBetween('repaired_on', [$monthStart, $monthEnd])->sum('amount_paid')
+            + (int) Expense::query()->approved()->whereNotNull('machine_id')->whereBetween('spent_on', [$monthStart, $monthEnd])->sum('amount');
 
         $byType = $stock->byPaperType();
 
@@ -39,6 +39,7 @@ class DashboardController extends Controller
             'machines' => Machine::query()->orderBy('code')->get(),
             'machinesUnderRepair' => Machine::query()->where('status', MachineStatus::UnderRepair)->count(),
             'pending' => $approvals->pendingItems(),
+            'sentBack' => $approvals->sentBackFor(auth()->user()),
             'weekly' => $this->weeklyPaper(),
             'heads' => $this->spendByHead($monthStart, $monthEnd),
             'feed' => $this->activity(),
@@ -56,14 +57,14 @@ class DashboardController extends Controller
         $labels = $received = $issued = [];
 
         $receipts = PaperReceipt::query()->notRejected()->where('received_at', '>=', $start)->get(['received_at', 'quantity']);
-        $issues = PaperIssue::query()->where('issued_on', '>=', $start)->get(['issued_on', 'quantity']);
+        $issues = PaperIssue::query()->notRejected()->where('issued_on', '>=', $start)->get(['issued_on', 'quantity', 'returned_quantity']);
 
         for ($week = 0; $week < 8; $week++) {
             $from = $start->copy()->addWeeks($week);
             $to = $from->copy()->endOfWeek();
             $labels[] = $from->format('j M');
             $received[] = (int) $receipts->filter(fn ($r) => $r->received_at->between($from, $to))->sum('quantity');
-            $issued[] = (int) $issues->filter(fn ($i) => $i->issued_on->between($from, $to))->sum('quantity');
+            $issued[] = (int) $issues->filter(fn ($i) => $i->issued_on->between($from, $to))->sum(fn (PaperIssue $i) => $i->used());
         }
 
         return compact('labels', 'received', 'issued');

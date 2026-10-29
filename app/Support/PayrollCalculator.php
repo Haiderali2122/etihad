@@ -23,14 +23,16 @@ use Illuminate\Support\Facades\DB;
  * - Daily rate = monthly salary ÷ days in the month.
  * - Each absent day is deducted at the daily rate (a missed day counts as an off day).
  * - Overtime hourly rate = daily rate ÷ divisor × multiplier (default ÷ 6, × 1).
- * - Advances given and not yet deducted, and this month's loan instalments, come off.
+ * - Approved advances not yet deducted, and this month's instalments on approved loans, come off.
+ *   Advances and loans still waiting for the owner are left out until approved.
  * - Net pay is rounded to the nearest Rs 10.
  */
 class PayrollCalculator
 {
     /**
      * Create the month's draft, or rebuild its lines from current attendance, advances and loans.
-     * Hand edits (loan instalment, bonus, other deduction, note) are kept unless $resetEdits is true.
+     * Hand edits (bonus, other deduction, note, and a loan instalment typed in by hand) are kept unless $resetEdits is true;
+     * a loan instalment nobody changed is worked out again, so loans given after the draft was prepared are picked up.
      */
     public function prepare(Carbon $month, User $by, bool $resetEdits = false): PayrollRun
     {
@@ -110,7 +112,7 @@ class PayrollCalculator
             'advances_deducted' => $this->unsettledAdvances($employee, $end),
         ]);
 
-        if (! $line->exists) {
+        if (! $line->loan_overridden) {
             $line->loan_deducted = $this->loanInstalments($employee, $end);
         }
 
@@ -120,20 +122,20 @@ class PayrollCalculator
     }
 
     /**
-     * Advances given by the end of this month that no finalized payroll has deducted yet.
+     * Approved advances given by the end of this month that no finalized payroll has deducted yet.
      */
     public function unsettledAdvances(Employee $employee, Carbon $monthEnd): int
     {
-        return (int) $employee->advances()->notRejected()->whereNull('payroll_run_id')
+        return (int) $employee->advances()->approved()->whereNull('payroll_run_id')
             ->where('given_on', '<=', $monthEnd->copy()->endOfDay())->sum('amount');
     }
 
     /**
-     * The usual instalment for every loan due by this month, capped at what is still owed.
+     * The usual instalment for every approved loan due by this month, capped at what is still owed.
      */
     public function loanInstalments(Employee $employee, Carbon $monthEnd): int
     {
-        return (int) $employee->loans()->notRejected()->withSum('repayments', 'amount')
+        return (int) $employee->loans()->approved()->withSum('repayments', 'amount')
             ->where('first_instalment_month', '<=', $monthEnd->copy()->endOfDay())
             ->get()
             ->sum(fn (Loan $loan) => min($loan->monthly_instalment, $loan->balance()));
@@ -155,12 +157,12 @@ class PayrollCalculator
                 $line->net_pay = $line->computeNet();
                 $line->save();
 
-                SalaryAdvance::query()->where('employee_id', $line->employee_id)->notRejected()
+                SalaryAdvance::query()->where('employee_id', $line->employee_id)->approved()
                     ->whereNull('payroll_run_id')->where('given_on', '<=', $monthEnd)
                     ->update(['payroll_run_id' => $run->id]);
 
                 $left = $line->loan_deducted;
-                $loans = $line->employee->loans()->notRejected()->withSum('repayments', 'amount')->orderBy('issued_on')->orderBy('id')->get();
+                $loans = $line->employee->loans()->approved()->withSum('repayments', 'amount')->orderBy('issued_on')->orderBy('id')->get();
                 foreach ($loans as $loan) {
                     $take = min($left, $loan->balance());
                     if ($take > 0) {

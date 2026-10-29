@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Give advance')">
-    <x-page-head :title="__('Give advance')" :subtitle="__('The amount comes off this person\'s next salary.')" />
+    <x-page-head :back="($employeeId ? route('employees.show', $employeeId) : route('salary-advances.index'))" :title="__('Give advance')" :subtitle="__('The amount comes off this person\'s next salary.')" />
     <form method="POST" action="{{ route('salary-advances.store') }}" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">
@@ -8,6 +8,6 @@
             <x-field name="amount" type="number" min="1" :label="__('Amount (Rs)')" required />
             <x-field name="note" :label="__('Reason / note')" />
         </div></div>
-        <div class="form-actions"><a class="btn" href="{{ route('salary-advances.index') }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save advance') }}</button></div>
+        <div class="form-actions"><a class="btn" href="{{ ($employeeId ? route('employees.show', $employeeId) : route('salary-advances.index')) }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save advance') }}</button></div>
     </form>
 </x-layouts.app>

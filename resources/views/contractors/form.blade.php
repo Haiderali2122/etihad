@@ -1,5 +1,5 @@
 <x-layouts.app :title="$contractor->exists ? __('Edit contractor') : __('Add contractor')">
-    <x-page-head :title="$contractor->exists ? __('Edit contractor') : __('Add contractor')" :subtitle="__('Usual rates are pre-filled on each job and can be changed there.')" />
+    <x-page-head :back="$contractor->exists ? route('contractors.show', $contractor) : route('contractors.index')" :title="$contractor->exists ? __('Edit contractor') : __('Add contractor')" :subtitle="__('Usual rates are pre-filled on each job and can be changed there.')" />
     <form method="POST" action="{{ $contractor->exists ? route('contractors.update', $contractor) : route('contractors.store') }}" class="card form-card">
         @csrf
         @if ($contractor->exists) @method('PUT') @endif

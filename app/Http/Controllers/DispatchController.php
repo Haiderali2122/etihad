@@ -25,16 +25,31 @@ class DispatchController extends Controller
         ]);
     }
 
+    /**
+     * Opened from an order (?order=) or a buyer (?buyer=), the form starts with them filled in and goes back there.
+     */
     public function create(Request $request): View
     {
-        $order = WorkOrder::query()->find($request->integer('order'));
+        $order = WorkOrder::query()->with('bookFormat.book')->find($request->integer('order'));
+        $order = $order?->canBeLoaded() ? $order : null;
+        $buyer = Party::query()->where('kind', PartyKind::Buyer)->find($request->integer('buyer'));
+
+        $orders = WorkOrder::query()->with('bookFormat.book')->whereIn('stage', Dispatch::orderStages())
+            ->withSum('dispatches', 'copies')->latest('id')->get()
+            ->filter(fn (WorkOrder $o) => $o->copies > (int) $o->dispatches_sum_copies)->values();
 
         return view('dispatches.create', [
             'number' => Dispatch::nextNumber(),
             'buyers' => Party::query()->active()->where('kind', PartyKind::Buyer)->orderBy('name')->get(),
-            'orders' => WorkOrder::query()->with('bookFormat.book')->whereIn('stage', Dispatch::orderStages())->latest('id')->take(60)->get(),
+            'orders' => $orders,
             'books' => Book::query()->active()->with('formats')->orderBy('name')->get(),
             'order' => $order,
+            'buyerId' => $order?->buyer_id ?? $buyer?->id,
+            'back' => match (true) {
+                $order !== null => route('work-orders.show', $order),
+                $buyer !== null => route('buyers.show', $buyer),
+                default => route('dispatches.index'),
+            },
         ]);
     }
 

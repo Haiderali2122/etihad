@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\RepairKind;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -33,7 +34,12 @@ class StoreMachineRepairRequest extends FormRequest
             'description' => ['required', 'string', 'max:255'],
             'bill_amount' => ['required', 'integer', 'min:0'],
             'discount' => ['nullable', 'integer', 'min:0', 'lte:bill_amount'],
-            'amount_paid' => ['required', 'integer', 'min:0'],
+            'amount_paid' => ['required', 'integer', 'min:0', function (string $attribute, mixed $value, Closure $fail): void {
+                $due = (int) $this->input('bill_amount') - (int) $this->input('discount');
+                if ((int) $value > $due) {
+                    $fail(__('Paid cannot be more than the bill less discount (Rs :n).', ['n' => number_format(max(0, $due))]));
+                }
+            }],
             'invoice_no' => ['nullable', 'string', 'max:40'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];

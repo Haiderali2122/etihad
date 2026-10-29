@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Receive truck')">
-    <x-page-head :title="__('Receive truck')" :subtitle="__('Enter the paper receipt slip as the truck is unloaded. The rims are added to the party\'s balance straight away.')">
+    <x-page-head :back="route('paper.index')" :title="__('Receive truck')" :subtitle="__('Enter the paper receipt slip as the truck is unloaded. The rims are added to the party\'s balance straight away.')">
         @can('godowns.manage')
             <x-slot:actions><a class="btn" href="{{ route('godowns.index') }}"><x-icon name="box" />{{ __('Manage godowns') }}</a></x-slot:actions>
         @endcan

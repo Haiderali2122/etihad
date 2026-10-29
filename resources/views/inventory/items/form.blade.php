@@ -1,5 +1,5 @@
 <x-layouts.app :title="$item->exists ? __('Edit item') : __('Add item')">
-    <x-page-head :title="$item->exists ? __('Edit item') : __('Add item')" :subtitle="__('Something the press keeps in stock, with the unit it is counted in.')" />
+    <x-page-head :back="$item->exists ? route('inventory-items.show', $item) : route('inventory.index')" :title="$item->exists ? __('Edit item') : __('Add item')" :subtitle="__('Something the press keeps in stock, with the unit it is counted in.')" />
     <form method="POST" action="{{ $item->exists ? route('inventory-items.update', $item) : route('inventory-items.store') }}" class="card form-card">
         @csrf
         @if ($item->exists) @method('PUT') @endif

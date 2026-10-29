@@ -7,6 +7,21 @@
         </x-slot:actions>
     </x-page-head>
 
+    @if ($sentBack->isNotEmpty())
+        <div class="card">
+            <div class="card-h"><div><h3>{{ __('Sent back to you') }}</h3><div class="sub">{{ __('The owner returned these. Correct and resend, or leave them as they are.') }}</div></div></div>
+            <div class="card-b"><div class="list">
+                @foreach ($sentBack as $item)
+                    @php $m = $item['model']; @endphp
+                    <div class="row"><span class="ic-tile"><x-icon :name="$m->approvalIcon()" /></span>
+                        <div class="grow"><div class="t"><a href="{{ $m->approvalUrl() }}" style="color:inherit">{{ $m->approvalTitle() }}</a></div><div class="s">{{ $m->approvalKind() }} · {{ __('Owner note') }}: {{ $m->review_note ?: '—' }}</div></div>
+                        <a class="btn sm primary" href="{{ route('approvals.resend', [$item['type'], $m->id]) }}"><x-icon name="edit" />{{ __('Correct and resend') }}</a>
+                    </div>
+                @endforeach
+            </div></div>
+        </div>
+    @endif
+
     @if ($lowStock->isNotEmpty())
         <div class="alert"><x-icon name="alert" /><div>
             <b>{{ trans_choice(':count paper size is below its reorder level.|:count paper sizes are below their reorder level.', $lowStock->count()) }}</b>

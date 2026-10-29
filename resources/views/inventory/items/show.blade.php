@@ -42,7 +42,8 @@
                         @if ($row['kind'] === 'in')
                             <x-badge :tone="$row['status']->tone()">{{ __('Purchase') }} · {{ $row['status']->label() }}</x-badge>
                         @else
-                            <x-badge tone="info">{{ __('Moved out') }}</x-badge>
+                            <x-badge :tone="$row['status']->value === 'approved' ? 'info' : $row['status']->tone()">{{ __('Moved out') }}@unless ($row['status']->value === 'approved') · {{ $row['status']->label() }}@endunless</x-badge>
+                            @if ($row['model']->isSettled())<div class="meta">{{ __(':qty back at end of shift', ['qty' => InventoryItem::qty($row['model']->returned_quantity)]) }}</div>@endif
                         @endif
                     </td>
                     <td>{{ $row['who'] }}</td>

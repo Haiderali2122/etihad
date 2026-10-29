@@ -44,6 +44,11 @@ class ContractorPayment extends Model
         return $this->belongsTo(WorkOrder::class);
     }
 
+    public function resendUrl(): string
+    {
+        return route('contractors.show', $this->contractor_id);
+    }
+
     public function approvalKind(): string
     {
         return __('Contractor :kind', ['kind' => mb_strtolower($this->kind->label())]);

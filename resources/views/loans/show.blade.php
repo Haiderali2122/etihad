@@ -38,13 +38,15 @@
                 </table></div></div>
             </div>
             @can('advances.create')
-                @if (! $loan->isCleared() && $loan->status->value !== 'rejected')
+                @if ($loan->isPending())
+                    <div class="card no-print"><div class="empty">{{ __('Cash repayments can be recorded once the owner approves this loan.') }}</div></div>
+                @elseif (! $loan->isCleared() && $loan->status->value === 'approved')
                     <form method="POST" action="{{ route('loans.repay', $loan) }}" class="card no-print">
                         @csrf
                         <div class="card-h"><div><h3>{{ __('Cash repayment') }}</h3><div class="sub">{{ __('Paid back outside payroll') }}</div></div></div>
                         <div class="card-b"><div class="form" style="grid-template-columns:minmax(0,1fr)">
                             <x-field name="amount" type="number" min="1" :max="$loan->balance()" :label="__('Amount (Rs)')" required />
-                            <x-field name="paid_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                            <x-field name="paid_on" type="date" :label="__('Date')" :value="today()->toDateString()" :min="$loan->issued_on->toDateString()" :max="today()->toDateString()" required />
                             <x-field name="note" :label="__('Note')" />
                             <button class="btn primary" type="submit" style="justify-content:center"><x-icon name="check" />{{ __('Record repayment') }}</button>
                         </div></div>

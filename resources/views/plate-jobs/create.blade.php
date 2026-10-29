@@ -1,7 +1,7 @@
 <x-layouts.app :title="__('Add plate job')">
-    <x-page-head :title="__('Add plate job')" />
+    <x-page-head :back="$back" :title="__('Add plate job')" />
     @if ($processors->isEmpty())
-        <div class="card"><div class="empty"><b>{{ __('No plate processors yet') }}</b><a href="{{ route('parties.create') }}">{{ __('Add one under Parties & suppliers as a “Plate processor”.') }}</a></div></div>
+        <div class="card"><div class="empty"><b>{{ __('No plate processors yet') }}</b><a href="{{ route('parties.create', ['kind' => 'plates', 'return' => request()->fullUrl()]) }}">{{ __('Add a plate processor') }}</a></div></div>
     @else
         <form method="POST" action="{{ route('plate-jobs.store') }}" class="card form-card">
             @csrf
@@ -14,7 +14,7 @@
                 <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                 <x-field name="note" :label="__('Note')" full />
             </div></div>
-            <div class="form-actions"><a class="btn" href="{{ route('plate-jobs.index') }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save') }}</button></div>
+            <div class="form-actions"><a class="btn" href="{{ $back }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save') }}</button></div>
         </form>
         @push('scripts')
             <script>

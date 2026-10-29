@@ -20,6 +20,7 @@ trait RequiresApproval
         $this->mergeCasts([
             'status' => ApprovalStatus::class,
             'reviewed_at' => 'datetime',
+            'resent_at' => 'datetime',
         ]);
     }
 
@@ -28,6 +29,19 @@ trait RequiresApproval
      */
     public static function bootRequiresApproval(): void
     {
+        // Saving a corrected copy of an entry the owner sent back marks the old one as resent.
+        static::creating(function (self $model): void {
+            if ($original = static::beingResent()) {
+                $original->releaseForResend();
+            }
+        });
+        static::created(function (self $model): void {
+            if ($original = static::beingResent()) {
+                $original->forceFill(['resent_at' => now()])->saveQuietly();
+                session()->forget('resending');
+            }
+        });
+
         static::creating(function (self $model): void {
             $creator = $model->created_by ? User::find($model->created_by) : null;
 
@@ -72,6 +86,66 @@ trait RequiresApproval
     {
         $query->where('status', '!=', ApprovalStatus::Rejected);
     }
+
+    /**
+     * Sent back by the owner and not yet corrected and entered again.
+     */
+    public function scopeSentBackOpen(Builder $query): void
+    {
+        $query->where('status', ApprovalStatus::Rejected)->whereNull('resent_at');
+    }
+
+    /**
+     * The sent-back entry of this kind whose corrected copy is being entered in this session, if any.
+     */
+    public static function beingResent(): ?static
+    {
+        $resending = app()->bound('session') ? session('resending') : null;
+
+        return is_array($resending) && ($resending['class'] ?? null) === static::class
+            ? static::query()->sentBackOpen()->find($resending['id'] ?? 0)
+            : null;
+    }
+
+    /**
+     * The form values to start the corrected copy from. Kinds whose form differs override this.
+     *
+     * @return array<string, mixed>
+     */
+    public function resendInput(): array
+    {
+        return $this->baseResendInput();
+    }
+
+    /**
+     * The entry's own fields, with dates and enums as the form expects them.
+     *
+     * @return array<string, mixed>
+     */
+    public function baseResendInput(): array
+    {
+        return collect($this->getFillable())
+            ->reject(fn (string $field) => in_array($field, ['created_by', 'status', 'attachment'], true))
+            ->mapWithKeys(fn (string $field) => [$field => match (true) {
+                $this->{$field} instanceof \BackedEnum => $this->{$field}->value,
+                $this->{$field} instanceof \DateTimeInterface => $this->{$field}->format('Y-m-d'),
+                default => $this->{$field},
+            }])
+            ->all();
+    }
+
+    /**
+     * Free anything unique the corrected copy needs to reuse, e.g. a paper receipt's slip number.
+     */
+    public function releaseForResend(): void
+    {
+        //
+    }
+
+    /**
+     * Where the corrected copy is entered: normally this kind's own "add" form.
+     */
+    abstract public function resendUrl(): string;
 
     public function approve(User $reviewer, ?string $note = null): void
     {

@@ -36,6 +36,7 @@ class PlateJobController extends Controller
             'processors' => Party::query()->active()->where('kind', PartyKind::PlateProcessor)->orderBy('name')->get(),
             'orders' => WorkOrder::query()->with('bookFormat.book')->where('stage', '!=', WorkOrderStage::Dispatched)->latest('id')->get(),
             'orderId' => $request->integer('order') ?: null,
+            'back' => $request->integer('order') ? route('work-orders.show', $request->integer('order')) : route('plate-jobs.index'),
         ]);
     }
 
@@ -50,9 +51,9 @@ class PlateJobController extends Controller
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        PlateJob::create($data + ['amount' => (int) round($data['plates'] * $data['rate']), 'created_by' => $request->user()->id]);
+        $job = PlateJob::create($data + ['amount' => (int) round($data['plates'] * $data['rate']), 'created_by' => $request->user()->id]);
 
-        return redirect()->route('plate-jobs.index')->with('status', __('Plate job saved.'));
+        return redirect($job->work_order_id ? route('work-orders.show', $job->work_order_id) : route('plate-jobs.index'))->with('status', __('Plate job saved.'));
     }
 
     /**

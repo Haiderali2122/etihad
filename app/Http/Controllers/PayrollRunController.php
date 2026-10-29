@@ -56,7 +56,7 @@ class PayrollRunController extends Controller
     /**
      * Hand edits on a draft: this month's loan instalment, bonus, other deductions and a note.
      */
-    public function updateLines(Request $request, PayrollRun $payrollRun): RedirectResponse
+    public function updateLines(Request $request, PayrollRun $payrollRun, PayrollCalculator $calculator): RedirectResponse
     {
         abort_unless($payrollRun->isDraft(), 409, __('This payroll is finalized. Reopen it to make changes.'));
 
@@ -81,6 +81,7 @@ class PayrollRunController extends Controller
                 continue;
             }
             $line->fill($row);
+            $line->loan_overridden = (int) $row['loan_deducted'] !== $calculator->loanInstalments($line->employee, $payrollRun->month->copy()->endOfMonth());
             $line->net_pay = $line->computeNet();
             $line->save();
         }

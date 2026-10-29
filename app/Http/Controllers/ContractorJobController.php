@@ -44,9 +44,18 @@ class ContractorJobController extends Controller
             ->with('status', __(':kind job given to :name: Rs :amount.', ['kind' => $kind->label(), 'name' => $job->contractor->name, 'amount' => number_format($job->amount)]));
     }
 
-    public function done(ContractorJob $contractorJob): RedirectResponse
+    /**
+     * Finish a job: asks the date it was completed, which cannot be before it was given out.
+     */
+    public function done(Request $request, ContractorJob $contractorJob): RedirectResponse
     {
-        $contractorJob->update(['state' => 'done']);
+        abort_if($contractorJob->isDone(), 409, __('This job is already done.'));
+
+        $data = $request->validate([
+            'done_on' => ['required', 'date', 'after_or_equal:'.$contractorJob->job_on->toDateString(), 'before_or_equal:today'],
+        ]);
+
+        $contractorJob->update(['state' => 'done', 'done_on' => $data['done_on']]);
 
         return back()->with('status', __('Job marked as done.'));
     }

@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Issue paper')">
-    <x-page-head :title="__('Issue paper')" :subtitle="__('Paper leaves the godown three ways: to an in-house machine, to an outside press, or back to the supplier. Each is deducted from that party\'s balance.')" />
+    <x-page-head :back="route('paper.index', ['tab' => 'issues'])" :title="__('Issue paper')" :subtitle="__('Paper leaves the godown three ways: to an in-house machine, to an outside press, or back to the supplier. Each is deducted from that party\'s balance.')" />
 
     <form method="POST" action="{{ route('paper-issues.store') }}" class="card form-card" id="issueForm">
         @csrf
@@ -23,7 +23,11 @@
                 @error('paper_type_id')<span class="err">{{ $message }}</span>@enderror
             </div>
 
-            <x-field name="issued_to" :label="__('Sent to')" required list="issueTargets" :hint="__('Machine, outside press, or supplier name')" />
+            <div class="field full" id="inHouseFields"><div class="form">
+                <x-field name="machine_id" :label="__('Machine')" :options="$machines->mapWithKeys(fn ($m) => [$m->id => $m->code.' '.$m->name])" :placeholder="__('Choose machine')" />
+                <x-field name="employee_id" :label="__('Given to employee')" :options="$employees->mapWithKeys(fn ($e) => [$e->id => $e->name.($e->designation ? ' · '.$e->designation : '')])" :placeholder="__('Not to an employee')" />
+            </div></div>
+            <x-field name="issued_to" :label="__('Sent to')" list="issueTargets" :hint="__('Outside press or supplier name. For in-house paper, leave empty to use the machine.')" />
             <x-field name="reference" :label="__('Work order / reference')" placeholder="WO-1042" />
 
             <div class="field full" id="bookSection"><div class="calc">
@@ -123,6 +127,10 @@
                 let autoFilled = '';
                 const applyKind = () => {
                     const isReturn = kind.value === 'return';
+                    const inHouse = kind.value === 'in_house';
+                    $('inHouseFields').hidden = !inHouse;
+                    $('inHouseFields').querySelectorAll('select').forEach(el => el.disabled = !inHouse);
+                    sentTo.required = !inHouse;
                     section.hidden = isReturn;
                     $('returnHint').hidden = !isReturn;
                     section.querySelectorAll('input, select').forEach(el => el.disabled = isReturn);

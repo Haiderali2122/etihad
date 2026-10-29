@@ -50,6 +50,11 @@ class Expense extends Model
         return $this->belongsTo(Machine::class);
     }
 
+    public function resendUrl(): string
+    {
+        return route('expenses.create');
+    }
+
     public function approvalKind(): string
     {
         return __('Expense');

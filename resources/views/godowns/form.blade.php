@@ -1,5 +1,5 @@
 <x-layouts.app :title="$godown->exists ? __('Edit godown') : __('Add godown')">
-    <x-page-head :title="$godown->exists ? __('Edit godown') : __('Add godown')" />
+    <x-page-head :back="route('godowns.index')" :title="$godown->exists ? __('Edit godown') : __('Add godown')" />
     <form method="POST" action="{{ $godown->exists ? route('godowns.update', $godown) : route('godowns.store') }}" class="card form-card">
         @csrf
         @if ($godown->exists) @method('PUT') @endif

@@ -1,5 +1,5 @@
 <x-layouts.app :title="$category->exists ? __('Edit category') : __('Add category')">
-    <x-page-head :title="$category->exists ? __('Edit category') : __('Add category')" />
+    <x-page-head :back="route('inventory-categories.index')" :title="$category->exists ? __('Edit category') : __('Add category')" />
     <form method="POST" action="{{ $category->exists ? route('inventory-categories.update', $category) : route('inventory-categories.store') }}" class="card form-card">
         @csrf
         @if ($category->exists) @method('PUT') @endif
