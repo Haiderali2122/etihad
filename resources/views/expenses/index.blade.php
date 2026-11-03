@@ -4,10 +4,10 @@
     </x-page-head>
 
     <div class="grid g4">
-        <x-kpi icon="wallet" tone="warn" :label="__('Cash with manager')" :foot="__('Given minus spent')">Rs {{ number_format($cashGiven - $cashSpent) }}</x-kpi>
+        <x-kpi icon="wallet" tone="warn" :label="__('Cash with manager')" :foot="__('Given minus spent from it')">Rs {{ number_format($cashGiven - $cashSpent) }}</x-kpi>
         <x-kpi icon="download" :label="__('Total given')">Rs {{ number_format($cashGiven) }}</x-kpi>
-        <x-kpi icon="send" :label="__('Total spent')">Rs {{ number_format($cashSpent) }}</x-kpi>
-        <x-kpi icon="shield" tone="good" :label="__('Spent today')" :foot="$dailyLimit ? __('Daily limit Rs :limit', ['limit' => number_format($dailyLimit)]) : __('No daily limit set — every spend needs approval')">Rs {{ number_format($todaySpent) }}</x-kpi>
+        <x-kpi icon="send" :label="__('Total spent')" :foot="__('Rs :cash from manager\'s cash · Rs :owner paid by owner', ['cash' => number_format($cashSpent), 'owner' => number_format($totalSpent - $cashSpent)])">Rs {{ number_format($totalSpent) }}</x-kpi>
+        <x-kpi icon="shield" tone="good" :label="__('Spent today')" :foot="$dailyLimit ? __('Manager Rs :n of daily limit Rs :limit', ['n' => number_format($todayFromCash), 'limit' => number_format($dailyLimit)]) : __('No daily limit set — every spend needs approval')">Rs {{ number_format($todaySpent) }}</x-kpi>
     </div>
 
     <div class="grid g-main">

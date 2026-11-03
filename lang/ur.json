@@ -1132,5 +1132,8 @@
     "Correct the details and save to send it to the owner again. Owner's note: :note": "تفصیل درست کریں اور محفوظ کر کے دوبارہ مالک کو بھیجیں۔ مالک کا نوٹ: :note",
     "Sent back to you": "آپ کو واپس بھیجے گئے",
     "The owner returned these. Correct and resend, or leave them as they are.": "مالک نے یہ واپس کیے ہیں۔ درست کر کے دوبارہ بھیجیں یا ایسے ہی رہنے دیں۔",
-    "Correct and resend": "درست کر کے دوبارہ بھیجیں"
+    "Correct and resend": "درست کر کے دوبارہ بھیجیں",
+    "Given minus spent from it": "دی گئی رقم میں سے اس سے ہونے والا خرچ",
+    "Rs :cash from manager's cash · Rs :owner paid by owner": "منیجر کی نقدی سے Rs :cash · مالک نے خود Rs :owner ادا کیے",
+    "Manager Rs :n of daily limit Rs :limit": "منیجر Rs :n، روزانہ حد Rs :limit"
 }

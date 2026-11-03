@@ -451,14 +451,14 @@ class CashOutApprovalsE2ETest extends TestCase
         $pending = $this->spend($this->manager, 7000);   // pending (11000 > 10000)
         $rejected = $this->spend($this->manager, 9000);  // pending, then rejected
         $this->actingAs($this->owner)->patch(route('approvals.update', ['expense', $rejected->id]), ['decision' => 'reject', 'note' => 'No'])->assertSessionHasNoErrors();
-        $this->spend($this->owner, 2500);                 // owner has no float → not in "cash spent"
+        $this->spend($this->owner, 2500);                 // owner has no float: counts in total spent, not against the manager's cash
 
         $this->assertTrue($pending->refresh()->isPending());
         $this->assertSame(50000 - 4000 - 7000, $this->manager->cashInHand());
 
         $this->actingAs($this->owner)->get(route('expenses.index'))->assertOk()
-            ->assertSeeInOrder(['Cash with manager', 'Rs 39,000', 'Total given', 'Rs 50,000', 'Total spent', 'Rs 11,000', 'Spent today', 'Rs 13,500'])
-            ->assertSee('Daily limit Rs 10,000')
+            ->assertSeeInOrder(['Cash with manager', 'Rs 39,000', 'Total given', 'Rs 50,000', 'Total spent', 'Rs 13,500', 'Rs 11,000 from manager&#039;s cash · Rs 2,500 paid by owner', 'Spent today', 'Rs 13,500'], false)
+            ->assertSee('Manager Rs 11,000 of daily limit Rs 10,000')
             ->assertSee('Weekly float')
             ->assertSee('Sent back');
     }

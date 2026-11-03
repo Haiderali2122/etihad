@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ApprovalStatus;
+use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
 use App\Models\Setting;
@@ -64,5 +65,22 @@ class ExpenseTest extends TestCase
         $this->actingAs($manager)->post(route('cash-floats.store'), [
             'given_on' => today()->toDateString(), 'user_id' => $manager->id, 'amount' => 5000,
         ])->assertForbidden();
+    }
+
+    public function test_owner_payments_count_in_total_spent_but_not_against_the_managers_cash(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        CashFloat::factory()->create(['user_id' => $manager->id, 'amount' => 100000]);
+        Expense::factory()->create(['user_id' => $manager->id, 'amount' => 20000, 'spent_on' => today(), 'status' => ApprovalStatus::Approved]);
+        Expense::factory()->create(['user_id' => $owner->id, 'amount' => 78900, 'spent_on' => today(), 'status' => ApprovalStatus::Approved]);
+
+        $this->actingAs($owner)->get(route('expenses.index'))->assertOk()
+            ->assertViewHas('cashSpent', 20000)
+            ->assertViewHas('totalSpent', 98900)
+            ->assertViewHas('todaySpent', 98900)
+            ->assertViewHas('todayFromCash', 20000)
+            ->assertSee('Rs 80,000')
+            ->assertSee('Rs 98,900');
     }
 }

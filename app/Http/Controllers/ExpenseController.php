@@ -28,9 +28,13 @@ class ExpenseController extends Controller
             'floats' => CashFloat::query()->with('user')->latest('given_on')->take(10)->get(),
             'heads' => ExpenseHead::query()->orderBy('name')->get(),
             'headId' => $headId,
+            // Cash with the manager only goes down for what was spent from that cash; payments the owner
+            // made himself still count in the spending totals.
             'cashGiven' => (int) CashFloat::query()->sum('amount'),
             'cashSpent' => (int) Expense::query()->notRejected()->whereIn('user_id', CashFloat::query()->select('user_id'))->sum('amount'),
+            'totalSpent' => (int) Expense::query()->notRejected()->sum('amount'),
             'todaySpent' => (int) Expense::query()->notRejected()->whereDate('spent_on', today())->sum('amount'),
+            'todayFromCash' => (int) Expense::query()->notRejected()->whereDate('spent_on', today())->whereIn('user_id', CashFloat::query()->select('user_id'))->sum('amount'),
             'dailyLimit' => (int) Setting::get(Setting::ManagerDailyLimit, 0),
             'managers' => User::query()->active()->with('role')->orderBy('name')->get()
                 ->filter(fn (User $u) => ! $u->isOwner() && $u->can('expenses.create'))->values(),
