@@ -135,7 +135,7 @@ class DemoDataSeeder extends Seeder
             [9, 'Admin', 'Stationer', 700, 'Envelopes, 10 packs', null],
             [9, 'Admin', 'Staff', 580, 'Tea and lunch for night shift', null],
             [8, 'Takiyan', 'Hardware store', 2600, '10 takiyan', null],
-            [8, 'Meethi ka tail', 'Oil shop', 1950, 'Machine oil, 3 tins', 'P-01'],
+            [8, 'Mitti ka tel (earthen oil)', 'Oil shop', 1950, 'Mitti ka tel for cleaning, 3 tins', 'P-01'],
             [7, 'Diesel', 'Diesel depot', 6000, 'Generator, load-shedding', null],
             [6, 'Plates', 'Ali Processor', 1500, 'Plate processing, 12 plates', null],
             [3, 'Petrol', 'Shell, Ravi Road', 4285, 'Delivery van and bike', null],

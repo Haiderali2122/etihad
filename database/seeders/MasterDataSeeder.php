@@ -67,7 +67,7 @@ class MasterDataSeeder extends Seeder
             ['Glue', 'گلو', '#B9CBEE'],
             ['Petrol', 'پیٹرول', '#D69A2D'],
             ['Takiyan', 'ٹکیاں', '#8A8FB8'],
-            ['Meethi ka tail', 'میٹھا تیل', '#C7CADB'],
+            ['Mitti ka tel (earthen oil)', 'مٹی کا تیل', '#C7CADB'],
             ['Plates', 'پلیٹیں', '#5A9C7D'],
             ['Binding', 'بائنڈنگ', '#9A6FB0'],
             ['Admin', 'انتظامی', '#B0B5C9'],

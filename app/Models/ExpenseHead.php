@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * An expense head from the owner's list: petrol, diesel, machine repair, takiyan, meethi ka tail and so on.
+ * An expense head from the owner's list: petrol, diesel, machine repair, takiyan, mitti ka tel (earthen oil) and so on.
  */
 #[Fillable(['name', 'name_ur', 'color', 'is_active'])]
 class ExpenseHead extends Model
