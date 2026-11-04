@@ -138,6 +138,19 @@ class ExpenseController extends Controller
     }
 
     /**
+     * A mirrored payment is deleted on the tab where it was made, which removes it from Cash-out too.
+     */
+    public function destroy(Expense $expense): RedirectResponse
+    {
+        abort_if($expense->isLinked(), 409, __('This payment was made on another tab; delete it there.'));
+
+        $number = $expense->receiptNumber();
+        $expense->delete();
+
+        return redirect()->route('expenses.index')->with('status', __('Expense :no deleted.', ['no' => $number]));
+    }
+
+    /**
      * Header fields from the form. The amount is the total of the lines; the head is the first line's, and the
      * payee and reason list every line's, so the Cash-out row reads well for a receipt with several payments.
      */

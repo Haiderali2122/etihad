@@ -15,6 +15,10 @@ trait RecordsDeletion
     public static function bootRecordsDeletion(): void
     {
         static::deleted(function (self $model): void {
+            if (! $model->logsDeletion()) {
+                return;
+            }
+
             $user = auth()->user();
 
             Deletion::create([
@@ -27,6 +31,14 @@ trait RecordsDeletion
                 'deleted_by_name' => $user?->name,
             ]);
         });
+    }
+
+    /**
+     * Whether this deletion gets its own line in the log. Records removed along with another (logged) record say no.
+     */
+    public function logsDeletion(): bool
+    {
+        return true;
     }
 
     /**

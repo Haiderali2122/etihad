@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\PlateJobFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PlateJob extends Model
 {
     /** @use HasFactory<PlateJobFactory> */
-    use HasFactory, RecordsCashOut;
+    use HasFactory, RecordsCashOut, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -81,5 +82,10 @@ class PlateJob extends Model
     public function platesHeld(): int
     {
         return max(0, $this->plates - $this->returned_plates);
+    }
+
+    public function deletionLabel(): string
+    {
+        return trim(($this->processor?->name ?? '').', '.$this->plates.' plates'.($this->workOrder ? ' for '.$this->workOrder->number : '').', Rs '.number_format($this->amount), ', ');
     }
 }

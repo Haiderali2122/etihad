@@ -40,7 +40,8 @@
                         </td>
                         <td class="r num"><b>Rs {{ number_format($e->amount) }}</b></td>
                         <td><x-badge :tone="$e->status->tone()">{{ $e->status->label() }}</x-badge>@if ($e->review_note)<div class="meta">{{ $e->review_note }}</div>@endif</td>
-                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $e->attachment])<a class="btn sm" href="{{ route('expenses.show', $e) }}"><x-icon name="printer" />{{ __('Receipt') }}</a></td>
+                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $e->attachment])<a class="btn sm" href="{{ route('expenses.show', $e) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')@unless ($e->isLinked())
+                            <x-delete-button :action="route('expenses.destroy', $e)" :confirm="__('Delete expense :no?', ['no' => $e->receiptNumber()])" :label="''" small aria-label="{{ __('Delete') }}" />@endunless @endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="7"><div class="empty"><b>{{ __('No expenses yet') }}</b></div></td></tr>

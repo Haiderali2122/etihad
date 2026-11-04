@@ -12,7 +12,8 @@
             @if ($expense->isLinked())
                 <a class="btn" href="{{ $expense->source?->cashOutUrl() }}"><x-icon name="edit" />{{ __('Edit where it was made') }}</a>
             @else
-                @can('expenses.create')<a class="btn" href="{{ route('expenses.edit', $expense) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+                @can('expenses.create')<a class="btn" href="{{ route('expenses.edit', $expense) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
+                    <x-delete-button :action="route('expenses.destroy', $expense)" :confirm="__('Delete expense :no?', ['no' => $expense->receiptNumber()])" :label="__('Delete')" />@endcan
             @endif
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print receipt') }}</button>
         </x-slot:actions>

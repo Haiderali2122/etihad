@@ -294,7 +294,7 @@ class CashOutApprovalsE2ETest extends TestCase
             ->assertSee(Storage::disk('public')->url($expense->attachment));
     }
 
-    public function test_expense_can_be_edited_but_not_deleted_and_a_manager_edit_waits_for_the_owner(): void
+    public function test_expense_can_be_edited_and_deleted_only_with_a_reason_and_a_manager_edit_waits_for_the_owner(): void
     {
         $this->setLimitViaSettings(5000);
         $expense = $this->spend($this->manager, 1000);
@@ -306,8 +306,11 @@ class CashOutApprovalsE2ETest extends TestCase
         $this->assertSame(1500, $expense->amount);
         $this->assertSame(ApprovalStatus::Pending, $expense->status);
 
-        $this->delete('/expenses/'.$expense->id, ['delete_note' => 'Test reason'])->assertStatus(405);
+        $this->delete('/expenses/'.$expense->id)->assertStatus(422);
         $this->assertModelExists($expense);
+
+        $this->delete('/expenses/'.$expense->id, ['delete_note' => 'Entered twice'])->assertRedirect(route('expenses.index'));
+        $this->assertModelMissing($expense);
     }
 
     public function test_index_filters_by_head(): void

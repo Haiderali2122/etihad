@@ -35,7 +35,8 @@
                     @else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>@endcan
                 @endif
             </td>
-            <td class="r">@can('plates.manage')<a class="btn sm" href="{{ route('plate-jobs.edit', ['plateJob' => $j, 'return' => request()->fullUrl()]) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan</td>
+            <td class="r" style="white-space:nowrap">@can('plates.manage')<a class="btn sm" href="{{ route('plate-jobs.edit', ['plateJob' => $j, 'return' => request()->fullUrl()]) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
+                <x-delete-button :action="route('plate-jobs.destroy', $j)" :confirm="$j->isPaid() ? __('Delete this plate job? Its payment will also be removed from Cash-out.') : __('Delete this plate job?')" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
         </tr>
     @empty
         <tr><td colspan="{{ $withProcessor ? 9 : 8 }}"><div class="empty"><b>{{ __('No plate jobs here') }}</b></div></td></tr>

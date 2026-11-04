@@ -109,6 +109,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('plate-jobs/{plateJob}/return', [PlateJobController::class, 'returnPlates'])->name('plate-jobs.return');
         Route::get('plate-jobs/{plateJob}/edit', [PlateJobController::class, 'edit'])->name('plate-jobs.edit');
         Route::put('plate-jobs/{plateJob}', [PlateJobController::class, 'update'])->name('plate-jobs.update');
+        Route::delete('plate-jobs/{plateJob}', [PlateJobController::class, 'destroy'])->name('plate-jobs.destroy');
     });
 
     // Plate processors, kept apart from the other parties.
@@ -139,9 +140,9 @@ Route::middleware('auth')->group(function () {
     Route::redirect('purchases', 'inventory?tab=purchases')->name('purchases.index');
     Route::resource('purchases', PurchaseController::class)->only(['create', 'store'])->middleware('can:purchases.create');
 
-    Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
+    Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->middlewareFor(['index', 'show'], 'can:expenses.view')
-        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:expenses.create');
+        ->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'can:expenses.create');
     Route::resource('expense-heads', ExpenseHeadController::class)->except('show')->middleware('can:expense-heads.manage');
     Route::post('cash-floats', [CashFloatController::class, 'store'])->middleware('can:give-cash')->name('cash-floats.store');
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\ExpenseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class Expense extends Model
 {
     /** @use HasFactory<ExpenseFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -126,5 +127,18 @@ class Expense extends Model
     public function receiptNumber(): string
     {
         return 'EXP-'.str_pad((string) $this->id, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * A mirrored payment goes when its own record is deleted, and that record is the one logged.
+     */
+    public function logsDeletion(): bool
+    {
+        return ! $this->isLinked();
+    }
+
+    public function deletionLabel(): string
+    {
+        return $this->receiptNumber().' — Rs '.number_format($this->amount).', '.$this->paid_to;
     }
 }

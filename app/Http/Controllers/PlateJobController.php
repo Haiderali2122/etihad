@@ -77,6 +77,16 @@ class PlateJobController extends Controller
     }
 
     /**
+     * Removes the plate record from the Plates and Processors tabs, and its payment from Cash-out.
+     */
+    public function destroy(PlateJob $plateJob): RedirectResponse
+    {
+        $plateJob->load(['processor', 'workOrder'])->delete();
+
+        return back()->with('status', __('Plate job deleted.'));
+    }
+
+    /**
      * Plates the processor sent back.
      */
     public function returnPlates(Request $request, PlateJob $plateJob): RedirectResponse

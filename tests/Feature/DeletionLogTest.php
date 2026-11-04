@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Deletion;
 use App\Models\Designation;
+use App\Models\Expense;
 use App\Models\Godown;
+use App\Models\PlateJob;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,6 +64,46 @@ class DeletionLogTest extends TestCase
         $this->actingAs($user)->get(route('godowns.index'))->assertSee('value="DELETE"', false);
         $this->actingAs($user)->delete(route('godowns.destroy', $godown), ['delete_note' => 'done'])->assertRedirect();
         $this->assertModelMissing($godown);
+    }
+
+    public function test_an_expense_receipt_can_be_deleted_with_a_reason(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $expense = Expense::factory()->create();
+        $item = $expense->items()->sole();
+
+        $this->actingAs($owner)->get(route('expenses.index'))->assertSee('value="DELETE"', false);
+        $this->actingAs($owner)->get(route('expenses.show', $expense))->assertSee('value="DELETE"', false);
+        $this->actingAs($owner)->delete(route('expenses.destroy', $expense), ['delete_note' => 'Entered twice'])
+            ->assertRedirect(route('expenses.index'));
+
+        $this->assertModelMissing($expense);
+        $this->assertModelMissing($item);
+        $log = Deletion::query()->sole();
+        $this->assertSame('Expense', $log->kind);
+        $this->assertStringStartsWith($expense->receiptNumber(), $log->label);
+        $this->assertSame('Entered twice', $log->note);
+    }
+
+    public function test_a_plate_job_delete_also_removes_its_cash_out_payment_and_logs_once(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $job = PlateJob::factory()->create(['paid_on' => today(), 'amount' => 4000, 'created_by' => $owner->id]);
+        $mirror = $job->cashOutExpense()->sole();
+
+        // The mirrored row cannot be deleted from Cash-out and shows no delete button there.
+        $this->actingAs($owner)->get(route('expenses.index'))->assertDontSee('value="DELETE"', false);
+        $this->actingAs($owner)->get(route('expenses.show', $mirror))->assertDontSee('value="DELETE"', false);
+        $this->actingAs($owner)->delete(route('expenses.destroy', $mirror), ['delete_note' => 'x'])->assertStatus(409);
+
+        $this->actingAs($owner)->get(route('plate-jobs.index', ['show' => 'all']))->assertSee(route('plate-jobs.destroy', $job), false);
+        $this->actingAs($owner)->delete(route('plate-jobs.destroy', $job), ['delete_note' => 'Wrong processor'])->assertRedirect();
+
+        $this->assertModelMissing($job);
+        $this->assertModelMissing($mirror);
+        $log = Deletion::query()->sole();
+        $this->assertSame('Plate job', $log->kind);
+        $this->assertSame('Wrong processor', $log->note);
     }
 
     public function test_only_the_owner_sees_the_deletion_log(): void
