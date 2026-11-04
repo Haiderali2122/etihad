@@ -168,12 +168,12 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
 
         $this->post(route('contractors.store'), [
             'name' => 'Bashir Binders', 'name_ur' => 'بشیر بائنڈر', 'phone' => '0300-1234567', 'work' => 'binding',
-            'form_rate' => 0.6, 'copy_rate' => 2.5, 'is_active' => '1',
+            'form_rate' => 600, 'copy_rate' => 2500, 'is_active' => '1',
         ])->assertSessionHasNoErrors();
 
         $contractor = Contractor::query()->sole();
         $this->assertTrue($contractor->is_active);
-        $this->assertSame('0.60', $contractor->form_rate);
+        $this->assertSame('600.00', $contractor->form_rate); // per 1,000 books
 
         $this->get(route('contractors.show', $contractor))->assertOk()->assertSee('Bashir Binders')->assertSee('name="_method" value="DELETE"', false);
 
@@ -208,7 +208,8 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         ContractorPayment::factory()->create(['contractor_id' => $withPayment->id, 'created_by' => $this->owner->id]);
 
         $this->actingAs($this->owner);
-        $this->get(route('contractors.show', $withJob))->assertOk()->assertDontSee('name="_method" value="DELETE"', false);
+        // The contractor itself offers no delete; its jobs and payments each have their own.
+        $this->get(route('contractors.show', $withJob))->assertOk()->assertDontSee('action="'.route('contractors.destroy', $withJob).'"', false);
 
         foreach ([$withJob, $withPayment] as $contractor) {
             $this->from(route('contractors.show', $contractor))->delete(route('contractors.destroy', $contractor))
@@ -241,16 +242,16 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
             'forms' => 7.5, 'copies' => 3333, 'folding_rate' => 36,
         ])->assertRedirect(route('contractors.show', $contractor));
 
-        // Binding: ((8 × 0.6) + 2.5) × 25,000 = 182,500.
+        // Binding (rates per 1,000 books): ((8 × 600) + 2,500) × 25,000 ÷ 1,000 = 182,500.
         $this->post(route('contractor-jobs.store'), [
             'contractor_id' => $contractor->id, 'kind' => 'binding', 'job_on' => today()->toDateString(),
-            'forms' => 8, 'copies' => 25000, 'form_rate' => 0.6, 'copy_rate' => 2.5,
+            'forms' => 8, 'copies' => 25000, 'form_rate' => 600, 'copy_rate' => 2500,
         ])->assertSessionHasNoErrors();
 
-        // Binding: ((6 × 0.45) + 1.75) × 1,234 = 5,491.30 → 5,490.
+        // Binding: ((6 × 450) + 1,750) × 1,234 ÷ 1,000 = 5,491.30 → 5,490.
         $this->post(route('contractor-jobs.store'), [
             'contractor_id' => $contractor->id, 'kind' => 'binding', 'job_on' => today()->toDateString(),
-            'forms' => 6, 'copies' => 1234, 'form_rate' => 0.45, 'copy_rate' => 1.75,
+            'forms' => 6, 'copies' => 1234, 'form_rate' => 450, 'copy_rate' => 1750,
         ])->assertSessionHasNoErrors();
 
         // Folding landing exactly on a 5: 0.5 × 1,000 ÷ 1000 × 50 = 25 → 30 (half up).
@@ -265,7 +266,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         $this->get(route('contractors.show', $contractor))->assertOk()
             ->assertSee('Rs 193,120')
             ->assertSee('10 × 12,000 ÷ 1000 × 35')
-            ->assertSee('(8 × 0.6 + 2.5) × 25,000')
+            ->assertSee('(8 × 600 + 2,500) × 25,000 ÷ 1000')
             ->assertSee('Still to pay');
         $this->get(route('work-orders.show', $order))->assertOk()->assertSee('4,200');
     }
@@ -355,7 +356,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
             'contractor_id' => $contractor->id, 'work_order_id' => $orderA->id, 'kind' => 'folding', 'job_on' => $today, 'forms' => 10, 'copies' => 12000, 'folding_rate' => 35,
         ]);
         $this->actingAs($this->owner)->post(route('contractor-jobs.store'), [
-            'contractor_id' => $contractor->id, 'work_order_id' => $orderB->id, 'kind' => 'binding', 'job_on' => $today, 'forms' => 8, 'copies' => 25000, 'form_rate' => 0.6, 'copy_rate' => 2.5,
+            'contractor_id' => $contractor->id, 'work_order_id' => $orderB->id, 'kind' => 'binding', 'job_on' => $today, 'forms' => 8, 'copies' => 25000, 'form_rate' => 600, 'copy_rate' => 2500,
         ]);
         $this->assertSame(186700, $contractor->balance());
 
@@ -421,22 +422,22 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         $buyer = $this->buyer();
         $this->actingAs($this->owner);
 
-        // 30 × 25 + 10 loose = 760 copies; labour 30 × 3 + 2.5 rims × 10 = 115.
+        // 30 × 25 + 10 loose = 760 copies; labour 30 bundles × 3 = 90 (per-rim labour is Younus ka khata).
         $this->post(route('dispatches.store'), $this->load($buyer, [
             'work_order_id' => $order->id, 'destination' => 'Urdu Bazaar, Lahore', 'bundles' => 30, 'copies_per_bundle' => 25, 'loose_copies' => 10,
-            'rims' => 2.5, 'labour_per_bundle' => 3, 'labour_per_rim' => 10, 'labour_paid_to' => 'Aslam', 'truck_no' => 'LES-1234',
+            'labour_per_bundle' => 3, 'labour_paid_to' => 'Aslam', 'truck_no' => 'LES-1234',
         ]))->assertSessionHasNoErrors();
 
         $first = Dispatch::query()->sole();
         $this->assertSame('DSP-101', $first->number);
         $this->assertSame(760, $first->copies);
-        $this->assertSame(115, $first->labour_amount);
+        $this->assertSame(90, $first->labour_amount);
         $this->assertSame($order->book_format_id, $first->book_format_id);
         $this->assertSame(WorkOrderStage::Ready, $order->refresh()->stage);
 
         $this->get(route('dispatches.show', $first))->assertOk()
             ->assertSee('LOADING SLIP')->assertSee('DSP-101')->assertSee('760')->assertSee('30 × 25 + 10 loose')
-            ->assertSee('LES-1234')->assertSee('Rs 115 — Aslam')->assertSee($order->number);
+            ->assertSee('LES-1234')->assertSee('Rs 90 — Aslam')->assertSee($order->number);
 
         // The remaining 240 copies (9 × 25 + 15) close the order. Labour 9 × 2.5 = 22.5 → 23.
         $this->post(route('dispatches.store'), $this->load($buyer, ['work_order_id' => $order->id, 'bundles' => 9, 'copies_per_bundle' => 25, 'loose_copies' => 15, 'labour_per_bundle' => 2.5]))
@@ -450,7 +451,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         // No rims → no rims line on the slip.
         $this->get(route('dispatches.show', $second))->assertOk()->assertDontSee('Rims');
 
-        $this->get(route('dispatches.index'))->assertOk()->assertSee('1,000')->assertSee('Rs 138')->assertSee('DSP-102');
+        $this->get(route('dispatches.index'))->assertOk()->assertSee('1,000')->assertSee('Rs 113')->assertSee('DSP-102');
         $this->get(route('buyers.index'))->assertOk()->assertSee('1,000');
         $this->get(route('buyers.show', $buyer))->assertOk()->assertSee('DSP-101')->assertSee('2 loads');
     }

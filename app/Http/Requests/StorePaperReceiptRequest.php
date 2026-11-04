@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Godown;
 use App\Models\PaperReceipt;
+use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,6 +20,14 @@ class StorePaperReceiptRequest extends FormRequest
     }
 
     /**
+     * "Other…" on the list: save the typed name to the list (or reuse a matching one) before validating.
+     */
+    protected function prepareForValidation(): void
+    {
+        OtherOption::resolve($this, 'godown_id', Godown::class);
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -26,7 +36,7 @@ class StorePaperReceiptRequest extends FormRequest
     {
         return [
             // A corrected copy of a sent-back receipt may keep that receipt's slip number.
-            'slip_no' => ['required', 'string', 'max:30', Rule::unique('paper_receipts', 'slip_no')->ignore(PaperReceipt::beingResent()?->id)],
+            'slip_no' => ['required', 'string', 'max:30', Rule::unique('paper_receipts', 'slip_no')->ignore($this->route('paper_receipt')?->id ?? PaperReceipt::beingResent()?->id)],
             'received_at' => ['required', 'date'],
             'party_id' => ['required', 'exists:parties,id'],
             'paper_type_id' => ['required', 'exists:paper_types,id'],

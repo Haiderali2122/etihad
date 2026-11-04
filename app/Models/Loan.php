@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\LoanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Loan extends Model
 {
     /** @use HasFactory<LoanFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsCashOut, RequiresApproval;
 
     protected function casts(): array
     {
@@ -105,6 +106,25 @@ class Loan extends Model
     }
 
     public function approvalUrl(): string
+    {
+        return route('loans.show', $this);
+    }
+
+    /**
+     * The loan handed to the employee.
+     */
+    public function cashOut(): ?array
+    {
+        return [
+            'amount' => (int) $this->amount,
+            'date' => $this->issued_on,
+            'paid_to' => (string) $this->employee?->name,
+            'reason' => 'Staff loan',
+            'head' => 'Staff loans',
+        ];
+    }
+
+    public function cashOutUrl(): string
     {
         return route('loans.show', $this);
     }

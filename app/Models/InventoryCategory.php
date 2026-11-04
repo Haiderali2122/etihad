@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A group of inventory items, e.g. Ink, Plates, Glue.
  * Categories that don't track stock (paper) only record bills; their stock lives elsewhere.
  */
-#[Fillable(['name', 'name_ur', 'tracks_stock', 'is_active'])]
+#[Fillable(['name', 'name_ur', 'tracks_stock', 'for_machines', 'show_as_tab', 'is_active'])]
 class InventoryCategory extends Model
 {
     /** @use HasFactory<InventoryCategoryFactory> */
@@ -23,6 +23,8 @@ class InventoryCategory extends Model
     {
         return [
             'tracks_stock' => 'boolean',
+            'for_machines' => 'boolean',
+            'show_as_tab' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

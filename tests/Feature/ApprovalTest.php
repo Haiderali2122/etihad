@@ -134,7 +134,7 @@ class ApprovalTest extends TestCase
         $owner = User::factory()->owner()->create();
         $machine = Machine::factory()->create();
         $payload = [
-            'repaired_on' => today()->toDateString(), 'machine_id' => $machine->id, 'party_id' => Party::factory()->kind(PartyKind::Mechanic)->create()->id,
+            'repaired_on' => today()->toDateString(), 'machine_id' => $machine->id, 'party_id' => Party::factory()->kind(PartyKind::Kharadia)->create()->id,
             'kind' => 'repair', 'description' => 'Chain', 'bill_amount' => 10000, 'discount' => 2000,
         ];
 

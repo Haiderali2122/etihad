@@ -107,6 +107,8 @@ class ApprovalController extends Controller
             ->flatMap(fn (string $class, string $type) => $class::query()->sentBackOpen()->where('created_by', $user->id)
                 // A foreman sheet's advances are sent back together with the sheet.
                 ->when($class === SalaryAdvance::class, fn ($q) => $q->whereNull('foreman_sheet_id'))
+                // Expenses copied from another tab are decided there, with the entry they came from.
+                ->when($class === Expense::class, fn ($q) => $q->whereNull('source_type'))
                 ->get()
                 ->map(fn (Model $model) => ['type' => $type, 'model' => $model]))
             ->sortByDesc(fn (array $item) => $item['model']->reviewed_at)
@@ -138,6 +140,8 @@ class ApprovalController extends Controller
             ->flatMap(fn (string $class, string $type) => $class::query()->pending()->with($with[$class])
                 // A foreman sheet's advances are approved together with the sheet.
                 ->when($class === SalaryAdvance::class, fn ($q) => $q->whereNull('foreman_sheet_id'))
+                // Expenses copied from another tab are decided there, with the entry they came from.
+                ->when($class === Expense::class, fn ($q) => $q->whereNull('source_type'))
                 ->get()
                 ->map(fn (Model $model) => ['type' => $type, 'model' => $model]))
             ->sortByDesc(fn (array $item) => $item['model']->created_at)

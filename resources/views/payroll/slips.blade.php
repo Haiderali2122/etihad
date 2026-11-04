@@ -2,6 +2,7 @@
     <x-page-head :title="__('Salary slips — :month', ['month' => $run->label()])" :subtitle="trans_choice(':count slip|:count slips', $lines->count())">
         <x-slot:actions>
             <a class="btn" href="{{ route('payroll.show', $run) }}">{{ __('Back') }}</a>
+            @can('payroll.prepare')<a class="btn" href="{{ route('payroll.show', $run) }}" title="{{ $run->isDraft() ? '' : __('Reopen the payroll to change it.') }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print') }}</button>
         </x-slot:actions>
     </x-page-head>

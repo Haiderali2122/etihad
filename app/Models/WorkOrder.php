@@ -162,7 +162,8 @@ class WorkOrder extends Model
 
     /**
      * Why the order cannot move to its next stage yet, or null when it can. Each stage needs its own work recorded first:
-     * printing needs the printed copies, folding and binding need their contractor jobs given out and finished,
+     * printing needs the printed copies, the printed rims must be loaded to folding, folding and binding need
+     * their contractor jobs given out and finished,
      * and dispatch happens only by loading the books.
      */
     public function advanceBlocker(): ?string
@@ -181,6 +182,9 @@ class WorkOrder extends Model
             WorkOrderStage::Waiting => __('Waiting for the owner\'s approval.'),
             WorkOrderStage::Printing => $this->mode === PrintMode::Outsource && $this->printedCopies() === 0
                 ? __('Record the printed work received from the outside press first.')
+                : null,
+            WorkOrderStage::ToFolding => $this->rimLoadings()->doesntExist()
+                ? __('Record the rims loaded to folding (Younus ka khata) first.')
                 : null,
             WorkOrderStage::Folding => $jobsDone(ContractorJobKind::Folding),
             WorkOrderStage::Binding => $jobsDone(ContractorJobKind::Binding),
@@ -323,5 +327,15 @@ class WorkOrder extends Model
     public function approvalUrl(): string
     {
         return route('work-orders.show', $this);
+    }
+
+    /**
+     * Printed rims carried to folding (Younus ka khata).
+     *
+     * @return HasMany<RimLoading, $this>
+     */
+    public function rimLoadings(): HasMany
+    {
+        return $this->hasMany(RimLoading::class)->orderBy('loaded_on')->orderBy('id');
     }
 }

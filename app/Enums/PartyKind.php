@@ -7,6 +7,7 @@ enum PartyKind: string
     case PaperParty = 'paper';
     case Supplier = 'supplier';
     case Mechanic = 'mechanic';
+    case Kharadia = 'kharadia';
     case Press = 'press';
     case Buyer = 'buyer';
     case PlateProcessor = 'plates';
@@ -18,6 +19,7 @@ enum PartyKind: string
             self::PaperParty => __('Paper party / mill'),
             self::Supplier => __('Material supplier'),
             self::Mechanic => __('Mechanic / parts vendor'),
+            self::Kharadia => __('Kharadia (lathe turner)'),
             self::Press => __('Outside press'),
             self::Buyer => __('Buyer'),
             self::PlateProcessor => __('Plate processor'),

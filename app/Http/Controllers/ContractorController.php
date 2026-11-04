@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\ContractorPaymentKind;
 use App\Enums\WorkOrderStage;
 use App\Http\Requests\ContractorRequest;
@@ -97,18 +98,58 @@ class ContractorController extends Controller
      */
     public function pay(Request $request, Contractor $contractor): RedirectResponse
     {
-        $data = $request->validate([
-            'paid_on' => ['required', 'date'],
-            'amount' => ['required', 'integer', 'min:1'],
-            'kind' => ['required', Rule::enum(ContractorPaymentKind::class)],
-            'work_order_id' => ['nullable', 'exists:work_orders,id'],
-            'note' => ['nullable', 'string', 'max:255'],
-        ]);
+        $data = $request->validate($this->paymentRules());
 
         $payment = ContractorPayment::create($data + ['contractor_id' => $contractor->id, 'created_by' => $request->user()->id]);
 
         return back()->with('status', $payment->isPending()
             ? __('Rs :n recorded and sent for approval.', ['n' => number_format($payment->amount)])
             : __('Rs :n recorded.', ['n' => number_format($payment->amount)]));
+    }
+
+    public function editPayment(ContractorPayment $payment): View
+    {
+        return view('contractors.payments.edit', [
+            'payment' => $payment->load('contractor'),
+            'orders' => WorkOrder::query()->where('stage', '!=', WorkOrderStage::Waiting)->latest('id')->take(50)->get(),
+        ]);
+    }
+
+    /**
+     * The owner's change stands; anyone else's changed payment goes back to the owner for approval.
+     */
+    public function updatePayment(Request $request, ContractorPayment $payment): RedirectResponse
+    {
+        $payment->fill($request->validate($this->paymentRules()));
+        $user = $request->user();
+        $payment->forceFill($user->can('approve')
+            ? ['status' => ApprovalStatus::Approved, 'reviewed_by' => $user->id, 'reviewed_at' => now()]
+            : ['status' => ApprovalStatus::Pending, 'reviewed_by' => null, 'reviewed_at' => null])->save();
+
+        return redirect()->route('contractors.show', $payment->contractor_id)->with('status', $payment->isPending()
+            ? __('Payment changed and sent to the owner for approval.')
+            : __('Payment saved.'));
+    }
+
+    public function destroyPayment(ContractorPayment $payment): RedirectResponse
+    {
+        $contractorId = $payment->contractor_id;
+        $payment->delete();
+
+        return redirect()->route('contractors.show', $contractorId)->with('status', __('Payment deleted.'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function paymentRules(): array
+    {
+        return [
+            'paid_on' => ['required', 'date', 'before_or_equal:today'],
+            'amount' => ['required', 'integer', 'min:1'],
+            'kind' => ['required', Rule::enum(ContractorPaymentKind::class)],
+            'work_order_id' => ['nullable', 'exists:work_orders,id'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ];
     }
 }

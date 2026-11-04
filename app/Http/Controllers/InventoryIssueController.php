@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\PartyKind;
 use App\Http\Requests\StoreInventoryIssueRequest;
 use App\Models\Employee;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
 use App\Models\Machine;
+use App\Models\Party;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -25,14 +27,20 @@ class InventoryIssueController extends Controller
             'itemId' => $request->integer('item') ?: null,
             'machines' => Machine::query()->orderBy('code')->get(),
             'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'kharadias' => Party::query()->active()->where('kind', PartyKind::Kharadia)->orderBy('name')->get(),
         ]);
     }
 
     public function store(StoreInventoryIssueRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $forMachines = InventoryItem::query()->with('category')->find($data['inventory_item_id'])->category->for_machines;
+        // A machine part goes to the kharadia, other items to an employee.
+        $data[$forMachines ? 'employee_id' : 'party_id'] = null;
         if (blank($data['issued_to'] ?? null)) {
-            $data['issued_to'] = Employee::query()->whereKey($data['employee_id'])->value('name');
+            $data['issued_to'] = $forMachines
+                ? Party::query()->whereKey($data['party_id'])->value('name')
+                : Employee::query()->whereKey($data['employee_id'])->value('name');
         }
 
         $issue = InventoryIssue::create($data + ['created_by' => $request->user()->id]);

@@ -59,4 +59,41 @@ class ContractorJobController extends Controller
 
         return back()->with('status', __('Job marked as done.'));
     }
+
+    public function edit(ContractorJob $contractorJob): View
+    {
+        return view('contractors.jobs.edit', ['job' => $contractorJob->load(['contractor', 'workOrder'])]);
+    }
+
+    /**
+     * Forms, copies, rates and date can be corrected; the amount is worked out again.
+     */
+    public function update(Request $request, ContractorJob $contractorJob): RedirectResponse
+    {
+        $binding = $contractorJob->kind === ContractorJobKind::Binding;
+        $data = $request->validate([
+            'job_on' => ['required', 'date', 'before_or_equal:today'],
+            'forms' => ['required', 'numeric', 'min:0.5'],
+            'copies' => ['required', 'integer', 'min:1'],
+            'folding_rate' => [$binding ? 'nullable' : 'required', 'numeric', 'decimal:0,2', 'min:0'],
+            'form_rate' => [$binding ? 'required' : 'nullable', 'numeric', 'decimal:0,2', 'min:0'],
+            'copy_rate' => [$binding ? 'required' : 'nullable', 'numeric', 'decimal:0,2', 'min:0'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $contractorJob->update($data + [
+            'amount' => ContractorJob::price($contractorJob->kind, (float) $data['forms'], (int) $data['copies'],
+                (float) ($data['folding_rate'] ?? 0), (float) ($data['form_rate'] ?? 0), (float) ($data['copy_rate'] ?? 0)),
+        ]);
+
+        return redirect()->route('contractors.show', $contractorJob->contractor_id)->with('status', __('Job saved: Rs :amount.', ['amount' => number_format($contractorJob->amount)]));
+    }
+
+    public function destroy(ContractorJob $contractorJob): RedirectResponse
+    {
+        $contractorId = $contractorJob->contractor_id;
+        $contractorJob->delete();
+
+        return redirect()->route('contractors.show', $contractorId)->with('status', __('Job deleted.'));
+    }
 }

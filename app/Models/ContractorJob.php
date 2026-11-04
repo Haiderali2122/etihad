@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Folding or binding work given to a contractor, priced with the client's formulas:
  *
  * - Folding: (forms × copies ÷ 1000) × folding rate
- * - Binding: ((forms × rate per form) + binding rate) × copies
+ * - Binding: ((forms × rate per form) + binding rate) × copies in thousands (20,000 books count as 20)
  */
 #[Fillable(['contractor_id', 'work_order_id', 'kind', 'job_on', 'forms', 'copies', 'folding_rate', 'form_rate', 'copy_rate', 'amount', 'state', 'done_on', 'note', 'created_by'])]
 class ContractorJob extends Model
@@ -41,7 +41,7 @@ class ContractorJob extends Model
     {
         return PressMath::roundToTen(match ($kind) {
             ContractorJobKind::Folding => $forms * $copies / 1000 * $foldingRate,
-            ContractorJobKind::Binding => ($forms * $formRate + $copyRate) * $copies,
+            ContractorJobKind::Binding => ($forms * $formRate + $copyRate) * $copies / 1000,
         });
     }
 
@@ -72,6 +72,6 @@ class ContractorJob extends Model
 
         return $this->kind === ContractorJobKind::Folding
             ? "{$qty($this->forms)} × ".number_format($this->copies)." ÷ 1000 × {$qty($this->folding_rate)}"
-            : "({$qty($this->forms)} × {$qty($this->form_rate)} + {$qty($this->copy_rate)}) × ".number_format($this->copies);
+            : "({$qty($this->forms)} × {$qty($this->form_rate)} + {$qty($this->copy_rate)}) × ".number_format($this->copies).' ÷ 1000';
     }
 }

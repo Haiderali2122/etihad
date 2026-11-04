@@ -7,6 +7,7 @@ use App\Models\Book;
 use App\Models\CashFloat;
 use App\Models\Contractor;
 use App\Models\ContractorJob;
+use App\Models\ContractorPayment;
 use App\Models\Designation;
 use App\Models\Dispatch;
 use App\Models\Employee;
@@ -25,6 +26,7 @@ use App\Models\PaperType;
 use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\PlateJob;
+use App\Models\RimLoading;
 use App\Models\Role;
 use App\Models\SalaryAdvance;
 use App\Models\User;
@@ -512,6 +514,7 @@ class AuthAccessE2ETest extends TestCase
                     'designation' => Designation::factory()->create(),
                     'dispatch' => Dispatch::factory()->create(),
                     'employee' => Employee::factory()->create(),
+                    'expense' => Expense::factory()->create(),
                     'expense_head' => ExpenseHead::factory()->create(),
                     'foreman_sheet' => ForemanSheet::factory()->create(),
                     'godown' => Godown::factory()->create(),
@@ -524,8 +527,11 @@ class AuthAccessE2ETest extends TestCase
                     'paper_receipt' => PaperReceipt::factory()->create(),
                     'paper_type' => PaperType::factory()->create(),
                     'party' => Party::factory()->create(),
+                    'payment' => ContractorPayment::factory()->create(),
                     'payrollRun' => PayrollRun::factory()->create(),
                     'plateJob' => PlateJob::factory()->create(),
+                    'processor' => Party::factory()->kind(PartyKind::PlateProcessor)->create(),
+                    'rimLoading' => RimLoading::factory()->create(),
                     'role' => Role::factory()->create(),
                     'salary_advance' => SalaryAdvance::factory()->create(),
                     'user' => User::factory()->create(),

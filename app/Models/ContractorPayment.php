@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ContractorPaymentKind;
+use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\ContractorPaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ContractorPayment extends Model
 {
     /** @use HasFactory<ContractorPaymentFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsCashOut, RequiresApproval;
 
     protected function casts(): array
     {
@@ -75,6 +76,25 @@ class ContractorPayment extends Model
     }
 
     public function approvalUrl(): string
+    {
+        return route('contractors.show', $this->contractor_id);
+    }
+
+    /**
+     * An advance or payment handed to a folding or binding contractor.
+     */
+    public function cashOut(): ?array
+    {
+        return [
+            'amount' => (int) $this->amount,
+            'date' => $this->paid_on,
+            'paid_to' => (string) $this->contractor?->name,
+            'reason' => trim('Contractor '.mb_strtolower($this->kind->label()).($this->workOrder ? ' for '.$this->workOrder->number : '')),
+            'head' => 'Contractors',
+        ];
+    }
+
+    public function cashOutUrl(): string
     {
         return route('contractors.show', $this->contractor_id);
     }

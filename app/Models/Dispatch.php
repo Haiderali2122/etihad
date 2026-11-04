@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\WorkOrderStage;
+use App\Models\Concerns\RecordsCashOut;
 use Database\Factories\DispatchFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,11 +13,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Books loaded out to a buyer, with the loading labour paid per bundle and per rim.
  */
-#[Fillable(['number', 'dispatched_on', 'buyer_id', 'destination', 'work_order_id', 'book_format_id', 'bundles', 'copies_per_bundle', 'loose_copies', 'copies', 'rims', 'labour_per_bundle', 'labour_per_rim', 'labour_amount', 'labour_paid_to', 'truck_no', 'note', 'created_by'])]
+#[Fillable(['number', 'dispatched_on', 'buyer_id', 'destination', 'work_order_id', 'book_format_id', 'bundles', 'copies_per_bundle', 'loose_copies', 'copies', 'rims', 'labour_per_bundle', 'labour_per_rim', 'labour_amount', 'labour_paid_to', 'truck_no', 'truck_front', 'truck_back', 'files', 'note', 'created_by'])]
 class Dispatch extends Model
 {
     /** @use HasFactory<DispatchFactory> */
-    use HasFactory;
+    use HasFactory, RecordsCashOut;
 
     protected function casts(): array
     {
@@ -30,6 +31,7 @@ class Dispatch extends Model
             'labour_per_bundle' => 'decimal:2',
             'labour_per_rim' => 'decimal:2',
             'labour_amount' => 'integer',
+            'files' => 'array',
         ];
     }
 
@@ -77,5 +79,24 @@ class Dispatch extends Model
     public function bookName(): string
     {
         return $this->bookFormat ? $this->bookFormat->book->name.($this->bookFormat->book->formats()->count() > 1 ? " — {$this->bookFormat->name}" : '') : '—';
+    }
+
+    /**
+     * Labour paid for loading the truck.
+     */
+    public function cashOut(): ?array
+    {
+        return [
+            'amount' => (int) $this->labour_amount,
+            'date' => $this->dispatched_on,
+            'paid_to' => $this->labour_paid_to ?: 'Loading labour',
+            'reason' => 'Truck loading '.$this->number,
+            'head' => 'Loading labour',
+        ];
+    }
+
+    public function cashOutUrl(): string
+    {
+        return route('dispatches.show', $this);
     }
 }

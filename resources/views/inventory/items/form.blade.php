@@ -4,7 +4,7 @@
         @csrf
         @if ($item->exists) @method('PUT') @endif
         <div class="card-b"><div class="form">
-            <x-field name="inventory_category_id" :label="__('Category')" :options="$categories->mapWithKeys(fn ($c) => [$c->id => $c->localName()])" :value="$item->inventory_category_id" :placeholder="__('Choose category')" required />
+            <x-field-other name="inventory_category_id" :label="__('Category')" :options="$categories->mapWithKeys(fn ($c) => [$c->id => $c->localName()])" :value="$item->inventory_category_id" :placeholder="__('Choose category')" required />
             <x-field name="name" :label="__('Item name')" :value="$item->name" placeholder="Black ink" required />
             <x-field name="name_ur" :label="__('Name in Urdu')" :value="$item->name_ur" dir="rtl" />
             <x-field name="unit" :label="__('Unit')" :value="$item->unit" placeholder="kg" list="unitList" required :hint="__('How it is counted: kg, litre, pcs, tins…')" />

@@ -3,9 +3,11 @@
         <x-slot:actions>
             <x-badge :tone="$sheet->status->tone()">{{ $sheet->status->label() }}</x-badge>
             <a class="btn" href="{{ route('salary-advances.index') }}">{{ __('Back') }}</a>
+            @can('advances.create')<a class="btn" href="{{ route('foreman-sheets.edit', $sheet) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print') }}</button>
         </x-slot:actions>
     </x-page-head>
+    @if ($errors->any())<div class="flash err no-print" role="alert"><x-icon name="alert" />{{ $errors->first() }}</div>@endif
     @if ($sheet->review_note)<div class="alert"><x-icon name="alert" /><div><b>{{ __('Owner note') }}:</b> {{ $sheet->review_note }}</div></div>@endif
     <div class="card">
         <div class="tbl-wrap"><table>

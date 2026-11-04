@@ -55,29 +55,93 @@ class DispatchController extends Controller
 
     public function store(StoreDispatchRequest $request): RedirectResponse
     {
-        $data = $request->validated();
-        $order = isset($data['work_order_id']) ? WorkOrder::query()->find($data['work_order_id']) : null;
-        $copies = $data['bundles'] * $data['copies_per_bundle'] + (int) ($data['loose_copies'] ?? 0);
-        $labour = $data['bundles'] * (float) ($data['labour_per_bundle'] ?? 0) + (float) ($data['rims'] ?? 0) * (float) ($data['labour_per_rim'] ?? 0);
-
-        $dispatch = Dispatch::create(array_merge($data, [
-            'number' => Dispatch::nextNumber(),
-            'book_format_id' => $data['book_format_id'] ?? $order?->book_format_id,
-            'loose_copies' => (int) ($data['loose_copies'] ?? 0),
-            'copies' => $copies,
-            'labour_per_bundle' => $data['labour_per_bundle'] ?? 0,
-            'labour_per_rim' => $data['labour_per_rim'] ?? 0,
-            'labour_amount' => (int) round($labour),
-            'created_by' => $request->user()->id,
-        ]));
-
-        if ($order && $order->dispatches()->sum('copies') >= $order->copies && $order->stage !== WorkOrderStage::Dispatched) {
-            $order->update(['stage' => WorkOrderStage::Dispatched]);
-        }
+        $dispatch = new Dispatch(['number' => Dispatch::nextNumber(), 'created_by' => $request->user()->id]);
+        $this->fill($dispatch, $request);
+        $dispatch->save();
+        $this->closeOrderIfLoaded($dispatch->workOrder);
 
         return redirect()->route('dispatches.show', $dispatch)->with('status', __(':number saved: :copies copies to :buyer.', [
-            'number' => $dispatch->number, 'copies' => number_format($copies), 'buyer' => $dispatch->buyer->name,
+            'number' => $dispatch->number, 'copies' => number_format($dispatch->copies), 'buyer' => $dispatch->buyer->name,
         ]));
+    }
+
+    public function edit(Dispatch $dispatch): View
+    {
+        $dispatch->load('workOrder.bookFormat.book');
+        $orders = WorkOrder::query()->with('bookFormat.book')->whereIn('stage', Dispatch::orderStages())->latest('id')->get();
+        if ($dispatch->workOrder && ! $orders->contains('id', $dispatch->work_order_id)) {
+            $orders->prepend($dispatch->workOrder);
+        }
+
+        return view('dispatches.create', [
+            'dispatch' => $dispatch,
+            'number' => $dispatch->number,
+            'buyers' => Party::query()->where('kind', PartyKind::Buyer)->where(fn ($q) => $q->where('is_active', true)->orWhereKey($dispatch->buyer_id))->orderBy('name')->get(),
+            'orders' => $orders,
+            'books' => Book::query()->active()->with('formats')->orderBy('name')->get(),
+            'order' => $dispatch->workOrder,
+            'buyerId' => $dispatch->buyer_id,
+            'back' => route('dispatches.show', $dispatch),
+        ]);
+    }
+
+    public function update(StoreDispatchRequest $request, Dispatch $dispatch): RedirectResponse
+    {
+        $previousOrder = $dispatch->workOrder;
+        $this->fill($dispatch, $request);
+        $dispatch->save();
+
+        $this->closeOrderIfLoaded($dispatch->refresh()->workOrder);
+        if ($previousOrder && $previousOrder->id !== $dispatch->work_order_id) {
+            $this->closeOrderIfLoaded($previousOrder);
+        }
+
+        return redirect()->route('dispatches.show', $dispatch)->with('status', __(':number saved.', ['number' => $dispatch->number]));
+    }
+
+    /**
+     * Copies and labour from the form, plus the truck photos and any other files. Photos left empty keep the
+     * ones already attached; new files are added to the list.
+     */
+    private function fill(Dispatch $dispatch, StoreDispatchRequest $request): void
+    {
+        $data = $request->safe()->except(['truck_front', 'truck_back', 'files']);
+        $order = isset($data['work_order_id']) ? WorkOrder::query()->find($data['work_order_id']) : null;
+
+        $dispatch->fill(array_merge($data, [
+            'book_format_id' => $data['book_format_id'] ?? $order?->book_format_id,
+            'loose_copies' => (int) ($data['loose_copies'] ?? 0),
+            'copies' => $data['bundles'] * $data['copies_per_bundle'] + (int) ($data['loose_copies'] ?? 0),
+            'labour_per_bundle' => $data['labour_per_bundle'] ?? 0,
+            'labour_amount' => (int) round($data['bundles'] * (float) ($data['labour_per_bundle'] ?? 0)),
+        ]));
+
+        foreach (['truck_front', 'truck_back'] as $photo) {
+            if ($request->hasFile($photo)) {
+                $dispatch->{$photo} = $request->file($photo)->store('attachments/dispatches', 'public');
+            }
+        }
+        $files = collect($request->file('files', []))->map(fn ($file) => $file->store('attachments/dispatches', 'public'));
+        if ($files->isNotEmpty()) {
+            $dispatch->files = array_values(array_merge($dispatch->files ?? [], $files->all()));
+        }
+    }
+
+    /**
+     * An order closes once every copy is loaded, and opens again if a load is reduced or moved to another order.
+     */
+    private function closeOrderIfLoaded(?WorkOrder $order): void
+    {
+        if (! $order) {
+            return;
+        }
+
+        $loaded = (int) $order->dispatches()->sum('copies');
+        if ($loaded >= $order->copies && $order->stage !== WorkOrderStage::Dispatched) {
+            $order->update(['stage' => WorkOrderStage::Dispatched]);
+        } elseif ($loaded < $order->copies && $order->stage === WorkOrderStage::Dispatched) {
+            $order->update(['stage' => WorkOrderStage::Ready]);
+        }
     }
 
     /**

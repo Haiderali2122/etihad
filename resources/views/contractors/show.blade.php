@@ -42,11 +42,11 @@
         </div>
 
         @can('contractors.manage')
-            <form method="POST" action="{{ route('contractors.payments.store', $contractor) }}" class="card">
+            <form method="POST" action="{{ route('contractors.payments.store', $contractor) }}" class="card" id="pay">
                 @csrf
                 <div class="card-h"><div><h3>{{ __('Pay contractor') }}</h3><div class="sub">{{ __('Advances and payments go to the owner for approval') }}</div></div></div>
                 <div class="card-b"><div class="form" style="grid-template-columns:minmax(0,1fr)">
-                    <x-field name="kind" :label="__('Type')" :options="collect(\App\Enums\ContractorPaymentKind::cases())->mapWithKeys(fn ($k) => [$k->value => $k->label()])" required />
+                    <x-field name="kind" :label="__('Type')" :options="collect(\App\Enums\ContractorPaymentKind::cases())->mapWithKeys(fn ($k) => [$k->value => $k->label()])" :value="request('kind')" required />
                     <x-field name="amount" type="number" min="1" :label="__('Amount (Rs)')" :value="$balance > 0 ? $balance : null" required />
                     <x-field name="paid_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                     <x-field name="work_order_id" :label="__('Against order (optional)')" :options="$orders->pluck('number', 'id')" :placeholder="__('Not for an order')" />
@@ -60,7 +60,7 @@
     <div class="card">
         <div class="card-h"><div><h3>{{ __('Jobs') }}</h3></div></div>
         <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
-            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Order') }}</th><th>{{ __('Work') }}</th><th>{{ __('Formula') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th></tr></thead>
+            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Order') }}</th><th>{{ __('Work') }}</th><th>{{ __('Formula') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($jobs as $job)
                 <tr>
@@ -70,9 +70,11 @@
                     <td class="meta" dir="ltr">{{ $job->formula() }}</td>
                     <td class="r num"><b>Rs {{ number_format($job->amount) }}</b></td>
                     <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge></td>
+                    <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractor-jobs.edit', $job) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
+                        <form method="POST" action="{{ route('contractor-jobs.destroy', $job) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete this job?')))">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan</td>
                 </tr>
             @empty
-                <tr><td colspan="6"><div class="empty">{{ __('No jobs yet') }}</div></td></tr>
+                <tr><td colspan="7"><div class="empty">{{ __('No jobs yet') }}</div></td></tr>
             @endforelse
             </tbody>
         </table></div></div>
@@ -81,16 +83,18 @@
     <div class="card">
         <div class="card-h"><div><h3>{{ __('Advances and payments') }}</h3></div></div>
         <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
-            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Order') }}</th><th>{{ __('Note') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th></tr></thead>
+            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Order') }}</th><th>{{ __('Note') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($payments as $p)
                 <tr>
                     <td>{{ $p->paid_on->format('j M Y') }}</td><td>{{ $p->kind->label() }}</td><td>{{ $p->workOrder?->number ?? '—' }}</td><td>{{ $p->note ?: '—' }}</td>
                     <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
-                    <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
+                    <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge>@if ($p->review_note)<div class="meta">{{ $p->review_note }}</div>@endif</td>
+                    <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractor-payments.edit', $p) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
+                        <form method="POST" action="{{ route('contractor-payments.destroy', $p) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete this payment?')))">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan</td>
                 </tr>
             @empty
-                <tr><td colspan="6"><div class="empty">{{ __('Nothing paid yet') }}</div></td></tr>
+                <tr><td colspan="7"><div class="empty">{{ __('Nothing paid yet') }}</div></td></tr>
             @endforelse
             </tbody>
         </table></div></div>

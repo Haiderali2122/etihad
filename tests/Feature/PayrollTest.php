@@ -53,13 +53,14 @@ class PayrollTest extends TestCase
 
         $line = app(PayrollCalculator::class)->prepare($this->month, $owner)->lines->sole();
 
-        $this->assertSame(1500, $line->absence_deduction);
+        // Pay is for days present only: the absent day and the leave day are both unpaid (2 × 1,500).
+        $this->assertSame(3000, $line->absence_deduction);
         $this->assertSame(12.0, $line->overtime_hours);
         $this->assertSame(3000, $line->overtime_amount);
         $this->assertSame(15000, $line->advances_deducted);
         $this->assertSame(5000, $line->loan_deducted);
-        // 45,000 − 1,500 + 3,000 − 15,000 − 5,000
-        $this->assertSame(26500, $line->net_pay);
+        // 45,000 − 3,000 + 3,000 − 15,000 − 5,000
+        $this->assertSame(25000, $line->net_pay);
     }
 
     public function test_net_pay_rounds_to_the_nearest_ten(): void

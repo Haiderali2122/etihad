@@ -3,6 +3,7 @@
         <x-slot:actions>
             @if ($loan->isCleared())<x-badge tone="good">{{ __('Cleared') }}</x-badge>@else<x-badge :tone="$loan->status->tone()">{{ $loan->status->label() }}</x-badge>@endif
             <a class="btn" href="{{ route('loans.index') }}">{{ __('Back') }}</a>
+            @can('advances.create')@if ($loan->repayments->isEmpty())<a class="btn" href="{{ route('loans.edit', $loan) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endif @endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print') }}</button>
         </x-slot:actions>
     </x-page-head>

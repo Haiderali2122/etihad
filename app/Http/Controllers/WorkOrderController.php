@@ -39,7 +39,7 @@ class WorkOrderController extends Controller
         return view('work-orders.index', [
             'columns' => collect(WorkOrderStage::cases())->mapWithKeys(fn (WorkOrderStage $s) => [$s->value => $orders->where('stage', $s)->values()]),
             'rejected' => WorkOrder::query()->where('status', ApprovalStatus::Rejected)->latest()->take(5)->get(),
-            'inProduction' => $orders->whereIn('stage', [WorkOrderStage::Printing, WorkOrderStage::Folding, WorkOrderStage::Binding]),
+            'inProduction' => $orders->whereIn('stage', [WorkOrderStage::Printing, WorkOrderStage::ToFolding, WorkOrderStage::Folding, WorkOrderStage::Binding]),
             'overdue' => $orders->filter(fn (WorkOrder $o) => $o->due_on && $o->due_on->isPast() && $o->stage !== WorkOrderStage::Dispatched)->count(),
         ]);
     }
@@ -85,7 +85,7 @@ class WorkOrderController extends Controller
     public function show(WorkOrder $workOrder): View
     {
         $workOrder->load(['bookFormat.book', 'paperType', 'party', 'machine', 'press', 'buyer', 'paperIssue', 'creator', 'reviewer',
-            'outsideReceipts', 'contractorJobs.contractor', 'plateJobs.processor', 'dispatches.buyer', 'wasteEntries']);
+            'outsideReceipts', 'contractorJobs.contractor', 'plateJobs.processor', 'dispatches.buyer', 'wasteEntries', 'rimLoadings']);
         $sheets = $workOrder->paperType->sheets_per_unit ?: 500;
 
         return view('work-orders.show', [

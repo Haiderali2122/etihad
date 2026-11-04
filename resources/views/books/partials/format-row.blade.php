@@ -25,7 +25,5 @@
     </td>
     <td><input type="number" step="0.01" min="0" name="formats[{{ $i }}][folding_rate]" value="{{ $row['folding_rate'] ?? '' }}" placeholder="35" aria-label="{{ __('Folding rate') }}">
         @if ($err('folding_rate'))<span class="err">{{ $err('folding_rate') }}</span>@endif</td>
-    <td><input type="number" step="0.01" min="0" name="formats[{{ $i }}][binding_rate]" value="{{ $row['binding_rate'] ?? '' }}" placeholder="2.5" aria-label="{{ __('Binding rate') }}">
-        @if ($err('binding_rate'))<span class="err">{{ $err('binding_rate') }}</span>@endif</td>
     <td><button type="button" class="icon-btn danger" data-remove aria-label="{{ __('Remove format') }}"><x-icon name="x" /></button></td>
 </tr>

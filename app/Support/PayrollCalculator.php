@@ -21,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  * Works out each employee's pay for a month, following the rules given at scoping:
  *
  * - Daily rate = monthly salary ÷ days in the month.
- * - Each absent day is deducted at the daily rate (a missed day counts as an off day).
+ * - Pay is for days present only: daily rate × days present (e.g. 45,000 ÷ 31 × 26). Leave, off days and
+ *   absences are unpaid; days with no attendance mark count as present unless the setting says absent.
  * - Overtime hourly rate = daily rate ÷ divisor × multiplier (default ÷ 6, × 1).
  * - Approved advances not yet deducted, and this month's instalments on approved loans, come off.
  *   Advances and loans still waiting for the owner are left out until approved.
@@ -90,7 +91,7 @@ class PayrollCalculator
 
         $unmarked = max(0, $employedDays - $records->count());
         $absent = $count(AttendanceStatus::Absent) + ($rules['unmarked_as'] === 'absent' ? $unmarked : 0);
-        $notEmployed = $daysInMonth - $employedDays;
+        $paidDays = $count(AttendanceStatus::Present) + ($rules['unmarked_as'] === 'absent' ? 0 : $unmarked);
 
         $dailyRate = $employee->monthly_salary / $daysInMonth;
         $overtimeHours = round($records->sum('overtime_minutes') / 60, 2);
@@ -108,7 +109,8 @@ class PayrollCalculator
             'unmarked_days' => $unmarked,
             'overtime_hours' => $overtimeHours,
             'overtime_amount' => PressMath::roundToTen($hourlyOvertime * $overtimeHours),
-            'absence_deduction' => PressMath::roundToTen($dailyRate * ($absent + $notEmployed)),
+            // Everything not paid as a present day: absences, leave, off days and days before joining or after leaving.
+            'absence_deduction' => PressMath::roundToTen($employee->monthly_salary - $dailyRate * $paidDays),
             'advances_deducted' => $this->unsettledAdvances($employee, $end),
         ]);
 

@@ -1,14 +1,14 @@
 <x-layouts.app :title="__('Log repair')">
-    <x-page-head :back="($machineId ? route('machines.show', $machineId) : route('machines.index'))" :title="__('Log repair')" :subtitle="__('Record the part, the vendor, the bill and any discount. Attach the invoice photo.')" />
+    <x-page-head :back="($machineId ? route('machines.show', $machineId) : route('machines.index'))" :title="__('Log repair')" :subtitle="__('Record the part, the kharadia, the bill and any discount. Attach the invoice photo.')" />
     <form method="POST" action="{{ route('machine-repairs.store') }}" enctype="multipart/form-data" class="card form-card">
         @csrf
         <div class="card-b"><div class="form">
             <x-field name="machine_id" :label="__('Machine')" :options="$machines->mapWithKeys(fn ($m) => [$m->id => $m->code.' '.$m->name])" :value="$machineId" :placeholder="__('Choose machine')" required />
             <x-field name="repaired_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
             <x-field name="kind" :label="__('Repair or new part')" :options="collect($kinds)->mapWithKeys(fn ($k) => [$k->value => $k->label()])" required />
-            <x-field name="part_id" :label="__('Part')" :options="$parts->mapWithKeys(fn ($p) => [$p->id => $p->name.($p->name_ur ? ' / '.$p->name_ur : '')])" :placeholder="__('No specific part')" />
+            <x-field-other name="part_id" :label="__('Part')" :options="$parts->mapWithKeys(fn ($p) => [$p->id => $p->name.($p->name_ur ? ' / '.$p->name_ur : '')])" :placeholder="__('No specific part')" />
             <x-field name="description" :label="__('Work done')" placeholder="Roller re-rubbered" full required />
-            <x-field name="party_id" :label="__('Mechanic / vendor')" :options="$vendors->pluck('name', 'id')" :placeholder="__('Choose vendor')" required />
+            <x-field name="party_id" :label="__('Kharadia')" :options="$vendors->pluck('name', 'id')" :placeholder="__('Choose kharadia')" required :hint="$vendors->isEmpty() ? __('Add kharadias under Parties with the type Kharadia.') : null" />
             <x-field name="invoice_no" :label="__('Invoice no.')" />
             <x-field name="bill_amount" type="number" min="0" :label="__('Bill (Rs)')" required />
             <x-field name="discount" type="number" min="0" :label="__('Discount (Rs)')" value="0" />

@@ -83,4 +83,35 @@ class LoanController extends Controller
 
         return redirect()->route('loans.show', $loan)->with('status', __('Repayment of Rs :n recorded.', ['n' => number_format($data['amount'])]));
     }
+
+    /**
+     * Correct a loan before anything has been repaid against it.
+     */
+    public function edit(Loan $loan): View|RedirectResponse
+    {
+        if ($loan->repayments()->exists()) {
+            return redirect()->route('loans.show', $loan)->withErrors(['loan' => __('Repayments are already recorded against this loan, so it can no longer be changed.')]);
+        }
+
+        return view('loans.create', [
+            'loan' => $loan,
+            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($loan->employee_id))->orderBy('name')->get(),
+            'employeeId' => $loan->employee_id,
+        ]);
+    }
+
+    public function update(StoreLoanRequest $request, Loan $loan): RedirectResponse
+    {
+        if ($loan->repayments()->exists()) {
+            return redirect()->route('loans.show', $loan)->withErrors(['loan' => __('Repayments are already recorded against this loan, so it can no longer be changed.')]);
+        }
+
+        $data = $request->validated();
+        $data['first_instalment_month'] = Carbon::createFromFormat('!Y-m', $data['first_instalment_month'])->startOfMonth()->toDateString();
+        $loan->fill($data)->markEditedBy($request->user())->save();
+
+        return redirect()->route('loans.show', $loan)->with('status', $loan->isPending()
+            ? __('Loan changed and sent to the owner for approval.')
+            : __('Loan saved.'));
+    }
 }

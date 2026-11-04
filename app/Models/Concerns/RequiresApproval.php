@@ -147,6 +147,17 @@ trait RequiresApproval
      */
     abstract public function resendUrl(): string;
 
+    /**
+     * After an edit: the owner's change stands; anyone else's goes back to the owner for approval.
+     * Call before saving.
+     */
+    public function markEditedBy(User $user): static
+    {
+        return $this->forceFill($user->can('approve')
+            ? ['status' => ApprovalStatus::Approved, 'reviewed_by' => $user->id, 'reviewed_at' => now()]
+            : ['status' => ApprovalStatus::Pending, 'reviewed_by' => null, 'reviewed_at' => null]);
+    }
+
     public function approve(User $reviewer, ?string $note = null): void
     {
         $this->review($reviewer, ApprovalStatus::Approved, $note);

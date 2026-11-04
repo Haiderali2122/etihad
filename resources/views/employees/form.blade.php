@@ -7,7 +7,7 @@
             <x-field name="name" :label="__('Name')" :value="$employee->name" required />
             <x-field name="name_ur" :label="__('Name in Urdu')" :value="$employee->name_ur" dir="rtl" />
             <x-field name="code" :label="__('Employee no.')" :value="$employee->code" placeholder="E-001" required :hint="__('Use the same number as on the biometric device.')" />
-            <x-field name="designation" :label="__('Designation')" :options="$designations" :value="$employee->designation" :placeholder="__('Choose…')" required />
+            <x-field-other name="designation" :label="__('Designation')" :options="$designations" :value="$employee->designation" :placeholder="__('Choose…')" required />
             <x-field name="monthly_salary" type="number" min="0" :label="__('Monthly salary (Rs)')" :value="$employee->monthly_salary" required />
             <x-field name="foreman_id" :label="__('Works under foreman')" :options="$foremen->pluck('name', 'id')" :value="$employee->foreman_id" :placeholder="__('None')" />
             <x-field name="father_name" :label="__('Father\'s name')" :value="$employee->father_name" />

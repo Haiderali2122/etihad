@@ -1,23 +1,25 @@
+@php $sheet ??= null; @endphp
 <x-layouts.app :title="__('Foreman advance sheet')">
-    <x-page-head :back="route('salary-advances.index')" :title="__('Foreman advance sheet')" :subtitle="__('Cash given to a foreman. List who he handed it to; each amount becomes that person\'s advance. Whatever is left stays as the foreman\'s own advance.')" />
+    <x-page-head :back="$sheet ? route('foreman-sheets.show', $sheet) : route('salary-advances.index')" :title="__('Foreman advance sheet')" :subtitle="__('Cash given to a foreman. List who he handed it to; each amount becomes that person\'s advance. Whatever is left stays as the foreman\'s own advance.')" />
 
     @if ($foremen->isEmpty())
         <div class="card"><div class="empty"><b>{{ __('No foremen yet') }}</b>{{ __('Tick “Foreman” on an employee\'s record first.') }}</div></div>
     @else
-        <form method="POST" action="{{ route('foreman-sheets.store') }}" class="card form-card" id="sheetForm">
+        <form method="POST" action="{{ $sheet ? route('foreman-sheets.update', $sheet) : route('foreman-sheets.store') }}" class="card form-card" id="sheetForm">
             @csrf
+            @if ($sheet) @method('PUT') @endif
             <div class="card-b"><div class="form">
                 <x-field name="foreman_id" :label="__('Foreman')" :options="$foremen->pluck('name', 'id')" :value="$foremanId" required />
-                <x-field name="given_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                <x-field name="amount" type="number" min="1" :label="__('Cash given to the foreman (Rs)')" required />
-                <x-field name="note" :label="__('Note')" />
+                <x-field name="given_on" type="date" :label="__('Date')" :value="$sheet?->given_on->toDateString() ?? today()->toDateString()" required />
+                <x-field name="amount" type="number" min="1" :label="__('Cash given to the foreman (Rs)')" :value="$sheet?->amount" required />
+                <x-field name="note" :label="__('Note')" :value="$sheet?->note" />
             </div></div>
             <div class="card-h" style="padding-top:0"><div><h3>{{ __('Handed out to') }}</h3><div class="sub" id="sheetSummary"></div></div>
                 <button type="button" class="btn sm" id="addLine"><x-icon name="plus" />{{ __('Add person') }}</button></div>
             <div class="tbl-wrap" style="margin-top:12px"><table class="fmt-table">
                 <thead><tr><th>{{ __('Employee') }}</th><th>{{ __('Amount (Rs)') }}</th><th></th></tr></thead>
                 <tbody id="lines">
-                @foreach (old('lines', [[]]) as $i => $line)
+                @foreach (old('lines', isset($lines) && $lines ? $lines : [[]]) as $i => $line)
                     @include('foreman-sheets.line', ['i' => $i, 'line' => $line])
                 @endforeach
                 </tbody>

@@ -20,7 +20,7 @@
         <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
             <thead><tr>
                 <th>{{ __('Format') }}</th><th class="r">{{ __('Forms') }}</th><th class="r">{{ __('Pages') }}</th><th>{{ __('Default paper') }}</th>
-                <th class="r">{{ __('Folding rate') }}</th><th class="r">{{ __('Binding rate') }}</th>
+                <th class="r">{{ __('Folding rate') }}</th>
                 <th class="r">{{ __('Rims / 10,000') }}</th><th class="r">{{ __('Folding / 10,000') }}</th>
             </tr></thead>
             <tbody>
@@ -31,7 +31,6 @@
                     <td class="r num">{{ $format->pages ?: '—' }}</td>
                     <td>{{ $format->paperType?->label() ?? '—' }}</td>
                     <td class="r num">{{ $format->folding_rate !== null ? 'Rs '.number_format((float) $format->folding_rate, 2) : '—' }}<div class="meta">{{ __('per 1,000 forms') }}</div></td>
-                    <td class="r num">{{ $format->binding_rate !== null ? 'Rs '.number_format((float) $format->binding_rate, 2) : '—' }}<div class="meta">{{ __('per copy') }}</div></td>
                     <td class="r num">{{ number_format(\App\Support\PressMath::rimsFor((float) $format->forms, 10000, 3, $format->paperType?->sheets_per_unit ?? 500)) }}</td>
                     <td class="r num">{{ $format->foldingAmount(10000) !== null ? 'Rs '.number_format($format->foldingAmount(10000)) : '—' }}</td>
                 </tr>

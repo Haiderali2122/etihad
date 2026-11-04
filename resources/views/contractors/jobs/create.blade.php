@@ -12,17 +12,17 @@
                     <select id="f_work_order_id" name="work_order_id">
                         <option value="">{{ __('Not for an order') }}</option>
                         @foreach ($orders as $o)
-                            <option value="{{ $o->id }}" data-forms="{{ \App\Models\InventoryItem::qty($o->forms) }}" data-copies="{{ $o->copies }}" data-folding="{{ $o->bookFormat->folding_rate }}" data-binding="{{ $o->bookFormat->binding_rate }}" @selected((string) old('work_order_id', $order?->id) === (string) $o->id)>{{ $o->number }} — {{ $o->bookFormat->book->name }} ({{ number_format($o->copies) }})</option>
+                            <option value="{{ $o->id }}" data-forms="{{ \App\Models\InventoryItem::qty($o->forms) }}" data-copies="{{ $o->copies }}" data-folding="{{ $o->bookFormat->folding_rate }}" @selected((string) old('work_order_id', $order?->id) === (string) $o->id)>{{ $o->number }} — {{ $o->bookFormat->book->name }} ({{ number_format($o->copies) }})</option>
                         @endforeach
                     </select>
                 </div>
                 <x-field name="contractor_id" :label="__('Contractor')" :options="$contractors->mapWithKeys(fn ($c) => [$c->id => $c->name.' · '.$c->work->label()])" :value="$contractorId" :placeholder="__('Choose contractor')" required />
                 <x-field name="kind" :label="__('Work')" :options="collect(\App\Enums\ContractorJobKind::cases())->mapWithKeys(fn ($k) => [$k->value => $k->label()])" :value="$kind" required />
                 <x-field name="forms" type="number" step="0.5" min="0.5" :label="__('Forms per copy')" :value="$order ? \App\Models\InventoryItem::qty($order->forms) : null" required />
-                <x-field name="copies" type="number" min="1" :label="__('Copies')" :value="$order?->copies" required />
+                <x-field name="copies" type="number" min="1" :label="__('Total books (copies)')" :value="$order?->copies" required />
                 <x-field name="folding_rate" type="number" step="0.01" min="0" :label="__('Folding rate (per 1,000 forms)')" />
-                <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form')" />
-                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate per copy')" />                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form (per 1,000 books)')" />
+                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate (per 1,000 books)')" />                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                 <div class="field full"><div class="calc"><div class="lbl">{{ __('Amount') }}</div><div class="big num" id="jobAmount">Rs 0</div><div class="eq" id="jobEq" dir="ltr"></div></div></div>
                 <x-field name="note" :label="__('Note')" full />
             </div></div>
@@ -45,15 +45,15 @@
                         if (o.forms) { forms.value = o.forms; copies.value = o.copies; }
                         fold.value = c.folding ?? o.folding ?? fold.value;
                         perForm.value = c.form ?? perForm.value;
-                        perCopy.value = c.copy ?? o.binding ?? perCopy.value;
+                        perCopy.value = c.copy ?? perCopy.value;
                         calc();
                     };
                     const calc = () => {
                         const f = +forms.value || 0, n = +copies.value || 0;
-                        const amount = kind.value === 'binding' ? r10((f * (+perForm.value || 0) + (+perCopy.value || 0)) * n) : r10(f * n / 1000 * (+fold.value || 0));
+                        const amount = kind.value === 'binding' ? r10((f * (+perForm.value || 0) + (+perCopy.value || 0)) * n / 1000) : r10(f * n / 1000 * (+fold.value || 0));
                         $('jobAmount').textContent = 'Rs ' + fmt(amount);
                         $('jobEq').textContent = kind.value === 'binding'
-                            ? `((${f} × ${perForm.value || 0}) + ${perCopy.value || 0}) × ${fmt(n)}`
+                            ? `((${f} × ${perForm.value || 0}) + ${perCopy.value || 0}) × ${fmt(n)} ÷ 1000`
                             : `(${f} × ${fmt(n)} ÷ 1000) × ${fold.value || 0}`;
                     };
                     order.addEventListener('change', fill); contractor.addEventListener('change', fill);

@@ -116,4 +116,42 @@ class SalaryAdvanceController extends Controller
             'n' => $employees->count(), 'total' => number_format($amounts->only($employees->all())->sum()),
         ]));
     }
+
+    /**
+     * Correct an advance before payroll has taken it. Foreman-sheet advances are changed on their sheet.
+     */
+    public function edit(SalaryAdvance $salaryAdvance): View|RedirectResponse
+    {
+        if ($blocked = $this->editBlocker($salaryAdvance)) {
+            return redirect()->route('salary-advances.show', $salaryAdvance)->withErrors(['advance' => $blocked]);
+        }
+
+        return view('advances.create', [
+            'advance' => $salaryAdvance,
+            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($salaryAdvance->employee_id))->orderBy('name')->get(),
+            'employeeId' => $salaryAdvance->employee_id,
+        ]);
+    }
+
+    public function update(StoreSalaryAdvanceRequest $request, SalaryAdvance $salaryAdvance): RedirectResponse
+    {
+        if ($blocked = $this->editBlocker($salaryAdvance)) {
+            return redirect()->route('salary-advances.show', $salaryAdvance)->withErrors(['advance' => $blocked]);
+        }
+
+        $salaryAdvance->fill($request->validated())->markEditedBy($request->user())->save();
+
+        return redirect()->route('salary-advances.show', $salaryAdvance)->with('status', $salaryAdvance->isPending()
+            ? __('Advance changed and sent to the owner for approval.')
+            : __('Advance saved.'));
+    }
+
+    private function editBlocker(SalaryAdvance $advance): ?string
+    {
+        return match (true) {
+            $advance->payroll_run_id !== null => __('This advance was already deducted from a finalized payroll. Reopen that payroll to change it.'),
+            $advance->foreman_sheet_id !== null => __('This advance belongs to a foreman sheet; change it on the sheet.'),
+            default => null,
+        };
+    }
 }

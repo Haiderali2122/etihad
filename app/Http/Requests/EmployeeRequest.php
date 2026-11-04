@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Designation;
+use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,6 +16,14 @@ class EmployeeRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * "Other…" on the list: save the typed name to the list (or reuse a matching one) before validating.
+     */
+    protected function prepareForValidation(): void
+    {
+        OtherOption::resolve($this, 'designation', Designation::class, byId: false);
     }
 
     /**

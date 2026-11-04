@@ -69,11 +69,12 @@ class CashOutApprovalsE2ETest extends TestCase
 
     private function spend(User $user, int $amount, array $overrides = []): Expense
     {
-        $this->actingAs($user)->post(route('expenses.store'), $this->expensePayload(['amount' => $amount] + $overrides))
-            ->assertSessionHasNoErrors()
-            ->assertRedirect(route('expenses.index'));
+        $response = $this->actingAs($user)->post(route('expenses.store'), $this->expensePayload(['amount' => $amount] + $overrides))->assertSessionHasNoErrors();
+        $expense = Expense::query()->latest('id')->firstOrFail();
+        // Saving opens the expense's printable receipt.
+        $response->assertRedirect(route('expenses.show', $expense));
 
-        return Expense::query()->latest('id')->firstOrFail();
+        return $expense;
     }
 
     private function setLimitViaSettings(int $limit): void
@@ -179,7 +180,7 @@ class CashOutApprovalsE2ETest extends TestCase
         $clerk = $this->userWith(['expenses.create']);
 
         $this->actingAs($clerk)->get(route('expenses.create'))->assertOk();
-        $this->post(route('expenses.store'), $this->expensePayload())->assertRedirect(route('expenses.index'));
+        $this->post(route('expenses.store'), $this->expensePayload())->assertRedirect(route('expenses.show', Expense::query()->sole()));
         $this->assertSame(1, Expense::count());
 
         // UX: the store redirects to expenses.index which this role cannot open.
@@ -220,17 +221,17 @@ class CashOutApprovalsE2ETest extends TestCase
         $inactive = ExpenseHead::factory()->create(['is_active' => false]);
 
         $this->actingAs($this->manager)->post(route('expenses.store'), [])
-            ->assertSessionHasErrors(['spent_on', 'expense_head_id', 'paid_to', 'amount', 'reason']);
+            ->assertSessionHasErrors(['spent_on', 'expense_head_id', 'paid_to', 'items']);
 
-        $this->post(route('expenses.store'), $this->expensePayload(['amount' => 0]))->assertSessionHasErrors('amount');
-        $this->post(route('expenses.store'), $this->expensePayload(['amount' => -5]))->assertSessionHasErrors('amount');
-        $this->post(route('expenses.store'), $this->expensePayload(['amount' => '12.5']))->assertSessionHasErrors('amount');
+        $this->post(route('expenses.store'), $this->expensePayload(['amount' => 0]))->assertSessionHasErrors('items.0.amount');
+        $this->post(route('expenses.store'), $this->expensePayload(['amount' => -5]))->assertSessionHasErrors('items.0.amount');
+        $this->post(route('expenses.store'), $this->expensePayload(['amount' => '12.5']))->assertSessionHasErrors('items.0.amount');
         $this->post(route('expenses.store'), $this->expensePayload(['spent_on' => 'not-a-date']))->assertSessionHasErrors('spent_on');
         $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => $inactive->id]))->assertSessionHasErrors('expense_head_id');
         $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => 99999]))->assertSessionHasErrors('expense_head_id');
         $this->post(route('expenses.store'), $this->expensePayload(['machine_id' => 99999]))->assertSessionHasErrors('machine_id');
         $this->post(route('expenses.store'), $this->expensePayload(['paid_to' => str_repeat('a', 121)]))->assertSessionHasErrors('paid_to');
-        $this->post(route('expenses.store'), $this->expensePayload(['reason' => str_repeat('a', 256)]))->assertSessionHasErrors('reason');
+        $this->post(route('expenses.store'), $this->expensePayload(['reason' => str_repeat('a', 256)]))->assertSessionHasErrors('items.0.description');
 
         $this->assertSame(0, Expense::count());
     }
@@ -293,15 +294,20 @@ class CashOutApprovalsE2ETest extends TestCase
             ->assertSee(Storage::disk('public')->url($expense->attachment));
     }
 
-    public function test_expense_cannot_be_edited_or_deleted_over_http(): void
+    public function test_expense_can_be_edited_but_not_deleted_and_a_manager_edit_waits_for_the_owner(): void
     {
-        $expense = $this->spend($this->owner, 1000);
+        $this->setLimitViaSettings(5000);
+        $expense = $this->spend($this->manager, 1000);
+        $this->assertSame(ApprovalStatus::Approved, $expense->status);
 
-        $this->actingAs($this->owner)->put('/expenses/'.$expense->id, $this->expensePayload(['amount' => 5]))->assertNotFound();
-        $this->delete('/expenses/'.$expense->id)->assertNotFound();
-        $this->get('/expenses/'.$expense->id.'/edit')->assertNotFound();
+        $this->actingAs($this->manager)->get(route('expenses.edit', $expense))->assertOk()->assertSee('Petrol for van');
+        $this->put(route('expenses.update', $expense), $this->expensePayload(['amount' => 1500]))->assertRedirect(route('expenses.show', $expense));
+        $expense->refresh();
+        $this->assertSame(1500, $expense->amount);
+        $this->assertSame(ApprovalStatus::Pending, $expense->status);
 
-        $this->assertSame(1000, $expense->refresh()->amount);
+        $this->delete('/expenses/'.$expense->id)->assertStatus(405);
+        $this->assertModelExists($expense);
     }
 
     public function test_index_filters_by_head(): void

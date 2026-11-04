@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsCashOut;
 use Database\Factories\PlateJobFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,11 +12,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Plates made by a plate processor, and whether the bill has been cleared.
  */
-#[Fillable(['party_id', 'work_order_id', 'job_on', 'plates', 'rate', 'amount', 'paid_on', 'payment_note', 'note', 'created_by'])]
+#[Fillable(['party_id', 'work_order_id', 'job_on', 'plates', 'returned_plates', 'returned_on', 'rate', 'amount', 'paid_on', 'payment_note', 'note', 'created_by'])]
 class PlateJob extends Model
 {
     /** @use HasFactory<PlateJobFactory> */
-    use HasFactory;
+    use HasFactory, RecordsCashOut;
 
     protected function casts(): array
     {
@@ -23,6 +24,8 @@ class PlateJob extends Model
             'job_on' => 'date',
             'paid_on' => 'date',
             'plates' => 'integer',
+            'returned_plates' => 'integer',
+            'returned_on' => 'date',
             'rate' => 'decimal:2',
             'amount' => 'integer',
         ];
@@ -47,5 +50,36 @@ class PlateJob extends Model
     public function isPaid(): bool
     {
         return $this->paid_on !== null;
+    }
+
+    /**
+     * The processor's bill, once it has been paid. The same payment shows on the Plates and Processors tabs.
+     */
+    public function cashOut(): ?array
+    {
+        if (! $this->paid_on) {
+            return null;
+        }
+
+        return [
+            'amount' => (int) $this->amount,
+            'date' => $this->paid_on,
+            'paid_to' => (string) $this->processor?->name,
+            'reason' => trim($this->plates.' plates'.($this->workOrder ? ' for '.$this->workOrder->number : '').($this->payment_note ? ', '.$this->payment_note : '')),
+            'head' => 'Plates',
+        ];
+    }
+
+    public function cashOutUrl(): string
+    {
+        return route('plate-jobs.index');
+    }
+
+    /**
+     * Plates still with the processor: given out less those returned.
+     */
+    public function platesHeld(): int
+    {
+        return max(0, $this->plates - $this->returned_plates);
     }
 }

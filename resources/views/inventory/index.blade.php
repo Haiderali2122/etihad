@@ -40,6 +40,9 @@
                 @foreach ($tabs as $key => [$label, $count])
                     <a role="tab" aria-selected="{{ $tab === $key ? 'true' : 'false' }}" @class(['tab', 'on' => $tab === $key]) style="text-decoration:none" href="{{ route('inventory.index', array_filter(['tab' => $key, 'category' => $categoryId])) }}">{{ $label }}<span class="c">{{ $count }}</span></a>
                 @endforeach
+                @foreach ($materialTabs as $mt)
+                    <a role="tab" aria-selected="{{ $tab === 'material-'.$mt->id ? 'true' : 'false' }}" @class(['tab', 'on' => $tab === 'material-'.$mt->id]) style="text-decoration:none" href="{{ route('inventory.index', ['tab' => 'material-'.$mt->id]) }}">{{ $mt->localName() }}</a>
+                @endforeach
             </div>
             <form class="filters" method="GET">
                 <input type="hidden" name="tab" value="{{ $tab }}">
@@ -50,7 +53,54 @@
             </form>
         </div>
 
-        @if ($tab === 'stock')
+        @if ($material)
+            <div class="card-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+                <div><b>{{ $material->localName() }}</b> <span class="meta">{{ __('Paid this month: Rs :n', ['n' => number_format($materialPayments->filter(fn ($p) => $p->status->value !== 'rejected' && $p->spent_on->gte(now()->startOfMonth()))->sum('amount'))]) }}</span></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    @can('purchases.create')<a class="btn" href="{{ route('purchases.create') }}"><x-icon name="download" />{{ __('Add purchase') }}</a>@endcan
+                    @can('expenses.create')<a class="btn primary" href="{{ route('expenses.create', ['category' => $material->id]) }}"><x-icon name="plus" />{{ __('Add payment') }}</a>@endcan
+                </div>
+            </div>
+            <div class="tbl-wrap"><table>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Paid to') }}</th><th>{{ __('For') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
+                <tbody>
+                @forelse ($materialPayments as $p)
+                    <tr @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
+                        <td>{{ $p->spent_on->format('j M Y') }}<div class="meta">{{ $p->user->name }}</div></td>
+                        <td>{{ $p->paid_to }}</td>
+                        <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}</div>@endif</td>
+                        <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
+                        <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
+                        <td class="r"><a class="btn sm" href="{{ route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a></td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6"><div class="empty"><b>{{ __('No payments yet') }}</b>{{ __('Record who was paid, for what and when with Add payment.') }}</div></td></tr>
+                @endforelse
+                </tbody>
+            </table></div>
+            @if ($materialItems->isNotEmpty())
+                <div class="card-h"><div><h3>{{ __('Stock') }}</h3></div></div>
+                <div class="tbl-wrap"><table>
+                    <thead><tr><th>{{ __('Item') }}</th><th class="r">{{ __('In stock') }}</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach ($materialItems as $item)
+                        <tr><td><a class="main" href="{{ route('inventory-items.show', $item) }}" style="color:inherit">{{ $item->localName() }}</a></td><td class="r num"><b>{{ InventoryItem::qty($item->balance()) }}</b> {{ $item->unit }}</td><td class="r">@can('inventory.issue')@if ($item->balance() > 0)<a class="btn sm" href="{{ route('inventory-issues.create', ['item' => $item->id]) }}"><x-icon name="send" />{{ __('Move out') }}</a>@endif @endcan</td></tr>
+                    @endforeach
+                    </tbody>
+                </table></div>
+            @endif
+            @if ($materialIssues->isNotEmpty())
+                <div class="card-h"><div><h3>{{ __('Moved out') }}</h3></div></div>
+                <div class="tbl-wrap"><table>
+                    <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Item') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th></tr></thead>
+                    <tbody>
+                    @foreach ($materialIssues as $i)
+                        <tr><td>{{ $i->issued_on->format('j M Y') }}</td><td>{{ $i->item->localName() }}</td><td class="r num">{{ InventoryItem::qty($i->quantity) }} {{ $i->item->unit }}</td><td>{{ $i->issued_to }}@if ($i->machine)<div class="meta">{{ $i->machine->code }}</div>@endif</td></tr>
+                    @endforeach
+                    </tbody>
+                </table></div>
+            @endif
+        @elseif ($tab === 'stock')
             <div class="tbl-wrap"><table>
                 <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Category') }}</th><th class="r">{{ __('Bought') }}</th><th class="r">{{ __('Moved out') }}</th><th class="r">{{ __('Balance') }}</th><th class="r">{{ __('Reorder at') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                 <tbody>

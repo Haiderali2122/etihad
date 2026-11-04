@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\PartyKind;
 use App\Enums\RepairKind;
+use App\Models\Part;
+use App\Support\OtherOption;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,6 +22,14 @@ class StoreMachineRepairRequest extends FormRequest
     }
 
     /**
+     * "Other…" on the list: save the typed name to the list (or reuse a matching one) before validating.
+     */
+    protected function prepareForValidation(): void
+    {
+        OtherOption::resolve($this, 'part_id', Part::class);
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -29,7 +40,7 @@ class StoreMachineRepairRequest extends FormRequest
             'repaired_on' => ['required', 'date'],
             'machine_id' => ['required', 'exists:machines,id'],
             'part_id' => ['nullable', 'exists:parts,id'],
-            'party_id' => ['required', 'exists:parties,id'],
+            'party_id' => ['required', Rule::exists('parties', 'id')->where('kind', PartyKind::Kharadia->value)],
             'kind' => ['required', Rule::enum(RepairKind::class)],
             'description' => ['required', 'string', 'max:255'],
             'bill_amount' => ['required', 'integer', 'min:0'],

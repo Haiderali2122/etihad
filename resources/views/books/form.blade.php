@@ -1,5 +1,5 @@
 @php
-    $rows = old('formats', $book->formats->map(fn ($f) => $f->only(['id', 'name', 'size', 'forms', 'pages', 'paper_type_id', 'folding_rate', 'binding_rate']))->all());
+    $rows = old('formats', $book->formats->map(fn ($f) => $f->only(['id', 'name', 'size', 'forms', 'pages', 'paper_type_id', 'folding_rate']))->all());
     if (empty($rows)) {
         $rows = [['name' => __('Standard')]];
     }
@@ -25,7 +25,7 @@
         <div class="tbl-wrap" style="margin-top:12px"><table class="fmt-table">
             <thead><tr>
                 <th>{{ __('Format name') }} *</th><th>{{ __('Size') }}</th><th>{{ __('Forms') }} *</th><th>{{ __('Pages') }}</th>
-                <th>{{ __('Default paper') }}</th><th>{{ __('Folding rate') }}</th><th>{{ __('Binding rate') }}</th><th></th>
+                <th>{{ __('Default paper') }}</th><th>{{ __('Folding rate') }}</th><th></th>
             </tr></thead>
             <tbody id="formatRows">
             @foreach ($rows as $i => $row)

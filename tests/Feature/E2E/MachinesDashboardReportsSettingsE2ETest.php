@@ -170,7 +170,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         Storage::fake('public');
         $owner = $this->owner();
         $machine = Machine::factory()->create();
-        $mechanic = Party::factory()->kind(PartyKind::Mechanic)->create();
+        $mechanic = Party::factory()->kind(PartyKind::Kharadia)->create();
 
         $this->actingAs($owner)->post(route('machine-repairs.store'), [
             'repaired_on' => '2026-10-20', 'machine_id' => $machine->id, 'party_id' => $mechanic->id,
@@ -195,7 +195,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $owner = $this->owner();
         $manager = $this->manager();
         $machine = Machine::factory()->create(['code' => 'P-07']);
-        $mechanic = Party::factory()->kind(PartyKind::Mechanic)->create();
+        $mechanic = Party::factory()->kind(PartyKind::Kharadia)->create();
 
         $this->actingAs($manager)->post(route('machine-repairs.store'), [
             'repaired_on' => '2026-10-27', 'machine_id' => $machine->id, 'party_id' => $mechanic->id,
@@ -220,7 +220,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
     {
         $owner = $this->owner();
         $machine = Machine::factory()->create();
-        $mechanic = Party::factory()->kind(PartyKind::Mechanic)->create();
+        $mechanic = Party::factory()->kind(PartyKind::Kharadia)->create();
 
         $this->actingAs($owner)->post(route('machine-repairs.store'), [])
             ->assertSessionHasErrors(['repaired_on', 'machine_id', 'party_id', 'kind', 'description', 'bill_amount', 'amount_paid']);
@@ -345,7 +345,8 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             ->assertViewHas('machinesUnderRepair', 1)
             ->assertViewHas('paperTypeCount', 1)
             ->assertViewHas('lowStock', fn ($low) => $low->count() === 1)
-            ->assertViewHas('heads', fn (array $heads) => count($heads) === 1 && $heads[0]['amount'] === 31500)
+            // Repair bills also show in Cash-out under their own head, so the cash view has both heads.
+            ->assertViewHas('heads', fn (array $heads) => collect($heads)->firstWhere('name', 'Diesel')['amount'] === 31500 && collect($heads)->contains('name', 'Machine repair'))
             ->assertViewHas('weekly', fn (array $w) => count($w['labels']) === 8 && $w['received'][7] === 500 && $w['issued'][7] === 120)
             ->assertViewHas('feed', fn (array $feed) => count($feed) === 6)
             ->assertSee('Rs 11,000')
@@ -448,7 +449,8 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $this->actingAs($owner)->get(route('reports.index', $range))->assertOk()
             ->assertViewHas('purchases_by_supplier', fn ($rows) => $rows->sole() === ['Name' => 'Ink House', 'Bills' => 2, 'Amount (Rs)' => 3000])
             ->assertViewHas('purchases_by_category', fn ($rows) => $rows->sole() === ['Name' => 'Inks', 'Bills' => 2, 'Amount (Rs)' => 3000])
-            ->assertViewHas('expenses_by_head', fn ($rows) => $rows->sole() === ['Head' => 'Tea', 'Entries' => 2, 'Amount (Rs)' => 500])
+            // Purchase bills and repair payments are also Cash-out expenses now, each under its own head.
+            ->assertViewHas('expenses_by_head', fn ($rows) => $rows->keyBy('Head')->map(fn ($r) => $r['Amount (Rs)'])->sortKeys()->all() === ['Machine repair' => 1350, 'Purchases' => 3000, 'Tea' => 500])
             ->assertViewHas('machine_spend', fn ($rows) => $rows->sole() === ['Machine' => 'P-01 Offset', 'Bills' => 2, 'Discount (Rs)' => 150, 'Paid (Rs)' => 1350, 'Cash expenses (Rs)' => 0, 'Total (Rs)' => 1350])
             ->assertViewHas('paper_movement', fn ($rows) => $rows->sole()['Received'] === 700
                 && $rows->sole()['In-house'] === 100 && $rows->sole()['Outsource'] === 40 && $rows->sole()['Returned'] === 7);
@@ -462,7 +464,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         // A single-day range on the last day of the month still includes that day.
         $this->actingAs($owner)->get(route('reports.index', ['from' => '2026-10-31', 'to' => '2026-10-31']))->assertOk()
             ->assertViewHas('purchases_by_supplier', fn ($rows) => $rows->sole()['Amount (Rs)'] === 2000)
-            ->assertViewHas('expenses_by_head', fn ($rows) => $rows->sole()['Amount (Rs)'] === 300)
+            ->assertViewHas('expenses_by_head', fn ($rows) => $rows->firstWhere('Head', 'Tea')['Amount (Rs)'] === 300)
             ->assertViewHas('machine_spend', fn ($rows) => $rows->sole()['Paid (Rs)'] === 900);
     }
 
@@ -530,7 +532,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
 
         $rows = $this->csvRows($this->actingAs($owner)->get(route('reports.index', ['export' => 'expenses_by_head']))->assertOk());
         $this->assertSame(['مد', 'اندراج', 'رقم (روپے)'], $rows[0]);
-        $this->assertSame('500', $rows[1][2]);
+        $this->assertSame('500', collect($rows)->firstWhere(0, 'Tea')[2]);
     }
 
     // ------------------------------------------------------------------

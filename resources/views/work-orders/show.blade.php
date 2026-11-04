@@ -15,7 +15,7 @@
                 @if (! $order->paper_issue_id)
                     <form method="POST" action="{{ route('work-orders.destroy', $order) }}" onsubmit="return confirm(@js(__('Delete :n?', ['n' => $order->number])))">@csrf @method('DELETE')<button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button></form>
                 @endif
-                @if ($order->paper_issue_id && (in_array($order->stage, [WorkOrderStage::Folding, WorkOrderStage::Binding], true) || ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'outsource')))
+                @if ($order->paper_issue_id && (in_array($order->stage, [WorkOrderStage::ToFolding, WorkOrderStage::Folding, WorkOrderStage::Binding], true) || ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'outsource')))
                     <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit" @disabled($blocker)><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
                 @endif
             @endcan
@@ -46,12 +46,12 @@
         @can('orders.manage')
             <form method="POST" action="{{ route('work-orders.advance', $order) }}" class="card form-card">
                 @csrf @method('PATCH')
-                <div class="card-h"><div><h3>{{ __('Printing done') }}</h3><div class="sub">{{ __('Enter the good copies that came off :machine to move the order to folding.', ['machine' => $order->printedAt()]) }}</div></div></div>
+                <div class="card-h"><div><h3>{{ __('Printing done') }}</h3><div class="sub">{{ __('Enter the good copies that came off :machine. The printed rims are then loaded to folding.', ['machine' => $order->printedAt()]) }}</div></div></div>
                 <div class="card-b"><div class="form">
                     <x-field name="printed_copies" type="number" min="1" :label="__('Printed copies')" :value="$order->copies" required />
                     <x-field name="printed_on" type="date" :label="__('Printing finished on')" :value="today()->toDateString()" required />
                 </div></div>
-                <div class="form-actions"><button class="btn primary" type="submit"><x-icon name="chev" />{{ __('Move to :stage', ['stage' => WorkOrderStage::Folding->label()]) }}</button></div>
+                <div class="form-actions"><button class="btn primary" type="submit"><x-icon name="chev" />{{ __('Move to :stage', ['stage' => WorkOrderStage::ToFolding->label()]) }}</button></div>
             </form>
         @endcan
     @endif
@@ -113,6 +113,35 @@
             </div>
         @endif
     </div>
+
+    @php $canLoadRims = $order->paper_issue_id && ! in_array($order->stage, [WorkOrderStage::Waiting, WorkOrderStage::Printing, WorkOrderStage::Dispatched], true); @endphp
+    @if ($order->rimLoadings->isNotEmpty() || $canLoadRims)
+        <div class="card">
+            <div class="card-h"><div><h3>{{ __('Loading to folding (Younus ka khata)') }}</h3><div class="sub">{{ __(':rims rims loaded · Rs :amount labour', ['rims' => \App\Models\InventoryItem::qty($order->rimLoadings->sum('rims')), 'amount' => number_format($order->rimLoadings->sum('amount'))]) }}</div></div>
+                <a class="btn sm" href="{{ route('rim-loadings.index') }}">{{ __('Ledger') }}</a></div>
+            <div class="card-b">
+                @foreach ($order->rimLoadings as $l)
+                    <div class="stat-line"><span>{{ $l->loaded_on->format('j M') }} · {{ $l->loaded_by }}</span><b>{{ \App\Models\InventoryItem::qty($l->rims) }} {{ __('rims') }} × {{ \App\Models\InventoryItem::qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}
+                        @if ($l->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>
+                            @can('orders.manage')<form method="POST" action="{{ route('rim-loadings.destroy', $l) }}" style="display:inline">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan
+                        @endif</b></div>
+                @endforeach
+                @can('orders.manage')
+                    @if ($canLoadRims)
+                        <form method="POST" action="{{ route('rim-loadings.store', $order) }}" class="form" style="margin-top:12px">
+                            @csrf
+                            <x-field name="rims" type="number" step="0.5" min="0.5" :label="__('Rims loaded')" :value="$order->rimLoadings->isEmpty() ? $order->rims_needed : null" required />
+                            <x-field name="rate_per_rim" type="number" step="0.01" min="0" :label="__('Labour per rim (Rs)')" required />
+                            <x-field name="loaded_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                            <x-field name="loaded_by" :label="__('Loaded by')" value="Younus" />
+                            <x-field name="note" :label="__('Note')" full />
+                            <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Record loading') }}</button></div>
+                        </form>
+                    @endif
+                @endcan
+            </div>
+        </div>
+    @endif
 
     <div class="card">
         <div class="card-h"><div><h3>{{ __('Folding & binding') }}</h3></div>

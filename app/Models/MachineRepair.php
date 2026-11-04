@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RepairKind;
+use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\MachineRepairFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class MachineRepair extends Model
 {
     /** @use HasFactory<MachineRepairFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsCashOut, RequiresApproval;
 
     protected function casts(): array
     {
@@ -89,6 +90,25 @@ class MachineRepair extends Model
     }
 
     public function approvalUrl(): string
+    {
+        return route('machines.show', $this->machine_id);
+    }
+
+    /**
+     * What was paid to the kharadia for this repair or part.
+     */
+    public function cashOut(): ?array
+    {
+        return [
+            'amount' => (int) $this->amount_paid,
+            'date' => $this->repaired_on,
+            'paid_to' => (string) $this->vendor?->name,
+            'reason' => 'Repair of '.$this->machine?->code.': '.$this->description,
+            'head' => 'Machine repair',
+        ];
+    }
+
+    public function cashOutUrl(): string
     {
         return route('machines.show', $this->machine_id);
     }

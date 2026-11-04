@@ -27,6 +27,8 @@ class InventoryCategoryRequest extends FormRequest
             'name' => ['required', 'string', 'max:60', Rule::unique('inventory_categories', 'name')->ignore($this->route('inventory_category'))],
             'name_ur' => ['nullable', 'string', 'max:60'],
             'tracks_stock' => ['boolean'],
+            'for_machines' => ['boolean'],
+            'show_as_tab' => ['boolean'],
             'is_active' => ['boolean'],
         ];
     }

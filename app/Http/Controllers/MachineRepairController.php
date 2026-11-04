@@ -21,7 +21,8 @@ class MachineRepairController extends Controller
             'machines' => Machine::query()->orderBy('code')->get(),
             'machineId' => $request->integer('machine') ?: null,
             'parts' => Part::query()->orderBy('name')->get(),
-            'vendors' => Party::query()->active()->whereIn('kind', [PartyKind::Mechanic, PartyKind::Supplier, PartyKind::Other])->orderBy('name')->get(),
+            // Repairs are done by a kharadia (lathe turner).
+            'vendors' => Party::query()->active()->where('kind', PartyKind::Kharadia)->orderBy('name')->get(),
             'kinds' => RepairKind::cases(),
         ]);
     }

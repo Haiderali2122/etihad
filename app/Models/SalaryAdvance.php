@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AdvanceKind;
+use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\SalaryAdvanceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SalaryAdvance extends Model
 {
     /** @use HasFactory<SalaryAdvanceFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsCashOut, RequiresApproval;
 
     protected function casts(): array
     {
@@ -110,5 +111,24 @@ class SalaryAdvance extends Model
             'reviewed_by' => $sheet->reviewed_by,
             'reviewed_at' => $sheet->reviewed_at,
         ]);
+    }
+
+    /**
+     * Cash handed to the employee ahead of payday.
+     */
+    public function cashOut(): ?array
+    {
+        return [
+            'amount' => (int) $this->amount,
+            'date' => $this->given_on,
+            'paid_to' => (string) $this->employee?->name,
+            'reason' => $this->kind->label(),
+            'head' => 'Salary advances',
+        ];
+    }
+
+    public function cashOutUrl(): string
+    {
+        return route('salary-advances.show', $this);
     }
 }

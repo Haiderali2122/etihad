@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\PurchaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsCashOut, RequiresApproval;
 
     protected function casts(): array
     {
@@ -92,5 +93,28 @@ class Purchase extends Model
     public function approvalUrl(): string
     {
         return route('inventory.index', ['tab' => 'purchases']);
+    }
+
+    /**
+     * The bill paid for this purchase. Petrol, diesel, glue and ink go under their own head and tab.
+     */
+    public function cashOut(): ?array
+    {
+        $category = $this->item?->category;
+        $ownTab = $category?->show_as_tab;
+
+        return [
+            'amount' => (int) $this->amount,
+            'date' => $this->purchased_on,
+            'paid_to' => (string) $this->party?->name,
+            'reason' => trim('Purchase: '.InventoryItem::qty($this->quantity).' '.$this->item?->unit.' '.$this->item?->name.($this->bill_no ? ', bill '.$this->bill_no : '')),
+            'head' => $ownTab ? $category->name : 'Purchases',
+            'category_id' => $ownTab ? $category->id : null,
+        ];
+    }
+
+    public function cashOutUrl(): string
+    {
+        return route('inventory-items.show', $this->inventory_item_id);
     }
 }

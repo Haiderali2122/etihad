@@ -6,6 +6,7 @@ enum WorkOrderStage: string
 {
     case Waiting = 'waiting';
     case Printing = 'printing';
+    case ToFolding = 'to_folding';
     case Folding = 'folding';
     case Binding = 'binding';
     case Ready = 'ready';
@@ -16,6 +17,7 @@ enum WorkOrderStage: string
         return match ($this) {
             self::Waiting => __('Waiting approval'),
             self::Printing => __('Printing'),
+            self::ToFolding => __('Loading to folding'),
             self::Folding => __('Folding'),
             self::Binding => __('Binding'),
             self::Ready => __('Ready to load'),
@@ -31,6 +33,7 @@ enum WorkOrderStage: string
         return match ($this) {
             self::Waiting => 'warn',
             self::Printing => 'info',
+            self::ToFolding => 'info',
             self::Folding => 'info',
             self::Binding => 'info',
             self::Ready => 'good',
@@ -45,7 +48,8 @@ enum WorkOrderStage: string
     {
         return match ($this) {
             self::Waiting => null,
-            self::Printing => self::Folding,
+            self::Printing => self::ToFolding,
+            self::ToFolding => self::Folding,
             self::Folding => self::Binding,
             self::Binding => self::Ready,
             self::Ready => self::Dispatched,

@@ -67,6 +67,8 @@ class InventoryCategoryController extends Controller
     {
         return $request->validated() + [
             'tracks_stock' => $request->boolean('tracks_stock'),
+            'for_machines' => $request->boolean('for_machines'),
+            'show_as_tab' => $request->boolean('show_as_tab'),
             'is_active' => $request->boolean('is_active'),
         ];
     }

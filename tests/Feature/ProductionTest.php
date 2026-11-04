@@ -142,8 +142,16 @@ class ProductionTest extends TestCase
         $advance()->assertSessionHasErrors(['printed_copies', 'printed_on']);
         $this->assertSame(WorkOrderStage::Printing, $order->refresh()->stage);
         $advance(['printed_copies' => 18100, 'printed_on' => today()->toDateString()])->assertSessionHasNoErrors();
-        $this->assertSame(WorkOrderStage::Folding, $order->refresh()->stage);
+        $this->assertSame(WorkOrderStage::ToFolding, $order->refresh()->stage);
         $this->assertSame(18100, $order->printed_copies);
+
+        // The printed rims are loaded to folding (Younus ka khata) before folding starts.
+        $advance()->assertSessionHasErrors('stage');
+        $this->actingAs($owner)->post(route('rim-loadings.store', $order), ['loaded_on' => today()->toDateString(), 'rims' => 371, 'rate_per_rim' => 5])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(1855, $order->rimLoadings()->sole()->amount);
+        $advance()->assertSessionHasNoErrors();
+        $this->assertSame(WorkOrderStage::Folding, $order->refresh()->stage);
 
         // Folding and binding move on only once their contractor job is given and done.
         $advance()->assertSessionHasErrors('stage');
@@ -185,15 +193,15 @@ class ProductionTest extends TestCase
 
     public function test_contractor_jobs_follow_the_client_formulas(): void
     {
-        // Folding: (10 × 12,000 ÷ 1000) × 35 = 4,200. Binding: ((8 × 0.6) + 2.5) × 25,000 = 182,500.
+        // Folding: (10 × 12,000 ÷ 1000) × 35 = 4,200. Binding (rates per 1,000 books): ((8 × 600) + 2,500) × 25,000 ÷ 1,000 = 182,500.
         $this->assertSame(4200, ContractorJob::price(ContractorJobKind::Folding, 10, 12000, 35));
-        $this->assertSame(182500, ContractorJob::price(ContractorJobKind::Binding, 8, 25000, 0, 0.6, 2.5));
+        $this->assertSame(182500, ContractorJob::price(ContractorJobKind::Binding, 8, 25000, 0, 600, 2500));
 
         $manager = User::factory()->create();
         $contractor = Contractor::factory()->create();
         $this->actingAs($manager)->post(route('contractor-jobs.store'), [
             'contractor_id' => $contractor->id, 'kind' => 'binding', 'job_on' => today()->toDateString(),
-            'forms' => 8, 'copies' => 25000, 'form_rate' => 0.6, 'copy_rate' => 2.5,
+            'forms' => 8, 'copies' => 25000, 'form_rate' => 600, 'copy_rate' => 2500,
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(182500, ContractorJob::query()->sole()->amount);
@@ -227,12 +235,13 @@ class ProductionTest extends TestCase
 
         $this->actingAs($owner)->post(route('dispatches.store'), [
             'dispatched_on' => today()->toDateString(), 'buyer_id' => $buyer->id, 'work_order_id' => $order->id,
-            'bundles' => 39, 'copies_per_bundle' => 25, 'loose_copies' => 25, 'rims' => 2, 'labour_per_bundle' => 3, 'labour_per_rim' => 10,
+            'bundles' => 39, 'copies_per_bundle' => 25, 'loose_copies' => 25, 'labour_per_bundle' => 3,
         ])->assertSessionHasNoErrors();
 
         $dispatch = $order->dispatches()->sole();
         $this->assertSame(1000, $dispatch->copies);
-        $this->assertSame(137, $dispatch->labour_amount);
+        // Truck labour is per bundle only; per-rim labour is Younus ka khata, before folding.
+        $this->assertSame(117, $dispatch->labour_amount);
         $this->assertSame(WorkOrderStage::Dispatched, $order->refresh()->stage);
         $this->actingAs($owner)->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('LOADING SLIP');
         $this->actingAs($owner)->get(route('buyers.show', $buyer))->assertOk();

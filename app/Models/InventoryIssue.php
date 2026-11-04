@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * shift whatever came back is entered as the returned quantity and goes back into stock, so only what was used
  * stays deducted. An entry the owner sends back drops out of stock altogether.
  */
-#[Fillable(['issued_on', 'inventory_item_id', 'quantity', 'issued_to', 'employee_id', 'machine_id', 'reference', 'note', 'created_by'])]
+#[Fillable(['issued_on', 'inventory_item_id', 'quantity', 'issued_to', 'employee_id', 'party_id', 'machine_id', 'reference', 'note', 'created_by'])]
 class InventoryIssue extends Model
 {
     /** @use HasFactory<InventoryIssueFactory> */
@@ -114,5 +114,15 @@ class InventoryIssue extends Model
     public function approvalUrl(): string
     {
         return route('inventory.index', ['tab' => 'issues']);
+    }
+
+    /**
+     * The kharadia a machine part was given to.
+     *
+     * @return BelongsTo<Party, $this>
+     */
+    public function party(): BelongsTo
+    {
+        return $this->belongsTo(Party::class);
     }
 }

@@ -71,4 +71,57 @@ class ForemanSheetController extends Controller
             'created_by' => $userId, 'status' => $sheet->status,
         ]);
     }
+
+    public function edit(ForemanSheet $foremanSheet): View|RedirectResponse
+    {
+        if ($foremanSheet->advances()->whereNotNull('payroll_run_id')->exists()) {
+            return redirect()->route('foreman-sheets.show', $foremanSheet)->withErrors(['sheet' => __('Advances on this sheet were already deducted from a finalized payroll, so it can no longer be changed.')]);
+        }
+
+        $foremen = Employee::query()->where('is_foreman', true)->where(fn ($q) => $q->where('is_active', true)->orWhereKey($foremanSheet->foreman_id))->orderBy('name')->get();
+
+        return view('foreman-sheets.create', [
+            'sheet' => $foremanSheet,
+            'foremen' => $foremen,
+            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'foremanId' => $foremanSheet->foreman_id,
+            'lines' => $foremanSheet->advances()->where('employee_id', '!=', $foremanSheet->foreman_id)->get()
+                ->map(fn (SalaryAdvance $a) => ['employee_id' => $a->employee_id, 'amount' => $a->amount])->values()->all(),
+        ]);
+    }
+
+    /**
+     * Saving the sheet again replaces its advances with the new lines.
+     */
+    public function update(StoreForemanSheetRequest $request, ForemanSheet $foremanSheet): RedirectResponse
+    {
+        if ($foremanSheet->advances()->whereNotNull('payroll_run_id')->exists()) {
+            return redirect()->route('foreman-sheets.show', $foremanSheet)->withErrors(['sheet' => __('Advances on this sheet were already deducted from a finalized payroll, so it can no longer be changed.')]);
+        }
+
+        $data = $request->validated();
+        $user = $request->user();
+
+        DB::transaction(function () use ($data, $user, $foremanSheet): void {
+            $foremanSheet->fill([
+                'given_on' => $data['given_on'], 'foreman_id' => $data['foreman_id'], 'amount' => $data['amount'], 'note' => $data['note'] ?? null,
+            ])->markEditedBy($user)->saveQuietly();
+
+            $foremanSheet->advances()->get()->each->delete();
+
+            $lines = collect($data['lines'] ?? [])->filter(fn ($l) => filled($l['employee_id'] ?? null) && (int) ($l['amount'] ?? 0) > 0);
+            $handed = 0;
+            foreach ($lines as $line) {
+                $this->advance($foremanSheet, (int) $line['employee_id'], (int) $line['amount'], $user->id);
+                $handed += (int) $line['amount'];
+            }
+            if ($foremanSheet->amount - $handed > 0) {
+                $this->advance($foremanSheet, $foremanSheet->foreman_id, $foremanSheet->amount - $handed, $user->id, __('Kept by the foreman'));
+            }
+        });
+
+        return redirect()->route('foreman-sheets.show', $foremanSheet)->with('status', $foremanSheet->isPending()
+            ? __('Foreman sheet changed and sent to the owner for approval.')
+            : __('Foreman sheet saved.'));
+    }
 }

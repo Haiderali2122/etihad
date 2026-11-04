@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PayrollStatus;
+use App\Models\Concerns\RecordsCashOut;
 use Database\Factories\PayrollRunFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PayrollRun extends Model
 {
     /** @use HasFactory<PayrollRunFactory> */
-    use HasFactory;
+    use HasFactory, RecordsCashOut;
 
     protected function casts(): array
     {
@@ -66,5 +67,28 @@ class PayrollRun extends Model
     public function label(): string
     {
         return $this->month->translatedFormat('F Y');
+    }
+
+    /**
+     * The month's salaries, paid out once the payroll is finalized.
+     */
+    public function cashOut(): ?array
+    {
+        if ($this->isDraft()) {
+            return null;
+        }
+
+        return [
+            'amount' => (int) $this->lines()->sum('net_pay'),
+            'date' => $this->pay_date ?? $this->finalized_at ?? now(),
+            'paid_to' => 'Staff',
+            'reason' => 'Salaries '.$this->label(),
+            'head' => 'Salaries',
+        ];
+    }
+
+    public function cashOutUrl(): string
+    {
+        return route('payroll.show', $this);
     }
 }

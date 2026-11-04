@@ -31,8 +31,10 @@ use App\Http\Controllers\PaperTypeController;
 use App\Http\Controllers\PartyController;
 use App\Http\Controllers\PayrollRunController;
 use App\Http\Controllers\PlateJobController;
+use App\Http\Controllers\ProcessorController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RimLoadingController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalaryAdvanceController;
 use App\Http\Controllers\SettingController;
@@ -57,8 +59,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::get('paper', [PaperStockController::class, 'index'])->middleware('can:paper.view')->name('paper.index');
-    Route::resource('paper-receipts', PaperReceiptController::class)->only(['create', 'store', 'show'])
-        ->middlewareFor(['create', 'store'], 'can:paper.receive')
+    Route::resource('paper-receipts', PaperReceiptController::class)->only(['create', 'store', 'show', 'edit', 'update'])
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:paper.receive')
         ->middlewareFor('show', 'can:paper.view');
     Route::resource('paper-issues', PaperIssueController::class)->only(['create', 'store'])->middleware('can:paper.issue');
     Route::patch('paper-issues/{paperIssue}/settle', [PaperIssueController::class, 'settle'])->middleware('can:paper.issue')->name('paper-issues.settle');
@@ -76,7 +78,11 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:orders.manage')->group(function () {
         Route::patch('work-orders/{workOrder}/stage', [WorkOrderController::class, 'advance'])->name('work-orders.advance');
         Route::post('work-orders/{workOrder}/outside-receipts', [WorkOrderController::class, 'receiveOutside'])->name('work-orders.outside-receipts.store');
+        Route::post('work-orders/{workOrder}/rim-loadings', [RimLoadingController::class, 'store'])->name('rim-loadings.store');
+        Route::patch('rim-loadings/{rimLoading}/pay', [RimLoadingController::class, 'pay'])->name('rim-loadings.pay');
+        Route::delete('rim-loadings/{rimLoading}', [RimLoadingController::class, 'destroy'])->name('rim-loadings.destroy');
     });
+    Route::get('rim-loadings', [RimLoadingController::class, 'index'])->middleware('can:orders.view')->name('rim-loadings.index');
 
     Route::resource('contractors', ContractorController::class)
         ->middlewareFor(['index', 'show'], 'can:orders.view')
@@ -86,6 +92,12 @@ Route::middleware('auth')->group(function () {
         Route::get('contractor-jobs/create', [ContractorJobController::class, 'create'])->name('contractor-jobs.create');
         Route::post('contractor-jobs', [ContractorJobController::class, 'store'])->name('contractor-jobs.store');
         Route::patch('contractor-jobs/{contractorJob}/done', [ContractorJobController::class, 'done'])->name('contractor-jobs.done');
+        Route::get('contractor-jobs/{contractorJob}/edit', [ContractorJobController::class, 'edit'])->name('contractor-jobs.edit');
+        Route::put('contractor-jobs/{contractorJob}', [ContractorJobController::class, 'update'])->name('contractor-jobs.update');
+        Route::delete('contractor-jobs/{contractorJob}', [ContractorJobController::class, 'destroy'])->name('contractor-jobs.destroy');
+        Route::get('contractor-payments/{payment}/edit', [ContractorController::class, 'editPayment'])->name('contractor-payments.edit');
+        Route::put('contractor-payments/{payment}', [ContractorController::class, 'updatePayment'])->name('contractor-payments.update');
+        Route::delete('contractor-payments/{payment}', [ContractorController::class, 'destroyPayment'])->name('contractor-payments.destroy');
     });
 
     Route::get('plate-jobs', [PlateJobController::class, 'index'])->middleware('can:orders.view')->name('plate-jobs.index');
@@ -93,11 +105,19 @@ Route::middleware('auth')->group(function () {
         Route::get('plate-jobs/create', [PlateJobController::class, 'create'])->name('plate-jobs.create');
         Route::post('plate-jobs', [PlateJobController::class, 'store'])->name('plate-jobs.store');
         Route::patch('plate-jobs/{plateJob}/pay', [PlateJobController::class, 'pay'])->name('plate-jobs.pay');
+        Route::patch('plate-jobs/{plateJob}/return', [PlateJobController::class, 'returnPlates'])->name('plate-jobs.return');
+        Route::get('plate-jobs/{plateJob}/edit', [PlateJobController::class, 'edit'])->name('plate-jobs.edit');
+        Route::put('plate-jobs/{plateJob}', [PlateJobController::class, 'update'])->name('plate-jobs.update');
     });
 
-    Route::resource('dispatches', DispatchController::class)->only(['index', 'create', 'store', 'show'])
+    // Plate processors, kept apart from the other parties.
+    Route::resource('processors', ProcessorController::class)->parameters(['processors' => 'processor'])
         ->middlewareFor(['index', 'show'], 'can:orders.view')
-        ->middlewareFor(['create', 'store'], 'can:dispatch.manage');
+        ->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'can:plates.manage');
+
+    Route::resource('dispatches', DispatchController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
+        ->middlewareFor(['index', 'show'], 'can:orders.view')
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:dispatch.manage');
 
     Route::get('buyers', [BuyerController::class, 'index'])->middleware('can:orders.view')->name('buyers.index');
     Route::get('buyers/{buyer}', [BuyerController::class, 'show'])->middleware('can:orders.view')->name('buyers.show');
@@ -118,9 +138,9 @@ Route::middleware('auth')->group(function () {
     Route::redirect('purchases', 'inventory?tab=purchases')->name('purchases.index');
     Route::resource('purchases', PurchaseController::class)->only(['create', 'store'])->middleware('can:purchases.create');
 
-    Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store'])
-        ->middlewareFor('index', 'can:expenses.view')
-        ->middlewareFor(['create', 'store'], 'can:expenses.create');
+    Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
+        ->middlewareFor(['index', 'show'], 'can:expenses.view')
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:expenses.create');
     Route::resource('expense-heads', ExpenseHeadController::class)->except('show')->middleware('can:expense-heads.manage');
     Route::post('cash-floats', [CashFloatController::class, 'store'])->middleware('can:give-cash')->name('cash-floats.store');
 
@@ -145,15 +165,15 @@ Route::middleware('auth')->group(function () {
 
     Route::get('salary-advances/mid-month', [SalaryAdvanceController::class, 'midMonth'])->middleware('can:advances.create')->name('salary-advances.mid-month');
     Route::post('salary-advances/mid-month', [SalaryAdvanceController::class, 'storeMidMonth'])->middleware('can:advances.create')->name('salary-advances.mid-month.store');
-    Route::resource('salary-advances', SalaryAdvanceController::class)->only(['index', 'create', 'store', 'show'])
+    Route::resource('salary-advances', SalaryAdvanceController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
         ->middlewareFor(['index', 'show'], 'can:staff.view')
-        ->middlewareFor(['create', 'store'], 'can:advances.create');
-    Route::resource('foreman-sheets', ForemanSheetController::class)->only(['create', 'store', 'show'])
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:advances.create');
+    Route::resource('foreman-sheets', ForemanSheetController::class)->only(['create', 'store', 'show', 'edit', 'update'])
         ->middlewareFor('show', 'can:staff.view')
-        ->middlewareFor(['create', 'store'], 'can:advances.create');
-    Route::resource('loans', LoanController::class)->only(['index', 'create', 'store', 'show'])
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:advances.create');
+    Route::resource('loans', LoanController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
         ->middlewareFor(['index', 'show'], 'can:staff.view')
-        ->middlewareFor(['create', 'store'], 'can:advances.create');
+        ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:advances.create');
     Route::post('loans/{loan}/repayments', [LoanController::class, 'repay'])->middleware('can:advances.create')->name('loans.repay');
 
     Route::get('payroll', [PayrollRunController::class, 'index'])->middleware('can:staff.view')->name('payroll.index');

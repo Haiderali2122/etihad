@@ -14,7 +14,7 @@
                         @foreach ($categories as $category)
                             <optgroup label="{{ $category->localName() }}">
                                 @foreach ($category->items as $item)
-                                    <option value="{{ $item->id }}" data-balance="{{ $item->balance() }}" data-unit="{{ $item->unit }}" @selected((string) old('inventory_item_id', $itemId) === (string) $item->id) @disabled($item->balance() <= 0)>
+                                    <option value="{{ $item->id }}" data-balance="{{ $item->balance() }}" data-unit="{{ $item->unit }}" data-machines="{{ $category->for_machines ? 1 : 0 }}" @selected((string) old('inventory_item_id', $itemId) === (string) $item->id) @disabled($item->balance() <= 0)>
                                         {{ $item->localName() }} — {{ \App\Models\InventoryItem::qty($item->balance()) }} {{ $item->unit }} {{ __('in stock') }}
                                     </option>
                                 @endforeach
@@ -26,6 +26,7 @@
                 <x-field name="quantity" type="number" step="0.01" min="0.01" :label="__('Quantity going out')" required />
                 <div class="field"><label>&nbsp;</label><div id="stockcheck"></div></div>
                 <x-field name="issued_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                <x-field name="party_id" :label="__('Given to kharadia')" :options="$kharadias->pluck('name', 'id')" :placeholder="__('Choose kharadia')" :hint="$kharadias->isEmpty() ? __('Add kharadias under Parties with the type Kharadia.') : null" />
                 <x-field name="employee_id" :label="__('Given to employee')" :options="$employees->mapWithKeys(fn ($e) => [$e->id => $e->name.($e->designation ? ' · '.$e->designation : '')])" :placeholder="__('Not to an employee')" />
                 <x-field name="machine_id" :label="__('For machine (optional)')" :options="$machines->mapWithKeys(fn ($m) => [$m->id => $m->code.' '.$m->name])" :placeholder="__('Not for a machine')" />
                 <x-field name="issued_to" :label="__('Given to')" list="issueTargets" :hint="__('Department or person not on the staff list. Leave empty to use the employee\'s name.')" />
@@ -50,6 +51,14 @@
                             ? `<div class="stockcheck ok">${fmt(have - need)} ${unit} {{ __('left after this') }}</div>`
                             : `<div class="stockcheck no">{{ __('Only') }} ${fmt(have)} ${unit} {{ __('in stock') }}</div>`;
                     };
+                    // Machine parts go to a kharadia; everything else to an employee.
+                    const who = () => {
+                        const machines = item.selectedOptions[0]?.dataset.machines === '1';
+                        document.getElementById('f_party_id').closest('.field').hidden = !machines;
+                        document.getElementById('f_employee_id').closest('.field').hidden = machines;
+                    };
+                    item.addEventListener('change', who);
+                    who();
                     item.addEventListener('change', sync);
                     qty.addEventListener('input', sync);
                     sync();

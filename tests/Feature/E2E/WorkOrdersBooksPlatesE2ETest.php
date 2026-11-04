@@ -130,7 +130,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->get(route('work-orders.index'))->assertOk()->assertSee($inHouse->number)->assertSee($outsource->number)->assertSee($pending->number)->assertSee($rejected->number);
         $this->get(route('work-orders.create'))->assertOk()->assertSee('WO-1005')->assertSee('Urdu Reader Class 5');
         $this->get(route('work-orders.create', ['format' => $this->format->id]))->assertOk();
-        $this->get(route('work-orders.show', $inHouse))->assertOk()->assertSee('371')->assertSee('Move to Folding')->assertSee('Kitab Ghar');
+        $this->get(route('work-orders.show', $inHouse))->assertOk()->assertSee('371')->assertSee('Printing done')->assertSee('Move to Loading to folding')->assertSee('Kitab Ghar');
         $this->get(route('work-orders.show', $outsource))->assertOk()->assertSee('Outside printing')->assertSee('Record receipt')->assertSee('Al-Noor Press');
         $this->get(route('work-orders.show', $pending))->assertOk()->assertSee('Waiting for the owner')->assertDontSee('Move to');
         $this->get(route('work-orders.show', $rejected))->assertOk()->assertSee('Sent back')->assertSee('Wrong book');
@@ -303,6 +303,10 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
 
         // Each stage needs its own work recorded before the order moves on.
         $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order), ['printed_copies' => 18000, 'printed_on' => today()->toDateString()])
+            ->assertRedirect($show)->assertSessionHas('status', 'WO-1001 moved to Loading to folding.');
+        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))->assertSessionHasErrors('stage');
+        $this->actingAs($this->manager)->post(route('rim-loadings.store', $order), ['loaded_on' => today()->toDateString(), 'rims' => 371, 'rate_per_rim' => 4])->assertSessionHasNoErrors();
+        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))
             ->assertRedirect($show)->assertSessionHas('status', 'WO-1001 moved to Folding.');
         foreach ([[ContractorJobKind::Folding, WorkOrderStage::Binding], [ContractorJobKind::Binding, WorkOrderStage::Ready]] as [$kind, $stage]) {
             $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))->assertSessionHasErrors('stage');

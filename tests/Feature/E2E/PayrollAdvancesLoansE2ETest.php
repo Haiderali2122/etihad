@@ -227,30 +227,31 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->assertSame(1.0, $a->absent_days);
         $this->assertSame(1.0, $a->leave_days);
         $this->assertSame(26, $a->unmarked_days);
-        $this->assertSame(1500, $a->absence_deduction);
+        // Paid for days present only: the absent day and the leave day are unpaid.
+        $this->assertSame(3000, $a->absence_deduction);
         $this->assertSame(6.5, $a->overtime_hours);
         $this->assertSame(1630, $a->overtime_amount); // 6.5 × 250 = 1,625 → 1,630
         $this->assertSame(25500, $a->advances_deducted);
         $this->assertSame(5000, $a->loan_deducted);
-        $this->assertSame(14630, $a->net_pay); // 45,000 − 1,500 + 1,630 − 25,500 − 5,000
+        $this->assertSame(13130, $a->net_pay); // 45,000 − 3,000 + 1,630 − 25,500 − 5,000
 
         $b = $this->lineFor($sep, $bilal);
         $this->assertSame(1030, $b->absence_deduction);
         $this->assertSame(520, $b->overtime_amount); // 3 × 172.22 = 516.67 → 520
         $this->assertSame(20490, $b->net_pay); // 31,000 − 1,030 + 520 − 10,000
 
-        $this->actingAs($this->owner)->get(route('payroll.show', $sep))->assertOk()->assertSee('14,630')->assertSee('20,490')->assertSee('35,120')
+        $this->actingAs($this->owner)->get(route('payroll.show', $sep))->assertOk()->assertSee('13,130')->assertSee('20,490')->assertSee('33,620')
             ->assertSee('54 days have no attendance.');
 
         // Hand edits: lower loan instalment this month, bonus, other deduction.
         $this->actingAs($this->owner)->put(route('payroll.lines.update', $sep), ['lines' => [
             $a->id => ['loan_deducted' => 3000, 'bonus' => 500, 'other_deduction' => 120, 'note' => 'Broken plate'],
         ]])->assertSessionHasNoErrors()->assertRedirect(route('payroll.show', $sep));
-        $this->assertSame(17010, $a->refresh()->net_pay); // 45,000 − 1,500 + 1,630 + 500 − 25,500 − 3,000 − 120
+        $this->assertSame(15510, $a->refresh()->net_pay); // 45,000 − 3,000 + 1,630 + 500 − 25,500 − 3,000 − 120
 
         // Recalculate keeps hand edits; reset wipes them.
         $this->actingAs($this->owner)->post(route('payroll.recalculate', $sep));
-        $this->assertSame(17010, $a->refresh()->net_pay);
+        $this->assertSame(15510, $a->refresh()->net_pay);
 
         $this->actingAs($this->owner)->post(route('payroll.finalize', $sep))->assertRedirect(route('payroll.show', $sep));
         $this->assertSame(PayrollStatus::Finalized, $sep->refresh()->status);
@@ -264,7 +265,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
 
         $this->actingAs($this->owner)->get(route('payroll.show', $sep))->assertOk()->assertDontSee('Save changes')->assertSee('Broken plate');
         $this->actingAs($this->owner)->get(route('payroll.slips', $sep))->assertOk()->assertSee('Aslam Khan')->assertSee('Bilal Ahmed')
-            ->assertSee('Rs 17,010')->assertSee('balance after: Rs 17,000')->assertDontSee('still a draft');
+            ->assertSee('Rs 15,510')->assertSee('balance after: Rs 17,000')->assertDontSee('still a draft');
         $this->actingAs($this->owner)->get(route('payroll.slips', [$sep, 'line' => $a->id]))->assertOk()->assertSee('Aslam Khan')->assertDontSee('Bilal Ahmed');
         $this->actingAs($this->owner)->get(route('loans.show', $loan))->assertOk()->assertSee('17,000');
         $this->actingAs($this->owner)->get(route('salary-advances.index', ['show' => 'deducted']))->assertOk()->assertSee('Aslam Khan');
@@ -286,10 +287,10 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->assertSame(20000, $loan->refresh()->balance());
         $this->assertSame(25500, $aslam->outstandingAdvances());
         $this->assertSame(0, LoanRepayment::query()->count());
-        $this->assertSame(17010, $a->refresh()->net_pay, 'Hand edits survive a reopen.');
+        $this->assertSame(15510, $a->refresh()->net_pay, 'Hand edits survive a reopen.');
 
         $this->actingAs($this->owner)->post(route('payroll.recalculate', $sep), ['reset' => 1]);
-        $this->assertSame(14630, $this->lineFor($sep, $aslam)->net_pay, 'Reset recalculation drops hand edits.');
+        $this->assertSame(13130, $this->lineFor($sep, $aslam)->net_pay, 'Reset recalculation drops hand edits.');
     }
 
     public function test_foreman_sheet_advances_reach_the_payroll(): void
@@ -577,8 +578,9 @@ class PayrollAdvancesLoansE2ETest extends TestCase
 
         $this->assertSame(8, $line->unmarked_days);
         $this->assertSame(8.0, $line->absent_days);
-        $this->assertSame(8000, $line->absence_deduction);
-        $this->assertSame(22000, $line->net_pay);
+        // Paid for the 20 days present only: the off day, leave day and 8 unmarked days are unpaid.
+        $this->assertSame(10000, $line->absence_deduction);
+        $this->assertSame(20000, $line->net_pay);
         $this->actingAs($this->owner)->get(route('payroll.show', $run))->assertSee('They are counted as absent and deducted.');
     }
 

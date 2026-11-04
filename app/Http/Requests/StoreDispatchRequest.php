@@ -36,12 +36,14 @@ class StoreDispatchRequest extends FormRequest
             'bundles' => ['required', 'integer', 'min:0'],
             'copies_per_bundle' => ['required', 'integer', 'min:1'],
             'loose_copies' => ['nullable', 'integer', 'min:0'],
-            'rims' => ['nullable', 'numeric', 'min:0'],
             'labour_per_bundle' => ['nullable', 'numeric', 'min:0'],
-            'labour_per_rim' => ['nullable', 'numeric', 'min:0'],
             'labour_paid_to' => ['nullable', 'string', 'max:120'],
             'truck_no' => ['nullable', 'string', 'max:30'],
             'note' => ['nullable', 'string', 'max:255'],
+            'truck_front' => ['nullable', 'image', 'max:8192'],
+            'truck_back' => ['nullable', 'image', 'max:8192'],
+            'files' => ['nullable', 'array', 'max:10'],
+            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];
     }
 
@@ -80,7 +82,8 @@ class StoreDispatchRequest extends FormRequest
                     return;
                 }
 
-                $remaining = max(0, $order->copies - (int) $order->dispatches()->sum('copies'));
+                // When editing a loading, its own copies are not counted against what is left.
+                $remaining = max(0, $order->copies - (int) $order->dispatches()->whereKeyNot($this->route('dispatch')?->getKey())->sum('copies'));
 
                 if ($copies > $remaining) {
                     $validator->errors()->add('copies', __('Only :n copies of order :number are left to load.', [
