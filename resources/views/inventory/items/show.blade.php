@@ -6,10 +6,7 @@
             @can('inventory.manage')
                 <a class="btn" href="{{ route('inventory-items.edit', $item) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                 @if ($ledger->isEmpty())
-                    <form method="POST" action="{{ route('inventory-items.destroy', $item) }}" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $item->name])))">
-                        @csrf @method('DELETE')
-                        <button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button>
-                    </form>
+                    <x-delete-button :action="route('inventory-items.destroy', $item)" :confirm="__('Delete :name?', ['name' => $item->name])" :label="__('Delete')" />
                 @endif
             @endcan
             @can('inventory.issue')

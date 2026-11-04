@@ -4,10 +4,7 @@
             <x-badge :tone="$book->is_active ? 'good' : 'mute'">{{ $book->is_active ? __('Active') : __('Inactive') }}</x-badge>
             <a class="btn" href="{{ route('books.index') }}">{{ __('Back') }}</a>
             @can('books.manage')
-            <form method="POST" action="{{ route('books.destroy', $book) }}" onsubmit="return confirm(@js(__('Delete :name and all its formats?', ['name' => $book->name])))">
-                @csrf @method('DELETE')
-                <button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button>
-            </form>
+            <x-delete-button :action="route('books.destroy', $book)" :confirm="__('Delete :name and all its formats?', ['name' => $book->name])" :label="__('Delete')" />
             @endcan
             @can('books.manage')<a class="btn primary" href="{{ route('books.edit', $book) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
         </x-slot:actions>

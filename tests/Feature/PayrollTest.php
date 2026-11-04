@@ -297,8 +297,8 @@ class PayrollTest extends TestCase
         $used = Attendance::factory()->create()->employee;
         $fresh = Employee::factory()->create();
 
-        $this->actingAs($owner)->delete(route('employees.destroy', $used))->assertSessionHasErrors('employee');
-        $this->actingAs($owner)->delete(route('employees.destroy', $fresh))->assertRedirect(route('employees.index'));
+        $this->actingAs($owner)->delete(route('employees.destroy', $used), ['delete_note' => 'Test reason'])->assertSessionHasErrors('employee');
+        $this->actingAs($owner)->delete(route('employees.destroy', $fresh), ['delete_note' => 'Test reason'])->assertRedirect(route('employees.index'));
         $this->assertModelMissing($fresh);
     }
 

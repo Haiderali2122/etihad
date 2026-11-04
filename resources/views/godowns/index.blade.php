@@ -22,10 +22,7 @@
                 <td class="r" style="white-space:nowrap">
                     <a class="btn sm" href="{{ route('godowns.edit', $godown) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                     @if ($godown->paper_receipts_count === 0)
-                        <form method="POST" action="{{ route('godowns.destroy', $godown) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $godown->name])))">
-                            @csrf @method('DELETE')
-                            <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $godown->name]) }}"><x-icon name="x" /></button>
-                        </form>
+                        <x-delete-button :action="route('godowns.destroy', $godown)" :confirm="__('Delete :name?', ['name' => $godown->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $godown->name]) }}" />
                     @endif
                 </td>
             </tr>

@@ -220,7 +220,7 @@ class PaperInventoryE2ETest extends TestCase
         $this->post(route('godowns.store'), ['name' => 'X'])->assertForbidden();
         $this->get(route('godowns.edit', $godown))->assertForbidden();
         $this->put(route('godowns.update', $godown), ['name' => 'X'])->assertForbidden();
-        $this->delete(route('godowns.destroy', $godown))->assertForbidden();
+        $this->delete(route('godowns.destroy', $godown), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->assertModelExists($godown);
 
         $this->get(route('inventory.index'))->assertForbidden();
@@ -254,11 +254,11 @@ class PaperInventoryE2ETest extends TestCase
         $this->post(route('inventory-items.store'), [])->assertForbidden();
         $this->get(route('inventory-items.edit', $item))->assertForbidden();
         $this->put(route('inventory-items.update', $item), [])->assertForbidden();
-        $this->delete(route('inventory-items.destroy', $item))->assertForbidden();
+        $this->delete(route('inventory-items.destroy', $item), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->get(route('inventory-categories.index'))->assertForbidden();
         $this->post(route('inventory-categories.store'), ['name' => 'X'])->assertForbidden();
         $this->put(route('inventory-categories.update', $category), ['name' => 'X'])->assertForbidden();
-        $this->delete(route('inventory-categories.destroy', $category))->assertForbidden();
+        $this->delete(route('inventory-categories.destroy', $category), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->get(route('inventory-issues.create'))->assertForbidden();
         $this->post(route('inventory-issues.store'), [])->assertForbidden();
         $this->get(route('purchases.create'))->assertForbidden();
@@ -581,7 +581,7 @@ class PaperInventoryE2ETest extends TestCase
 
     public function test_godown_crud_and_history_protection(): void
     {
-        $clerk = $this->userWith(['godowns.manage', 'paper.view']);
+        $clerk = $this->userWith(['godowns.manage', 'paper.view', 'records.delete']);
 
         $this->actingAs($clerk);
         $this->post(route('godowns.store'), [])->assertSessionHasErrors('name');
@@ -594,13 +594,13 @@ class PaperInventoryE2ETest extends TestCase
         $this->assertFalse($godown->refresh()->is_active);
 
         // Unused godown deletes.
-        $this->delete(route('godowns.destroy', $godown))->assertRedirect(route('godowns.index'));
+        $this->delete(route('godowns.destroy', $godown), ['delete_note' => 'Test reason'])->assertRedirect(route('godowns.index'));
         $this->assertModelMissing($godown);
 
         // A godown with history (even a rejected slip) cannot be deleted.
         $used = Godown::factory()->create(['name' => 'Godown A']);
         PaperReceipt::factory()->for($used)->create(['status' => ApprovalStatus::Rejected]);
-        $this->from(route('godowns.index'))->delete(route('godowns.destroy', $used))
+        $this->from(route('godowns.index'))->delete(route('godowns.destroy', $used), ['delete_note' => 'Test reason'])
             ->assertRedirect(route('godowns.index'))->assertSessionHasErrors('godown');
         $this->assertModelExists($used);
         $this->get(route('godowns.index'))->assertOk()->assertDontSee('action="'.route('godowns.destroy', $used).'"', false);
@@ -610,7 +610,7 @@ class PaperInventoryE2ETest extends TestCase
 
     public function test_category_crud_and_bills_only_categories(): void
     {
-        $clerk = $this->userWith(['inventory.manage', 'purchases.view']);
+        $clerk = $this->userWith(['inventory.manage', 'purchases.view', 'records.delete']);
 
         $this->actingAs($clerk);
         $this->post(route('inventory-categories.store'), [])->assertSessionHasErrors('name');
@@ -628,18 +628,18 @@ class PaperInventoryE2ETest extends TestCase
         $this->assertSame('Paper bills', $paper->refresh()->name);
         $this->assertFalse($paper->is_active);
 
-        $this->delete(route('inventory-categories.destroy', $paper))->assertRedirect(route('inventory-categories.index'));
+        $this->delete(route('inventory-categories.destroy', $paper), ['delete_note' => 'Test reason'])->assertRedirect(route('inventory-categories.index'));
         $this->assertModelMissing($paper);
 
         $ink = InventoryCategory::query()->where('name', 'Varnish')->sole();
         InventoryItem::factory()->for($ink, 'category')->create();
-        $this->from(route('inventory-categories.index'))->delete(route('inventory-categories.destroy', $ink))->assertSessionHasErrors('category');
+        $this->from(route('inventory-categories.index'))->delete(route('inventory-categories.destroy', $ink), ['delete_note' => 'Test reason'])->assertSessionHasErrors('category');
         $this->assertModelExists($ink);
     }
 
     public function test_item_crud_and_validation(): void
     {
-        $clerk = $this->userWith(['inventory.manage', 'purchases.view']);
+        $clerk = $this->userWith(['inventory.manage', 'purchases.view', 'records.delete']);
         $ink = InventoryCategory::query()->firstOrCreate(['name' => 'Ink'], ['tracks_stock' => true]);
         $glue = InventoryCategory::query()->firstOrCreate(['name' => 'Glue'], ['tracks_stock' => true]);
 
@@ -661,7 +661,7 @@ class PaperInventoryE2ETest extends TestCase
             ->assertRedirect(route('inventory-items.show', $item));
         $this->assertSame('12.50', $item->refresh()->reorder_level);
 
-        $this->delete(route('inventory-items.destroy', $item))->assertRedirect(route('inventory.index'));
+        $this->delete(route('inventory-items.destroy', $item), ['delete_note' => 'Test reason'])->assertRedirect(route('inventory.index'));
         $this->assertModelMissing($item);
     }
 
@@ -723,8 +723,8 @@ class PaperInventoryE2ETest extends TestCase
         ])->assertSessionHasNoErrors();
         $this->assertSame('out', $item->refresh()->level());
 
-        $manager = $this->userWith(['inventory.manage', 'purchases.view']);
-        $this->actingAs($manager)->from(route('inventory-items.show', $item))->delete(route('inventory-items.destroy', $item))
+        $manager = $this->userWith(['inventory.manage', 'purchases.view', 'records.delete']);
+        $this->actingAs($manager)->from(route('inventory-items.show', $item))->delete(route('inventory-items.destroy', $item), ['delete_note' => 'Test reason'])
             ->assertSessionHasErrors('item');
         $this->assertModelExists($item);
     }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ContractorWork;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\ContractorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Contractor extends Model
 {
     /** @use HasFactory<ContractorFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {

@@ -27,10 +27,7 @@
                     <td class="r" style="white-space:nowrap">
                         <a class="btn sm" href="{{ route('roles.edit', $role) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                         @unless ($role->is_super)
-                            <form method="POST" action="{{ route('roles.destroy', $role) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete the :name role?', ['name' => $role->name])))">
-                                @csrf @method('DELETE')
-                                <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $role->name]) }}"><x-icon name="x" /></button>
-                            </form>
+                            <x-delete-button :action="route('roles.destroy', $role)" :confirm="__('Delete the :name role?', ['name' => $role->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $role->name]) }}" />
                         @endunless
                     </td>
                 </tr>

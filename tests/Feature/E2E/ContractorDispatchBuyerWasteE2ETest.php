@@ -196,7 +196,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
     {
         $contractor = Contractor::factory()->create();
 
-        $this->actingAs($this->owner)->delete(route('contractors.destroy', $contractor))->assertRedirect(route('contractors.index'));
+        $this->actingAs($this->owner)->delete(route('contractors.destroy', $contractor), ['delete_note' => 'Test reason'])->assertRedirect(route('contractors.index'));
         $this->assertModelMissing($contractor);
     }
 
@@ -212,13 +212,13 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         $this->get(route('contractors.show', $withJob))->assertOk()->assertDontSee('action="'.route('contractors.destroy', $withJob).'"', false);
 
         foreach ([$withJob, $withPayment] as $contractor) {
-            $this->from(route('contractors.show', $contractor))->delete(route('contractors.destroy', $contractor))
+            $this->from(route('contractors.show', $contractor))->delete(route('contractors.destroy', $contractor), ['delete_note' => 'Test reason'])
                 ->assertRedirect(route('contractors.show', $contractor))
                 ->assertSessionHasErrors('contractor');
             $this->assertModelExists($contractor);
         }
 
-        $this->followingRedirects()->from(route('contractors.show', $withJob))->delete(route('contractors.destroy', $withJob))
+        $this->followingRedirects()->from(route('contractors.show', $withJob))->delete(route('contractors.destroy', $withJob), ['delete_note' => 'Test reason'])
             ->assertOk()->assertSee('Has Job has jobs or payments');
     }
 
@@ -677,7 +677,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
 
         $this->post(route('contractors.store'), ['name' => 'X', 'work' => 'both'])->assertForbidden();
         $this->put(route('contractors.update', $contractor), ['name' => 'X', 'work' => 'both'])->assertForbidden();
-        $this->delete(route('contractors.destroy', $contractor))->assertForbidden();
+        $this->delete(route('contractors.destroy', $contractor), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->post(route('contractors.payments.store', $contractor), ['paid_on' => today()->toDateString(), 'amount' => 100, 'kind' => 'advance'])->assertForbidden();
         $this->post(route('contractor-jobs.store'), [])->assertForbidden();
         $this->patch(route('contractor-jobs.done', $job))->assertForbidden();

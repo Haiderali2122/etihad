@@ -6,7 +6,7 @@
             @can('contractors.manage')
                 <a class="btn" href="{{ route('contractors.edit', $contractor) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                 @if ($jobs->isEmpty() && $payments->isEmpty())
-                    <form method="POST" action="{{ route('contractors.destroy', $contractor) }}" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $contractor->name])))">@csrf @method('DELETE')<button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button></form>
+                    <x-delete-button :action="route('contractors.destroy', $contractor)" :confirm="__('Delete :name?', ['name' => $contractor->name])" :label="__('Delete')" />
                 @endif
                 <a class="btn primary" href="{{ route('contractor-jobs.create', ['contractor' => $contractor->id]) }}"><x-icon name="fold" />{{ __('Give job') }}</a>
             @endcan
@@ -71,7 +71,7 @@
                     <td class="r num"><b>Rs {{ number_format($job->amount) }}</b></td>
                     <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge></td>
                     <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractor-jobs.edit', $job) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
-                        <form method="POST" action="{{ route('contractor-jobs.destroy', $job) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete this job?')))">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan</td>
+                        <x-delete-button :action="route('contractor-jobs.destroy', $job)" :confirm="__('Delete this job?')" :label="''" small :danger="false" aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="7"><div class="empty">{{ __('No jobs yet') }}</div></td></tr>
@@ -91,7 +91,7 @@
                     <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                     <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge>@if ($p->review_note)<div class="meta">{{ $p->review_note }}</div>@endif</td>
                     <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractor-payments.edit', $p) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
-                        <form method="POST" action="{{ route('contractor-payments.destroy', $p) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete this payment?')))">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan</td>
+                        <x-delete-button :action="route('contractor-payments.destroy', $p)" :confirm="__('Delete this payment?')" :label="''" small :danger="false" aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="7"><div class="empty">{{ __('Nothing paid yet') }}</div></td></tr>

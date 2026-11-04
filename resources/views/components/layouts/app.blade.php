@@ -30,6 +30,7 @@
         ['group' => __('Records')],
         ['route' => 'parties.index', 'match' => 'parties.*', 'icon' => 'users', 'label' => __('Parties & suppliers'), 'can' => 'parties.manage'],
         ['route' => 'users.index', 'match' => ['users.*', 'roles.*'], 'icon' => 'shield', 'label' => __('Users & roles'), 'can' => 'users.manage'],
+        ['route' => 'deletions.index', 'match' => 'deletions.*', 'icon' => 'x', 'label' => __('Deletion log'), 'can' => 'deletions.view'],
     ];
     $nav = array_values(array_filter($nav, fn ($item) => ! isset($item['can']) || $user->can($item['can'])));
     $nav = array_values(array_filter($nav, fn ($item, $i) => ! isset($item['group']) || (isset($nav[$i + 1]) && ! isset($nav[$i + 1]['group'])), ARRAY_FILTER_USE_BOTH));
@@ -120,6 +121,51 @@
         </main>
     </div>
 </div>
+
+{{-- Reason dialog shown before any delete. The chosen form is submitted only after a reason is typed. --}}
+<div class="scrim" id="deleteScrim" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle" style="width:min(460px,100%)">
+        <div class="modal-h"><div><h2 id="deleteTitle">{{ __('Delete record') }}</h2><p id="deleteText">{{ __('This cannot be undone.') }}</p></div></div>
+        <div class="modal-b">
+            <label for="deleteNote" style="display:block;font-weight:600;margin-bottom:6px">{{ __('Reason for deleting') }} <span class="muted">*</span></label>
+            <textarea id="deleteNote" rows="3" maxlength="255" style="width:100%" placeholder="{{ __('Why is this being deleted?') }}"></textarea>
+            <span class="err" id="deleteErr" hidden>{{ __('Please give a reason.') }}</span>
+        </div>
+        <div class="modal-f">
+            <button type="button" class="btn" id="deleteCancel">{{ __('Cancel') }}</button>
+            <button type="button" class="btn" id="deleteConfirm" style="background:var(--bad);border-color:var(--bad);color:#fff"><x-icon name="x" />{{ __('Delete') }}</button>
+        </div>
+    </div>
+</div>
+<script>
+    (() => {
+        const scrim = document.getElementById('deleteScrim'), note = document.getElementById('deleteNote');
+        const text = document.getElementById('deleteText'), err = document.getElementById('deleteErr');
+        let pending = null;
+        const close = () => { scrim.hidden = true; pending = null; note.value = ''; err.hidden = true; };
+        // Intercept every delete form and ask for a reason first.
+        document.addEventListener('submit', e => {
+            const form = e.target.closest('form.delete-form');
+            if (!form) { return; }
+            e.preventDefault();
+            pending = form;
+            text.textContent = form.dataset.confirm || @json(__('This cannot be undone.'));
+            scrim.hidden = false;
+            note.focus();
+        });
+        document.getElementById('deleteConfirm').addEventListener('click', () => {
+            const reason = note.value.trim();
+            if (!reason) { err.hidden = false; note.focus(); return; }
+            pending.querySelector('input[name="delete_note"]').value = reason;
+            const form = pending;
+            pending = null;
+            form.submit();
+        });
+        document.getElementById('deleteCancel').addEventListener('click', close);
+        scrim.addEventListener('click', e => { if (e.target === scrim) { close(); } });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !scrim.hidden) { close(); } });
+    })();
+</script>
 <script>
     (() => {
         const app = document.getElementById('app'), btn = document.getElementById('menuBtn');

@@ -39,7 +39,7 @@ class GodownTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertSame('Back store', $godown->refresh()->name);
 
-        $this->actingAs($owner)->delete(route('godowns.destroy', $godown))->assertRedirect(route('godowns.index'));
+        $this->actingAs($owner)->delete(route('godowns.destroy', $godown), ['delete_note' => 'Test reason'])->assertRedirect(route('godowns.index'));
         $this->assertModelMissing($godown);
     }
 
@@ -48,7 +48,7 @@ class GodownTest extends TestCase
         $owner = User::factory()->owner()->create();
         $godown = PaperReceipt::factory()->create()->godown;
 
-        $this->actingAs($owner)->delete(route('godowns.destroy', $godown))->assertSessionHasErrors('godown');
+        $this->actingAs($owner)->delete(route('godowns.destroy', $godown), ['delete_note' => 'Test reason'])->assertSessionHasErrors('godown');
         $this->assertModelExists($godown);
     }
 

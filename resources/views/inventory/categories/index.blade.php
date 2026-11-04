@@ -22,10 +22,7 @@
                 <td class="r" style="white-space:nowrap">
                     <a class="btn sm" href="{{ route('inventory-categories.edit', $category) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                     @if ($category->items_count === 0)
-                        <form method="POST" action="{{ route('inventory-categories.destroy', $category) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $category->name])))">
-                            @csrf @method('DELETE')
-                            <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $category->name]) }}"><x-icon name="x" /></button>
-                        </form>
+                        <x-delete-button :action="route('inventory-categories.destroy', $category)" :confirm="__('Delete :name?', ['name' => $category->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $category->name]) }}" />
                     @endif
                 </td>
             </tr>

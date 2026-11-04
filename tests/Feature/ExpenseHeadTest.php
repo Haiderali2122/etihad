@@ -59,10 +59,10 @@ class ExpenseHeadTest extends TestCase
         $used = Expense::factory()->create()->head;
         $unused = ExpenseHead::factory()->create();
 
-        $this->actingAs($owner)->delete(route('expense-heads.destroy', $used))->assertSessionHasErrors('head');
+        $this->actingAs($owner)->delete(route('expense-heads.destroy', $used), ['delete_note' => 'Test reason'])->assertSessionHasErrors('head');
         $this->assertModelExists($used);
 
-        $this->actingAs($owner)->delete(route('expense-heads.destroy', $unused))->assertRedirect(route('expense-heads.index'));
+        $this->actingAs($owner)->delete(route('expense-heads.destroy', $unused), ['delete_note' => 'Test reason'])->assertRedirect(route('expense-heads.index'));
         $this->assertModelMissing($unused);
     }
 

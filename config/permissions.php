@@ -63,11 +63,16 @@ return [
         'payroll.finalize' => 'Finalize and reopen payroll',
     ],
 
+    'Records' => [
+        'records.delete' => 'Delete records (show the delete buttons); every delete asks for a reason',
+    ],
+
     'Owner controls' => [
         'approve' => 'Approve or send back entries',
         'reports.view' => 'View and export reports',
         'manage-settings' => 'Change settings and daily limit',
         'users.manage' => 'Manage users, roles and permissions',
+        'deletions.view' => 'View the deletion log',
     ],
 
 ];

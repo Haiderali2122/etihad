@@ -242,7 +242,7 @@ class AuthAccessE2ETest extends TestCase
         $this->actingAs($owner)->post(route('roles.store'), ['name' => ''])->assertSessionHasErrors('name');
         $this->actingAs($owner)->post(route('roles.store'), ['name' => str_repeat('x', 61)])->assertSessionHasErrors('name');
 
-        $this->actingAs($owner)->delete(route('roles.destroy', $role))->assertRedirect(route('roles.index'));
+        $this->actingAs($owner)->delete(route('roles.destroy', $role), ['delete_note' => 'Test reason'])->assertRedirect(route('roles.index'));
         $this->assertModelMissing($role);
     }
 
@@ -283,7 +283,7 @@ class AuthAccessE2ETest extends TestCase
         $owner = User::factory()->owner()->create();
 
         $this->actingAs($owner)->get(route('roles.edit', 99999))->assertNotFound();
-        $this->actingAs($owner)->delete(route('roles.destroy', 99999))->assertNotFound();
+        $this->actingAs($owner)->delete(route('roles.destroy', 99999), ['delete_note' => 'Test reason'])->assertNotFound();
     }
 
     // ---------------------------------------------------------------------
@@ -320,7 +320,7 @@ class AuthAccessE2ETest extends TestCase
         // Keeping your own email is fine.
         $this->actingAs($owner)->put(route('users.update', $clerk), $base)->assertSessionHasNoErrors();
 
-        $this->actingAs($owner)->delete(route('users.destroy', $clerk))->assertRedirect(route('users.index'));
+        $this->actingAs($owner)->delete(route('users.destroy', $clerk), ['delete_note' => 'Test reason'])->assertRedirect(route('users.index'));
         $this->assertModelMissing($clerk);
     }
 
@@ -329,7 +329,7 @@ class AuthAccessE2ETest extends TestCase
         $owner = User::factory()->owner()->create();
         User::factory()->owner()->create();
 
-        $this->actingAs($owner)->delete(route('users.destroy', $owner))->assertSessionHasErrors('user');
+        $this->actingAs($owner)->delete(route('users.destroy', $owner), ['delete_note' => 'Test reason'])->assertSessionHasErrors('user');
         $this->assertModelExists($owner);
     }
 
@@ -354,7 +354,7 @@ class AuthAccessE2ETest extends TestCase
     {
         $active = User::factory()->owner()->create();
         User::factory()->owner()->create(['is_active' => false]);
-        $admin = $this->userWithPermissions(['users.manage']);
+        $admin = $this->userWithPermissions(['users.manage', 'records.delete']);
 
         // A non-owner admin cannot demote, deactivate or delete the only *active* owner.
         $this->actingAs($admin)->put(route('users.update', $active), [
@@ -363,7 +363,7 @@ class AuthAccessE2ETest extends TestCase
         $this->actingAs($admin)->put(route('users.update', $active), [
             'name' => $active->name, 'email' => $active->email, 'role_id' => $active->role_id, 'locale' => 'en', 'is_active' => 0,
         ])->assertSessionHasErrors('role_id');
-        $this->actingAs($admin)->delete(route('users.destroy', $active))->assertSessionHasErrors('user');
+        $this->actingAs($admin)->delete(route('users.destroy', $active), ['delete_note' => 'Test reason'])->assertSessionHasErrors('user');
 
         $this->assertTrue($active->refresh()->isOwner());
         $this->assertTrue($active->is_active);
@@ -375,7 +375,7 @@ class AuthAccessE2ETest extends TestCase
         $withFloat = User::factory()->create();
         CashFloat::factory()->create(['user_id' => $withFloat->id]);
 
-        $this->actingAs($owner)->delete(route('users.destroy', $withFloat))->assertSessionHasErrors('user');
+        $this->actingAs($owner)->delete(route('users.destroy', $withFloat), ['delete_note' => 'Test reason'])->assertSessionHasErrors('user');
         $this->assertModelExists($withFloat);
     }
 

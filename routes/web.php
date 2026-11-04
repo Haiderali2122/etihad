@@ -9,6 +9,7 @@ use App\Http\Controllers\CashFloatController;
 use App\Http\Controllers\ContractorController;
 use App\Http\Controllers\ContractorJobController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeletionController;
 use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\EmployeeController;
@@ -210,4 +211,6 @@ Route::middleware('auth')->group(function () {
         Route::resource('users', UserController::class)->except('show');
         Route::resource('roles', RoleController::class)->except('show');
     });
+
+    Route::get('deletions', [DeletionController::class, 'index'])->middleware('can:deletions.view')->name('deletions.index');
 });

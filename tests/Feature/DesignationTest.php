@@ -40,7 +40,7 @@ class DesignationTest extends TestCase
         $this->assertSame('Shift supervisor', $designation->refresh()->name);
         $this->assertFalse($designation->is_active);
 
-        $this->actingAs($owner)->delete(route('designations.destroy', $designation))->assertRedirect(route('designations.index'));
+        $this->actingAs($owner)->delete(route('designations.destroy', $designation), ['delete_note' => 'Test reason'])->assertRedirect(route('designations.index'));
         $this->assertModelMissing($designation);
     }
 
@@ -63,7 +63,7 @@ class DesignationTest extends TestCase
         $designation = Designation::factory()->create(['name' => 'Cutter']);
         Employee::factory()->create(['designation' => 'Cutter']);
 
-        $this->actingAs($owner)->delete(route('designations.destroy', $designation))->assertSessionHasErrors('designation');
+        $this->actingAs($owner)->delete(route('designations.destroy', $designation), ['delete_note' => 'Test reason'])->assertSessionHasErrors('designation');
         $this->assertModelExists($designation);
     }
 

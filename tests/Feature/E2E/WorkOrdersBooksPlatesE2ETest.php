@@ -206,12 +206,12 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->post(route('work-orders.store'), $this->order())->assertForbidden();
         $this->patch(route('work-orders.advance', $order))->assertForbidden();
         $this->post(route('work-orders.outside-receipts.store', $outsource), ['received_on' => today()->toDateString(), 'printed_copies' => 1])->assertForbidden();
-        $this->delete(route('work-orders.destroy', $order))->assertForbidden();
+        $this->delete(route('work-orders.destroy', $order), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->get(route('books.create'))->assertForbidden();
         $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 1]]])->assertForbidden();
         $this->get(route('books.edit', $book))->assertForbidden();
         $this->put(route('books.update', $book), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 1]]])->assertForbidden();
-        $this->delete(route('books.destroy', $book))->assertForbidden();
+        $this->delete(route('books.destroy', $book), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->get(route('plate-jobs.create'))->assertForbidden();
         $this->post(route('plate-jobs.store'), [])->assertForbidden();
         $this->patch(route('plate-jobs.pay', $plate), ['paid_on' => today()->toDateString()])->assertForbidden();
@@ -368,7 +368,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->actingAs($this->owner)->get(route('work-orders.show', $order))->assertOk()->assertSee('Check the copies');
 
         // A sent-back order can be deleted since nothing left the godown.
-        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $order))->assertRedirect(route('work-orders.index'));
+        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $order), ['delete_note' => 'Test reason'])->assertRedirect(route('work-orders.index'));
         $this->assertModelMissing($order);
         $this->assertSame(1000, $this->stock());
     }
@@ -419,12 +419,12 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         PlateJob::factory()->create(['work_order_id' => $pending->id]);
 
         $this->actingAs($this->owner)->get(route('work-orders.show', $issued))->assertDontSee('Delete WO-1001');
-        $this->delete(route('work-orders.destroy', $issued))->assertStatus(409);
+        $this->delete(route('work-orders.destroy', $issued), ['delete_note' => 'Test reason'])->assertStatus(409);
         $this->assertModelExists($issued);
         $this->assertSame(629, $this->stock());
 
         // A waiting order with plate history can go; the plate bill stays, unlinked.
-        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $pending))
+        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $pending), ['delete_note' => 'Test reason'])
             ->assertRedirect(route('work-orders.index'))->assertSessionHas('status', 'WO-1002 deleted.');
         $this->assertModelMissing($pending);
         $this->assertNull(PlateJob::query()->sole()->work_order_id);
@@ -677,7 +677,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $format = BookFormat::factory()->create(['forms' => 2]);
         $issue = PaperIssue::factory()->create(['book_format_id' => $format->id, 'party_id' => $this->party->id, 'paper_type_id' => $this->paper->id, 'quantity' => 5]);
 
-        $this->actingAs($this->manager)->delete(route('books.destroy', $format->book))->assertRedirect(route('books.index'));
+        $this->actingAs($this->manager)->delete(route('books.destroy', $format->book), ['delete_note' => 'Test reason'])->assertRedirect(route('books.index'));
 
         $this->assertModelMissing($format);
         $this->assertNull($issue->refresh()->book_format_id);
@@ -692,7 +692,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->actingAs($this->owner)->post(route('work-orders.store'), $this->order())->assertSessionHasNoErrors();
         $book = $this->format->book;
 
-        $response = $this->actingAs($this->manager)->from(route('books.show', $book))->delete(route('books.destroy', $book));
+        $response = $this->actingAs($this->manager)->from(route('books.show', $book))->delete(route('books.destroy', $book), ['delete_note' => 'Test reason']);
 
         $this->assertNotSame(500, $response->getStatusCode(), 'Deleting a book with work orders crashes with a 500.');
         $this->assertModelExists($book);

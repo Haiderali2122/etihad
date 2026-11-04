@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\RoleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Role extends Model
 {
     /** @use HasFactory<RoleFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     /**
      * What the office manager could do before roles were editable: everything except owner controls.
@@ -32,6 +33,7 @@ class Role extends Model
         'orders.view', 'orders.manage', 'contractors.manage', 'plates.manage', 'dispatch.manage', 'buyers.manage', 'waste.manage',
         'staff.view', 'staff.manage', 'attendance.manage', 'advances.create', 'payroll.prepare',
         'reports.view',
+        'records.delete',
     ];
 
     protected function casts(): array

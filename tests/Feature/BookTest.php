@@ -88,7 +88,7 @@ class BookTest extends TestCase
     {
         $format = BookFormat::factory()->create();
 
-        $this->actingAs(User::factory()->create())->delete(route('books.destroy', $format->book))->assertRedirect(route('books.index'));
+        $this->actingAs(User::factory()->create())->delete(route('books.destroy', $format->book), ['delete_note' => 'Test reason'])->assertRedirect(route('books.index'));
 
         $this->assertModelMissing($format->book);
         $this->assertModelMissing($format);

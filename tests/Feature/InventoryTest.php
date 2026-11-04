@@ -51,7 +51,7 @@ class InventoryTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertFalse($category->refresh()->tracks_stock);
 
-        $this->actingAs($owner)->delete(route('inventory-categories.destroy', $category))->assertRedirect(route('inventory-categories.index'));
+        $this->actingAs($owner)->delete(route('inventory-categories.destroy', $category), ['delete_note' => 'Test reason'])->assertRedirect(route('inventory-categories.index'));
         $this->assertModelMissing($category);
     }
 
@@ -59,7 +59,7 @@ class InventoryTest extends TestCase
     {
         $category = InventoryItem::factory()->create()->category;
 
-        $this->actingAs(User::factory()->owner()->create())->delete(route('inventory-categories.destroy', $category))->assertSessionHasErrors('category');
+        $this->actingAs(User::factory()->owner()->create())->delete(route('inventory-categories.destroy', $category), ['delete_note' => 'Test reason'])->assertSessionHasErrors('category');
         $this->assertModelExists($category);
     }
 
@@ -120,10 +120,10 @@ class InventoryTest extends TestCase
         $used = Purchase::factory()->create()->item;
         $unused = InventoryItem::factory()->create();
 
-        $this->actingAs($owner)->delete(route('inventory-items.destroy', $used))->assertSessionHasErrors('item');
+        $this->actingAs($owner)->delete(route('inventory-items.destroy', $used), ['delete_note' => 'Test reason'])->assertSessionHasErrors('item');
         $this->assertModelExists($used);
 
-        $this->actingAs($owner)->delete(route('inventory-items.destroy', $unused))->assertRedirect(route('inventory.index'));
+        $this->actingAs($owner)->delete(route('inventory-items.destroy', $unused), ['delete_note' => 'Test reason'])->assertRedirect(route('inventory.index'));
         $this->assertModelMissing($unused);
     }
 

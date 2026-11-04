@@ -77,7 +77,7 @@ class UserManagementTest extends TestCase
             'name' => $owner->name, 'email' => $owner->email, 'role_id' => $owner->role_id, 'locale' => 'en', 'is_active' => 0,
         ])->assertSessionHasErrors('is_active');
 
-        $this->actingAs($owner)->delete(route('users.destroy', $owner))->assertSessionHasErrors('user');
+        $this->actingAs($owner)->delete(route('users.destroy', $owner), ['delete_note' => 'Test reason'])->assertSessionHasErrors('user');
         $this->assertTrue($owner->refresh()->isOwner());
     }
 
@@ -88,10 +88,10 @@ class UserManagementTest extends TestCase
         CashFloat::factory()->create(['user_id' => $faisal->id]);
         $newcomer = User::factory()->create();
 
-        $this->actingAs($owner)->delete(route('users.destroy', $faisal))->assertSessionHasErrors('user');
+        $this->actingAs($owner)->delete(route('users.destroy', $faisal), ['delete_note' => 'Test reason'])->assertSessionHasErrors('user');
         $this->assertModelExists($faisal);
 
-        $this->actingAs($owner)->delete(route('users.destroy', $newcomer))->assertRedirect(route('users.index'));
+        $this->actingAs($owner)->delete(route('users.destroy', $newcomer), ['delete_note' => 'Test reason'])->assertRedirect(route('users.index'));
         $this->assertModelMissing($newcomer);
     }
 
@@ -129,7 +129,7 @@ class UserManagementTest extends TestCase
         $this->assertSame('Malik', $owner->role->refresh()->name);
         $this->assertTrue($owner->refresh()->can('users.manage'));
 
-        $this->actingAs($owner)->delete(route('roles.destroy', $owner->role))->assertSessionHasErrors('role');
+        $this->actingAs($owner)->delete(route('roles.destroy', $owner->role), ['delete_note' => 'Test reason'])->assertSessionHasErrors('role');
         $this->assertModelExists($owner->role);
     }
 
@@ -139,8 +139,8 @@ class UserManagementTest extends TestCase
         $used = User::factory()->create()->role;
         $unused = Role::factory()->create();
 
-        $this->actingAs($owner)->delete(route('roles.destroy', $used))->assertSessionHasErrors('role');
-        $this->actingAs($owner)->delete(route('roles.destroy', $unused))->assertRedirect(route('roles.index'));
+        $this->actingAs($owner)->delete(route('roles.destroy', $used), ['delete_note' => 'Test reason'])->assertSessionHasErrors('role');
+        $this->actingAs($owner)->delete(route('roles.destroy', $unused), ['delete_note' => 'Test reason'])->assertRedirect(route('roles.index'));
         $this->assertModelMissing($unused);
     }
 

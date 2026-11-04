@@ -101,10 +101,7 @@
 
     @can('staff.manage')
         @if ($canDelete)
-            <form method="POST" action="{{ route('employees.destroy', $employee) }}" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $employee->name])))">
-                @csrf @method('DELETE')
-                <button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete employee') }}</button>
-            </form>
+            <x-delete-button :action="route('employees.destroy', $employee)" :confirm="__('Delete :name?', ['name' => $employee->name])" :label="__('Delete employee')" />
         @endif
     @endcan
 </x-layouts.app>

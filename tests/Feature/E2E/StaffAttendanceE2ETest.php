@@ -102,9 +102,9 @@ class StaffAttendanceE2ETest extends TestCase
 
         $this->actingAs($viewer)->post(route('employees.store'), $this->employeePayload())->assertForbidden();
         $this->actingAs($viewer)->put(route('employees.update', $employee), $this->employeePayload())->assertForbidden();
-        $this->actingAs($viewer)->delete(route('employees.destroy', $employee))->assertForbidden();
+        $this->actingAs($viewer)->delete(route('employees.destroy', $employee), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->actingAs($viewer)->post(route('designations.store'), ['name' => 'X'])->assertForbidden();
-        $this->actingAs($viewer)->delete(route('designations.destroy', $designation))->assertForbidden();
+        $this->actingAs($viewer)->delete(route('designations.destroy', $designation), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->actingAs($viewer)->put(route('attendance.save-day'), ['date' => '2026-10-27', 'rows' => [$employee->id => ['status' => 'present']]])->assertForbidden();
         $this->actingAs($viewer)->post(route('attendance.import.store'), ['file' => $this->csv("code,datetime\n")])->assertForbidden();
 
@@ -195,7 +195,7 @@ class StaffAttendanceE2ETest extends TestCase
         $this->actingAs($this->owner)->get(route('attendance.index'))->assertOk()->assertSee('26: Present · OT 2.5 h', false);
 
         // History exists, so delete is refused; the person is marked as left instead.
-        $this->actingAs($this->owner)->from(route('employees.show', $employee))->delete(route('employees.destroy', $employee))
+        $this->actingAs($this->owner)->from(route('employees.show', $employee))->delete(route('employees.destroy', $employee), ['delete_note' => 'Test reason'])
             ->assertSessionHasErrors('employee');
         $this->assertModelExists($employee);
 
@@ -281,7 +281,7 @@ class StaffAttendanceE2ETest extends TestCase
         $this->actingAs($this->owner)->post(route('employees.store'), $this->employeePayload(['code' => 'W-2', 'foreman_id' => 99999]))->assertSessionHasErrors('foreman_id');
 
         // Deleting a foreman with no history frees his team.
-        $this->actingAs($this->owner)->delete(route('employees.destroy', $foreman))->assertRedirect(route('employees.index'));
+        $this->actingAs($this->owner)->delete(route('employees.destroy', $foreman), ['delete_note' => 'Test reason'])->assertRedirect(route('employees.index'));
         $this->assertModelMissing($foreman);
         $this->assertNull($worker->refresh()->foreman_id);
         $this->actingAs($this->owner)->get(route('employees.show', $worker))->assertOk();
@@ -292,7 +292,7 @@ class StaffAttendanceE2ETest extends TestCase
         $employee = Employee::factory()->create();
 
         $this->actingAs($this->owner)->get(route('employees.show', $employee))->assertSee('Delete employee');
-        $this->actingAs($this->owner)->delete(route('employees.destroy', $employee))->assertRedirect(route('employees.index'));
+        $this->actingAs($this->owner)->delete(route('employees.destroy', $employee), ['delete_note' => 'Test reason'])->assertRedirect(route('employees.index'));
         $this->assertModelMissing($employee);
         $this->actingAs($this->owner)->get(route('employees.show', $employee))->assertNotFound();
     }
@@ -347,7 +347,7 @@ class StaffAttendanceE2ETest extends TestCase
         $this->actingAs($this->owner)->put(route('employees.update', $cutter), $this->employeePayload(['code' => $cutter->code, 'designation' => 'Cutter']))
             ->assertSessionHasNoErrors();
 
-        $this->actingAs($this->owner)->from(route('designations.index'))->delete(route('designations.destroy', $designation))->assertSessionHasErrors('designation');
+        $this->actingAs($this->owner)->from(route('designations.index'))->delete(route('designations.destroy', $designation), ['delete_note' => 'Test reason'])->assertSessionHasErrors('designation');
         $this->assertModelExists($designation);
     }
 

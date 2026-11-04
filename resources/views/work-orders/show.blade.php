@@ -13,7 +13,7 @@
             <a class="btn" href="{{ route('work-orders.index') }}">{{ __('Back') }}</a>
             @can('orders.manage')
                 @if (! $order->paper_issue_id)
-                    <form method="POST" action="{{ route('work-orders.destroy', $order) }}" onsubmit="return confirm(@js(__('Delete :n?', ['n' => $order->number])))">@csrf @method('DELETE')<button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button></form>
+                    <x-delete-button :action="route('work-orders.destroy', $order)" :confirm="__('Delete :n?', ['n' => $order->number])" :label="__('Delete')" />
                 @endif
                 @if ($order->paper_issue_id && (in_array($order->stage, [WorkOrderStage::ToFolding, WorkOrderStage::Folding, WorkOrderStage::Binding], true) || ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'outsource')))
                     <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit" @disabled($blocker)><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
@@ -123,7 +123,7 @@
                 @foreach ($order->rimLoadings as $l)
                     <div class="stat-line"><span>{{ $l->loaded_on->format('j M') }} · {{ $l->loaded_by }}</span><b>{{ \App\Models\InventoryItem::qty($l->rims) }} {{ __('rims') }} × {{ \App\Models\InventoryItem::qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}
                         @if ($l->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>
-                            @can('orders.manage')<form method="POST" action="{{ route('rim-loadings.destroy', $l) }}" style="display:inline">@csrf @method('DELETE')<button class="btn sm" type="submit" aria-label="{{ __('Delete') }}"><x-icon name="x" /></button></form>@endcan
+                            @can('orders.manage')<x-delete-button :action="route('rim-loadings.destroy', $l)" :confirm="__('Delete this loading?')" :label="''" small :danger="false" aria-label="{{ __('Delete') }}" />@endcan
                         @endif</b></div>
                 @endforeach
                 @can('orders.manage')

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\RimLoadingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class RimLoading extends Model
 {
     /** @use HasFactory<RimLoadingFactory> */
-    use HasFactory, RecordsCashOut;
+    use HasFactory, RecordsCashOut, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -77,5 +78,10 @@ class RimLoading extends Model
     public function cashOutUrl(): string
     {
         return route('rim-loadings.index');
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Rim loading').' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' rims)';
     }
 }

@@ -21,10 +21,7 @@
                 <td class="r" style="white-space:nowrap">
                     <a class="btn sm" href="{{ route('designations.edit', $designation) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                     @if ($designation->employees_count === 0)
-                        <form method="POST" action="{{ route('designations.destroy', $designation) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete :name?', ['name' => $designation->name])))">
-                            @csrf @method('DELETE')
-                            <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $designation->name]) }}"><x-icon name="x" /></button>
-                        </form>
+                        <x-delete-button :action="route('designations.destroy', $designation)" :confirm="__('Delete :name?', ['name' => $designation->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $designation->name]) }}" />
                     @endif
                 </td>
             </tr>

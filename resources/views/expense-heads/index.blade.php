@@ -22,10 +22,7 @@
                 <td class="r" style="white-space:nowrap">
                     <a class="btn sm" href="{{ route('expense-heads.edit', $head) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                     @if ($head->expenses_count === 0)
-                        <form method="POST" action="{{ route('expense-heads.destroy', $head) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete the :name head?', ['name' => $head->name])))">
-                            @csrf @method('DELETE')
-                            <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $head->name]) }}"><x-icon name="x" /></button>
-                        </form>
+                        <x-delete-button :action="route('expense-heads.destroy', $head)" :confirm="__('Delete the :name head?', ['name' => $head->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $head->name]) }}" />
                     @endif
                 </td>
             </tr>

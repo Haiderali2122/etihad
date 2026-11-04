@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ContractorPaymentKind;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\ContractorPaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ContractorPayment extends Model
 {
     /** @use HasFactory<ContractorPaymentFactory> */
-    use HasFactory, RecordsCashOut, RequiresApproval;
+    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -97,5 +98,10 @@ class ContractorPayment extends Model
     public function cashOutUrl(): string
     {
         return route('contractors.show', $this->contractor_id);
+    }
+
+    public function deletionLabel(): string
+    {
+        return $this->kind->label().' Rs '.number_format($this->amount).' — '.($this->contractor?->name ?? '');
     }
 }

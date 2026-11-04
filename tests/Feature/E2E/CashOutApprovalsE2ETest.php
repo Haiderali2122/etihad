@@ -168,7 +168,7 @@ class CashOutApprovalsE2ETest extends TestCase
         $this->get(route('expenses.create'))->assertForbidden();
         $this->get(route('expense-heads.edit', $this->head))->assertForbidden();
         $this->put(route('expense-heads.update', $this->head), ['name' => 'Hacked', 'color' => '#000000'])->assertForbidden();
-        $this->delete(route('expense-heads.destroy', $this->head))->assertForbidden();
+        $this->delete(route('expense-heads.destroy', $this->head), ['delete_note' => 'Test reason'])->assertForbidden();
         $this->patch(route('approvals.update', ['expense', $expense->id]), ['decision' => 'approve'])->assertForbidden();
 
         $this->assertSame('Petrol', $this->head->refresh()->name);
@@ -306,7 +306,7 @@ class CashOutApprovalsE2ETest extends TestCase
         $this->assertSame(1500, $expense->amount);
         $this->assertSame(ApprovalStatus::Pending, $expense->status);
 
-        $this->delete('/expenses/'.$expense->id)->assertStatus(405);
+        $this->delete('/expenses/'.$expense->id, ['delete_note' => 'Test reason'])->assertStatus(405);
         $this->assertModelExists($expense);
     }
 
@@ -500,7 +500,7 @@ class CashOutApprovalsE2ETest extends TestCase
         $this->put(route('expense-heads.update', $this->head), ['name' => 'Petrol', 'color' => '#262B7E']);
         $this->assertFalse($this->head->refresh()->is_active);
 
-        $this->delete(route('expense-heads.destroy', $diesel))->assertRedirect(route('expense-heads.index'));
+        $this->delete(route('expense-heads.destroy', $diesel), ['delete_note' => 'Test reason'])->assertRedirect(route('expense-heads.index'));
         $this->assertModelMissing($diesel);
     }
 
@@ -530,7 +530,7 @@ class CashOutApprovalsE2ETest extends TestCase
         $this->travelBack();
 
         $this->actingAs($this->owner)->from(route('expense-heads.index'))
-            ->delete(route('expense-heads.destroy', $this->head))
+            ->delete(route('expense-heads.destroy', $this->head), ['delete_note' => 'Test reason'])
             ->assertRedirect(route('expense-heads.index'))
             ->assertSessionHasErrors('head');
         $this->assertModelExists($this->head);

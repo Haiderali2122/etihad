@@ -7,6 +7,7 @@ use App\Enums\ContractorJobKind;
 use App\Enums\PaperIssueKind;
 use App\Enums\PrintMode;
 use App\Enums\WorkOrderStage;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use App\Support\PaperStock;
 use App\Support\PressMath;
@@ -25,7 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class WorkOrder extends Model
 {
     /** @use HasFactory<WorkOrderFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {

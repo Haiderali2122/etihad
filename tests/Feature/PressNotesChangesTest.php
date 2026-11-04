@@ -192,7 +192,7 @@ class PressNotesChangesTest extends TestCase
         $expense = $loading->refresh()->cashOutExpense;
         $this->assertSame(720, $expense->amount);
         $this->assertSame('Loading labour', $expense->head->name);
-        $this->actingAs($this->owner)->delete(route('rim-loadings.destroy', $loading))->assertStatus(409);
+        $this->actingAs($this->owner)->delete(route('rim-loadings.destroy', $loading), ['delete_note' => 'Test reason'])->assertStatus(409);
     }
 
     public function test_rims_cannot_be_loaded_while_the_order_is_still_printing(): void
@@ -252,7 +252,7 @@ class PressNotesChangesTest extends TestCase
         $this->assertSame(1800, $job->refresh()->amount);
         $this->assertSame(1800, Expense::query()->where('source_type', $job->getMorphClass())->sole()->amount);
 
-        $this->actingAs($this->owner)->delete(route('processors.destroy', $ali))->assertSessionHasErrors('processor');
+        $this->actingAs($this->owner)->delete(route('processors.destroy', $ali), ['delete_note' => 'Test reason'])->assertSessionHasErrors('processor');
         $this->assertModelExists($ali);
     }
 
@@ -262,7 +262,7 @@ class PressNotesChangesTest extends TestCase
         $processor = Party::query()->where('name', 'Bilal Plates')->sole();
         $this->assertSame(PartyKind::PlateProcessor, $processor->kind);
 
-        $this->actingAs($this->owner)->delete(route('processors.destroy', $processor))->assertRedirect(route('processors.index'));
+        $this->actingAs($this->owner)->delete(route('processors.destroy', $processor), ['delete_note' => 'Test reason'])->assertRedirect(route('processors.index'));
         $this->assertModelMissing($processor);
     }
 
@@ -379,8 +379,8 @@ class PressNotesChangesTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertSame(3500, $job->refresh()->amount);
 
-        $this->actingAs($this->owner)->delete(route('contractor-payments.destroy', $payment));
-        $this->actingAs($this->owner)->delete(route('contractor-jobs.destroy', $job));
+        $this->actingAs($this->owner)->delete(route('contractor-payments.destroy', $payment), ['delete_note' => 'Test reason']);
+        $this->actingAs($this->owner)->delete(route('contractor-jobs.destroy', $job), ['delete_note' => 'Test reason']);
         $this->assertModelMissing($payment);
         $this->assertModelMissing($job);
     }

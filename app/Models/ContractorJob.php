@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ContractorJobKind;
+use App\Models\Concerns\RecordsDeletion;
 use App\Support\PressMath;
 use Database\Factories\ContractorJobFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ContractorJob extends Model
 {
     /** @use HasFactory<ContractorJobFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -73,5 +74,10 @@ class ContractorJob extends Model
         return $this->kind === ContractorJobKind::Folding
             ? "{$qty($this->forms)} × ".number_format($this->copies)." ÷ 1000 × {$qty($this->folding_rate)}"
             : "({$qty($this->forms)} × {$qty($this->form_rate)} + {$qty($this->copy_rate)}) × ".number_format($this->copies).' ÷ 1000';
+    }
+
+    public function deletionLabel(): string
+    {
+        return $this->kind->label().' — '.($this->contractor?->name ?? '').($this->workOrder ? ' ('.$this->workOrder->number.')' : '');
     }
 }

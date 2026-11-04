@@ -28,10 +28,7 @@
                     <td class="r" style="white-space:nowrap">
                         <a class="btn sm" href="{{ route('users.edit', $u) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
                         @unless ($u->is(auth()->user()))
-                            <form method="POST" action="{{ route('users.destroy', $u) }}" style="display:inline" onsubmit="return confirm(@js(__('Delete :name? They will no longer be able to sign in.', ['name' => $u->name])))">
-                                @csrf @method('DELETE')
-                                <button class="btn sm" type="submit" style="color:var(--bad)" aria-label="{{ __('Delete :name', ['name' => $u->name]) }}"><x-icon name="x" /></button>
-                            </form>
+                            <x-delete-button :action="route('users.destroy', $u)" :confirm="__('Delete :name? They will no longer be able to sign in.', ['name' => $u->name])" :label="''" small aria-label="{{ __('Delete :name', ['name' => $u->name]) }}" />
                         @endunless
                     </td>
                 </tr>

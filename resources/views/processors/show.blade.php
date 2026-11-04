@@ -3,7 +3,7 @@
         <x-slot:actions>
             @can('plates.manage')
                 <a class="btn" href="{{ route('processors.edit', $processor) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
-                <form method="POST" action="{{ route('processors.destroy', $processor) }}" onsubmit="return confirm(@js(__('Delete :n?', ['n' => $processor->name])))">@csrf @method('DELETE')<button class="btn" type="submit" style="color:var(--bad)"><x-icon name="x" />{{ __('Delete') }}</button></form>
+                <x-delete-button :action="route('processors.destroy', $processor)" :confirm="__('Delete :n?', ['n' => $processor->name])" :label="__('Delete')" />
                 <a class="btn primary" href="{{ route('plate-jobs.create', ['processor' => $processor->id]) }}"><x-icon name="plus" />{{ __('Add plate job') }}</a>
             @endcan
         </x-slot:actions>
