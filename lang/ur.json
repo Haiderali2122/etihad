@@ -1258,5 +1258,19 @@
     "Younus ka khata": "یونس کا کھاتہ",
     "amount": "رقم",
     "item": "چیز",
-    "of Rs :n billed": ":n روپے کے بل میں سے"
+    "of Rs :n billed": ":n روپے کے بل میں سے",
+    ":count payment|:count payments": ":count ادائیگی|:count ادائیگیاں",
+    "Add a line for each payment: its head, who was paid and how much. The receipt shows every line and the total. Spends within the daily limit are approved straight away; anything over goes to the owner.": "ہر ادائیگی کی الگ لائن بنائیں: اس کی مد، کس کو دی اور کتنی رقم۔ رسید پر ہر لائن اور کل رقم نظر آئے گی۔ روزانہ حد کے اندر خرچ فوراً منظور ہوتا ہے؛ اس سے زیادہ مالک کے پاس جاتا ہے۔",
+    "Contractor payment": "ٹھیکیدار کی ادائیگی",
+    "Machine repair": "مشین مرمت",
+    "New head": "نئی مد",
+    "Outside press bill": "بیرونی پریس کا بل",
+    "Payments": "ادائیگیاں",
+    "Plate bill": "پلیٹوں کا بل",
+    "Salary advance": "تنخواہ کا ایڈوانس",
+    "Truck loading labour": "ٹرک لوڈنگ کی مزدوری",
+    "What for (optional)": "کس لیے (اختیاری)",
+    "head": "مد",
+    "paid to": "ادائیگی بنام",
+    "what for": "کس لیے"
 }

@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Expense;
+use App\Models\ExpenseHead;
 use App\Models\ExpenseItem;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,6 +21,8 @@ class ExpenseItemFactory extends Factory
     {
         return [
             'expense_id' => Expense::factory(),
+            'expense_head_id' => ExpenseHead::factory(),
+            'paid_to' => fake()->company(),
             'description' => fake()->randomElement(['Tea for night shift', 'Diesel, 20 litres', 'Machine oil', 'Envelopes']),
             'amount' => fake()->numberBetween(100, 5000),
         ];

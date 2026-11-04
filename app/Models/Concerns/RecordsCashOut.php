@@ -63,7 +63,8 @@ trait RecordsCashOut
         // Entries that wait for the owner pass their status on; the rest are paid when recorded.
         $status = in_array(RequiresApproval::class, class_uses_recursive($this), true) ? $this->status : ApprovalStatus::Approved;
 
-        ($expense ?? new Expense)->forceFill([
+        $expense ??= new Expense;
+        $expense->forceFill([
             'source_type' => $this->getMorphClass(),
             'source_id' => $this->getKey(),
             'spent_on' => Carbon::parse($data['date'])->toDateString(),
@@ -80,5 +81,32 @@ trait RecordsCashOut
             'reviewed_at' => $this->reviewed_at ?? null,
             'review_note' => $this->review_note ?? null,
         ])->saveQuietly();
+
+        // Its one line on the receipt, so spending by head reads every expense the same way.
+        $expense->items()->delete();
+        $expense->items()->create([
+            'expense_head_id' => $expense->expense_head_id, 'paid_to' => $expense->paid_to,
+            'description' => $expense->reason, 'amount' => $expense->amount,
+        ]);
+    }
+
+    /**
+     * A short name for where the payment was made, shown on its Cash-out row and receipt.
+     */
+    public function cashOutSource(): string
+    {
+        return match (class_basename($this)) {
+            'Purchase' => __('Purchase bill'),
+            'MachineRepair' => __('Machine repair'),
+            'ContractorPayment' => __('Contractor payment'),
+            'PlateJob' => __('Plate bill'),
+            'OutsidePrintReceipt' => __('Outside press bill'),
+            'Dispatch' => __('Truck loading labour'),
+            'RimLoading' => __('Younus ka khata'),
+            'SalaryAdvance' => __('Salary advance'),
+            'Loan' => __('Staff loan'),
+            'PayrollRun' => __('Salaries'),
+            default => __('Payment'),
+        };
     }
 }

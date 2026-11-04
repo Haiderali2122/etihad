@@ -7,6 +7,7 @@ use App\Http\Requests\StoreExpenseRequest;
 use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
+use App\Models\ExpenseItem;
 use App\Models\InventoryCategory;
 use App\Models\Machine;
 use App\Models\Setting;
@@ -25,8 +26,9 @@ class ExpenseController extends Controller
         $headId = $request->integer('head') ?: null;
 
         return view('expenses.index', [
-            'expenses' => Expense::query()->with(['head', 'user', 'machine', 'source'])
-                ->when($headId, fn ($q) => $q->where('expense_head_id', $headId))
+            'expenses' => Expense::query()->with(['head', 'user', 'machine', 'source', 'items.head'])
+                // A receipt can hold several heads; it is listed under each of them.
+                ->when($headId, fn ($q) => $q->whereHas('items', fn ($q) => $q->where('expense_head_id', $headId)))
                 ->latest('spent_on')->latest('id')->paginate(30)->withQueryString(),
             'floats' => CashFloat::query()->with('user')->latest('given_on')->take(10)->get(),
             'heads' => ExpenseHead::query()->orderBy('name')->get(),
@@ -60,6 +62,7 @@ class ExpenseController extends Controller
             'category' => $category,
             'heads' => ExpenseHead::query()->active()->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
+            'payees' => $this->payees(),
             'back' => $category ? route('inventory.index', ['tab' => 'material-'.$category->id]) : route('expenses.index'),
         ]);
     }
@@ -91,7 +94,7 @@ class ExpenseController extends Controller
      */
     public function show(Expense $expense): View
     {
-        return view('expenses.show', ['expense' => $expense->load(['items', 'head', 'user', 'machine', 'category', 'source'])]);
+        return view('expenses.show', ['expense' => $expense->load(['items.head', 'head', 'user', 'machine', 'category', 'source'])]);
     }
 
     public function edit(Expense $expense): View
@@ -103,6 +106,7 @@ class ExpenseController extends Controller
             'category' => $expense->category,
             'heads' => ExpenseHead::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($expense->expense_head_id))->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
+            'payees' => $this->payees(),
             'back' => route('expenses.show', $expense),
         ]);
     }
@@ -134,7 +138,8 @@ class ExpenseController extends Controller
     }
 
     /**
-     * Header fields from the form; the amount is the total of the items and the reason lists them.
+     * Header fields from the form. The amount is the total of the lines; the head is the first line's, and the
+     * payee and reason list every line's, so the Cash-out row reads well for a receipt with several payments.
      */
     private function fill(Expense $expense, StoreExpenseRequest $request): void
     {
@@ -142,12 +147,12 @@ class ExpenseController extends Controller
 
         $expense->fill([
             'spent_on' => Carbon::parse($request->validated('spent_on'))->toDateString(),
-            'expense_head_id' => $request->validated('expense_head_id'),
+            'expense_head_id' => (int) $items->first()['expense_head_id'],
             'machine_id' => $request->validated('machine_id'),
             'inventory_category_id' => $request->validated('inventory_category_id'),
-            'paid_to' => $request->validated('paid_to'),
+            'paid_to' => mb_substr($items->pluck('paid_to')->unique()->implode(', '), 0, 255),
             'amount' => (int) $items->sum('amount'),
-            'reason' => mb_substr($items->pluck('description')->implode(', '), 0, 255),
+            'reason' => mb_substr($items->map(fn (array $i) => $i['description'] ?: ExpenseHead::query()->whereKey($i['expense_head_id'])->value('name'))->implode(', '), 0, 255),
         ]);
 
         if ($request->hasFile('attachment')) {
@@ -156,12 +161,25 @@ class ExpenseController extends Controller
     }
 
     /**
-     * @param  list<array{description: string, amount: int|string}>  $items
+     * People and shops paid before, offered as suggestions so the same name is typed the same way next time.
+     *
+     * @return list<string>
+     */
+    private function payees(): array
+    {
+        return ExpenseItem::query()->whereNotNull('paid_to')->distinct()->orderBy('paid_to')->limit(300)->pluck('paid_to')->all();
+    }
+
+    /**
+     * @param  list<array{expense_head_id: int|string, paid_to: string, description: ?string, amount: int|string}>  $items
      */
     private function saveItems(Expense $expense, array $items): void
     {
         foreach ($items as $item) {
-            $expense->items()->create(['description' => $item['description'], 'amount' => (int) $item['amount']]);
+            $expense->items()->create([
+                'expense_head_id' => (int) $item['expense_head_id'], 'paid_to' => $item['paid_to'],
+                'description' => $item['description'] ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'), 'amount' => (int) $item['amount'],
+            ]);
         }
     }
 

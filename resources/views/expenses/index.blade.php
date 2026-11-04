@@ -27,10 +27,17 @@
                 @forelse ($expenses as $e)
                     <tr>
                         <td>{{ $e->spent_on->format('j M') }}<div class="meta">{{ $e->user->name }}</div></td>
-                        <td><span class="who"><i style="width:10px;height:10px;border-radius:3px;background:{{ $e->head->color }};display:inline-block"></i>{{ $e->head->localName() }}</span></td>
+                        @php $lineHeads = $e->items->map(fn ($i) => $i->head ?? $e->head)->unique('id')->values(); @endphp
+                        <td>@foreach ($lineHeads->isNotEmpty() ? $lineHeads : collect([$e->head]) as $h)<span class="who"><i style="width:10px;height:10px;border-radius:3px;background:{{ $h->color }};display:inline-block"></i>{{ $h->localName() }}</span>@endforeach</td>
                         <td>{{ $e->paid_to }}</td>
-                        <td>{{ $e->reason }}@if ($e->machine)<div class="meta">{{ $e->machine->code }}</div>@endif
-                            @if ($e->isLinked() && $e->source)<div class="meta"><a href="{{ $e->source->cashOutUrl() }}">{{ __('Paid on its own tab') }}</a></div>@endif</td>
+                        <td>
+                            @if ($e->isLinked() && $e->source)
+                                <a href="{{ $e->source->cashOutUrl() }}">{{ $e->source->cashOutSource() }}</a><div class="meta">{{ $e->reason }}</div>
+                            @else
+                                {{ $e->reason }}@if ($e->items->count() > 1)<div class="meta">{{ trans_choice(':count payment|:count payments', $e->items->count()) }}</div>@endif
+                            @endif
+                            @if ($e->machine)<div class="meta">{{ $e->machine->code }}</div>@endif
+                        </td>
                         <td class="r num"><b>Rs {{ number_format($e->amount) }}</b></td>
                         <td><x-badge :tone="$e->status->tone()">{{ $e->status->label() }}</x-badge>@if ($e->review_note)<div class="meta">{{ $e->review_note }}</div>@endif</td>
                         <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $e->attachment])<a class="btn sm" href="{{ route('expenses.show', $e) }}"><x-icon name="printer" />{{ __('Receipt') }}</a></td>

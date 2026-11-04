@@ -221,16 +221,16 @@ class CashOutApprovalsE2ETest extends TestCase
         $inactive = ExpenseHead::factory()->create(['is_active' => false]);
 
         $this->actingAs($this->manager)->post(route('expenses.store'), [])
-            ->assertSessionHasErrors(['spent_on', 'expense_head_id', 'paid_to', 'items']);
+            ->assertSessionHasErrors(['spent_on', 'items']);
 
         $this->post(route('expenses.store'), $this->expensePayload(['amount' => 0]))->assertSessionHasErrors('items.0.amount');
         $this->post(route('expenses.store'), $this->expensePayload(['amount' => -5]))->assertSessionHasErrors('items.0.amount');
         $this->post(route('expenses.store'), $this->expensePayload(['amount' => '12.5']))->assertSessionHasErrors('items.0.amount');
         $this->post(route('expenses.store'), $this->expensePayload(['spent_on' => 'not-a-date']))->assertSessionHasErrors('spent_on');
-        $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => $inactive->id]))->assertSessionHasErrors('expense_head_id');
-        $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => 99999]))->assertSessionHasErrors('expense_head_id');
+        $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => $inactive->id]))->assertSessionHasErrors('items.0.expense_head_id');
+        $this->post(route('expenses.store'), $this->expensePayload(['expense_head_id' => 99999]))->assertSessionHasErrors('items.0.expense_head_id');
         $this->post(route('expenses.store'), $this->expensePayload(['machine_id' => 99999]))->assertSessionHasErrors('machine_id');
-        $this->post(route('expenses.store'), $this->expensePayload(['paid_to' => str_repeat('a', 121)]))->assertSessionHasErrors('paid_to');
+        $this->post(route('expenses.store'), $this->expensePayload(['paid_to' => str_repeat('a', 121)]))->assertSessionHasErrors('items.0.paid_to');
         $this->post(route('expenses.store'), $this->expensePayload(['reason' => str_repeat('a', 256)]))->assertSessionHasErrors('items.0.description');
 
         $this->assertSame(0, Expense::count());

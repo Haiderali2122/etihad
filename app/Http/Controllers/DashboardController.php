@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\MachineStatus;
 use App\Models\CashFloat;
 use App\Models\Expense;
+use App\Models\ExpenseItem;
 use App\Models\Machine;
 use App\Models\MachineRepair;
 use App\Models\PaperIssue;
@@ -75,9 +76,9 @@ class DashboardController extends Controller
      */
     private function spendByHead(Carbon $since, Carbon $until): array
     {
-        return Expense::query()
-            ->notRejected()
-            ->whereBetween('spent_on', [$since, $until])
+        // Read from the payment lines: one receipt can hold several heads.
+        return ExpenseItem::query()
+            ->whereHas('expense', fn ($q) => $q->notRejected()->whereBetween('spent_on', [$since, $until]))
             ->with('head')
             ->get()
             ->groupBy('expense_head_id')

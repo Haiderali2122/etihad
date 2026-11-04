@@ -38,6 +38,16 @@ class ExpenseHead extends Model
         return $this->hasMany(Expense::class);
     }
 
+    /**
+     * Payment lines under this head, from any receipt (a receipt can hold several heads).
+     *
+     * @return HasMany<ExpenseItem, $this>
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(ExpenseItem::class);
+    }
+
     public function localName(): string
     {
         return app()->getLocale() === 'ur' && $this->name_ur ? $this->name_ur : $this->name;

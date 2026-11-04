@@ -28,4 +28,19 @@ class ExpenseFactory extends Factory
             'reason' => fake()->sentence(3),
         ];
     }
+
+    /**
+     * Like the Add expense form, every receipt gets its payment line.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Expense $expense): void {
+            if ($expense->items()->doesntExist()) {
+                $expense->items()->create([
+                    'expense_head_id' => $expense->expense_head_id, 'paid_to' => $expense->paid_to,
+                    'description' => $expense->reason, 'amount' => $expense->amount,
+                ]);
+            }
+        });
+    }
 }

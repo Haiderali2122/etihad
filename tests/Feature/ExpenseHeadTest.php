@@ -77,6 +77,6 @@ class ExpenseHeadTest extends TestCase
         $this->actingAs($manager)->post(route('expenses.store'), [
             'spent_on' => today()->toDateString(), 'expense_head_id' => $inactive->id,
             'paid_to' => 'Depot', 'amount' => 100, 'reason' => 'Test',
-        ])->assertSessionHasErrors('expense_head_id');
+        ])->assertSessionHasErrors('items.0.expense_head_id');
     }
 }

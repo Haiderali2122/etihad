@@ -319,6 +319,47 @@ class PressNotesChangesTest extends TestCase
             ->assertSee($expense->receiptNumber())->assertSee('Rope')->assertSee('Rs 750');
     }
 
+    public function test_one_receipt_holds_several_payments_each_with_its_own_head_and_payee(): void
+    {
+        $glue = ExpenseHead::factory()->create(['name' => 'Glue']);
+        $ink = ExpenseHead::factory()->create(['name' => 'Ink']);
+
+        $this->actingAs($this->owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(),
+            'items' => [
+                ['expense_head_id' => $glue->id, 'paid_to' => 'Fahad', 'amount' => 2000],
+                ['expense_head_id' => $ink->id, 'paid_to' => 'Fahad', 'description' => 'Black ink, 2 kg', 'amount' => 2000],
+                ['expense_head_id' => OtherOption::Value, 'head_other' => 'Diesel', 'paid_to' => 'PSO Ravi Road', 'amount' => 5000],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $expense = Expense::query()->sole();
+        $diesel = ExpenseHead::query()->where('name', 'Diesel')->sole();
+        $this->assertSame(9000, $expense->amount);
+        $this->assertSame('Fahad, PSO Ravi Road', $expense->paid_to);
+        $this->assertSame([$glue->id, $ink->id, $diesel->id], $expense->items->pluck('expense_head_id')->all());
+
+        $this->actingAs($this->owner)->get(route('expenses.show', $expense))->assertOk()
+            ->assertSeeInOrder(['Glue', 'Fahad', '2,000', 'Ink', 'Black ink, 2 kg', '2,000', 'Diesel', 'PSO Ravi Road', '5,000', 'Rs 9,000']);
+        $this->actingAs($this->owner)->get(route('expenses.index'))->assertSeeInOrder(['Glue', 'Ink', 'Diesel', 'Fahad, PSO Ravi Road', 'Rs 9,000']);
+        $this->actingAs($this->owner)->get(route('expenses.index', ['head' => $diesel->id]))->assertSee('Rs 9,000');
+
+        // Spending by head counts each payment under its own head.
+        $this->actingAs($this->owner)->get(route('reports.index'))->assertViewHas('expenses_by_head', fn ($rows) => $rows->keyBy('Head')->map(fn ($r) => $r['Amount (Rs)'])->sortKeys()->all() === ['Diesel' => 5000, 'Glue' => 2000, 'Ink' => 2000]);
+        // Heads and payees used before are offered next time.
+        $this->actingAs($this->owner)->get(route('expenses.create'))->assertSee('<option value="'.$diesel->id.'"', false)->assertSee('<option value="PSO Ravi Road">', false);
+    }
+
+    public function test_a_payment_made_on_another_tab_shows_where_it_came_from(): void
+    {
+        $purchase = Purchase::factory()->create(['amount' => 18500, 'bill_no' => 'B-77', 'created_by' => $this->owner->id]);
+        $expense = $purchase->cashOutExpense;
+
+        $this->actingAs($this->owner)->get(route('expenses.index'))->assertSee('Purchase bill')->assertSee('Rs 18,500');
+        $this->actingAs($this->owner)->get(route('expenses.show', $expense))->assertOk()
+            ->assertSee('Purchase bill')->assertSee('bill B-77')->assertSee($purchase->party->name)->assertSee('Rs 18,500');
+    }
+
     // 16: Folding & binding payments and jobs can be recorded and changed
 
     public function test_contractor_payments_and_jobs_are_edited_and_deleted(): void

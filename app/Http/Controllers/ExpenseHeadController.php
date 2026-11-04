@@ -20,9 +20,10 @@ class ExpenseHeadController extends Controller
     {
         return view('expense-heads.index', [
             'heads' => ExpenseHead::query()
-                ->withCount('expenses')
-                ->withSum(['expenses' => fn ($q) => $q->notRejected()], 'amount')
-                ->withSum(['expenses as month_amount' => fn ($q) => $q->notRejected()->where('spent_on', '>=', now()->startOfMonth())], 'amount')
+                // Totals come from the payment lines, so a receipt with several heads counts under each.
+                ->withCount('items as expenses_count')
+                ->withSum(['items as expenses_sum_amount' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected())], 'amount')
+                ->withSum(['items as month_amount' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected()->where('spent_on', '>=', now()->startOfMonth()))], 'amount')
                 ->orderByDesc('is_active')->orderBy('name')
                 ->get(),
         ]);
@@ -57,7 +58,7 @@ class ExpenseHeadController extends Controller
      */
     public function destroy(ExpenseHead $expenseHead): RedirectResponse
     {
-        if ($expenseHead->expenses()->exists()) {
+        if ($expenseHead->expenses()->exists() || $expenseHead->items()->exists()) {
             return back()->withErrors(['head' => __(':name has expenses recorded against it. Deactivate it instead so the history stays.', ['name' => $expenseHead->name])]);
         }
 

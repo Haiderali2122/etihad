@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\ExpenseItem;
 use App\Models\MachineRepair;
 use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
@@ -69,10 +70,11 @@ class ReportController extends Controller
      */
     private function expensesByHead(Carbon $from, Carbon $to): Collection
     {
-        return Expense::query()->approved()->with('head')
-            ->whereBetween('spent_on', [$from, $to])
+        // Read from the payment lines: one receipt can hold several heads.
+        return ExpenseItem::query()->with('head')
+            ->whereHas('expense', fn ($q) => $q->approved()->whereBetween('spent_on', [$from, $to]))
             ->get()
-            ->groupBy(fn (Expense $e) => $e->head->localName())
+            ->groupBy(fn (ExpenseItem $i) => $i->head->localName())
             ->map(fn (Collection $rows, string $name) => [__('Head') => $name, __('Entries') => $rows->count(), __('Amount (Rs)') => (int) $rows->sum('amount')])
             ->sortByDesc(__('Amount (Rs)'))
             ->values();
