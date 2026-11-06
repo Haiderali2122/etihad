@@ -73,7 +73,7 @@ class ContractorJobController extends Controller
         $binding = $contractorJob->kind === ContractorJobKind::Binding;
         $data = $request->validate([
             'job_on' => ['required', 'date', 'before_or_equal:today'],
-            'forms' => ['required', 'numeric', 'min:0.5'],
+            'forms' => ['required', 'numeric', 'min:0.01', 'max:9999', 'decimal:0,2'],
             'copies' => ['required', 'integer', 'min:1'],
             'folding_rate' => [$binding ? 'nullable' : 'required', 'numeric', 'decimal:0,2', 'min:0'],
             'form_rate' => [$binding ? 'required' : 'nullable', 'numeric', 'decimal:0,2', 'min:0'],

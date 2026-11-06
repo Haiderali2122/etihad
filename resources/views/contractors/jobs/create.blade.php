@@ -18,7 +18,7 @@
                 </div>
                 <x-field name="contractor_id" :label="__('Contractor')" :options="$contractors->mapWithKeys(fn ($c) => [$c->id => $c->name.' · '.$c->work->label()])" :value="$contractorId" :placeholder="__('Choose contractor')" required />
                 <x-field name="kind" :label="__('Work')" :options="collect(\App\Enums\ContractorJobKind::cases())->mapWithKeys(fn ($k) => [$k->value => $k->label()])" :value="$kind" required />
-                <x-field name="forms" type="number" step="0.5" min="0.5" :label="__('Forms per copy')" :value="$order ? \App\Models\InventoryItem::qty($order->forms) : null" required />
+                <x-field name="forms" type="number" step="0.01" min="0.01" :label="__('Forms per copy')" :value="$order ? \App\Models\InventoryItem::qty($order->forms) : null" required />
                 <x-field name="copies" type="number" min="1" :label="__('Total books (copies)')" :value="$order?->copies" required />
                 <x-field name="folding_rate" type="number" step="0.01" min="0" :label="__('Folding rate (per 1,000 forms)')" />
                 <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form (per 1,000 books)')" />

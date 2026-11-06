@@ -29,7 +29,7 @@ class StoreContractorJobRequest extends FormRequest
             'work_order_id' => ['nullable', 'exists:work_orders,id'],
             'kind' => ['required', Rule::enum(ContractorJobKind::class)],
             'job_on' => ['required', 'date'],
-            'forms' => ['required', 'numeric', 'min:0.5'],
+            'forms' => ['required', 'numeric', 'min:0.01', 'max:9999', 'decimal:0,2'],
             'copies' => ['required', 'integer', 'min:1'],
             'folding_rate' => ['nullable', 'required_if:kind,folding', 'numeric', 'decimal:0,2', 'min:0'],
             'form_rate' => ['nullable', 'required_if:kind,binding', 'numeric', 'decimal:0,2', 'min:0'],

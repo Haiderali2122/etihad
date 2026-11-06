@@ -40,6 +40,19 @@ class BookTest extends TestCase
         $this->assertNull($book->formats[1]->folding_rate);
     }
 
+    public function test_forms_take_any_value_up_to_two_decimals(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('books.store'), ['name' => 'Decimal forms', 'is_active' => 1, 'formats' => [['name' => 'Standard', 'forms' => 20.25]]])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('20.25', Book::query()->sole()->formats->sole()->forms);
+        $this->actingAs($user)->get(route('paper-issues.create'))->assertOk()->assertSee('id="c_formats" type="number" min="0" step="0.01"', false);
+
+        $this->actingAs($user)->post(route('books.store'), ['name' => 'Too fine', 'formats' => [['name' => 'Standard', 'forms' => 20.255]]])
+            ->assertSessionHasErrors('formats.0.forms');
+    }
+
     public function test_a_book_needs_at_least_one_format_with_forms(): void
     {
         $user = User::factory()->create();

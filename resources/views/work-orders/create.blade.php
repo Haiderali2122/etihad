@@ -24,7 +24,7 @@
                     @error('book_format_id')<span class="err">{{ $message }}</span>@enderror
                 </div>
                 <x-field name="copies" type="number" min="1" :label="__('Copies')" required />
-                <x-field name="wastage_percent" type="number" step="0.5" min="0" :label="__('Wastage %')" :value="$defaultWastage" required />
+                <x-field name="wastage_percent" type="number" step="0.01" min="0" :label="__('Wastage %')" :value="$defaultWastage" required />
 
                 <div @class(['field', 'full', 'has-err' => $errors->has('paper_type_id') || $errors->has('party_id')])>
                     <label for="f_stock">{{ __('Paper and party') }} <span class="muted">*</span></label>

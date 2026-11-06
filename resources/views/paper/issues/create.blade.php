@@ -57,9 +57,9 @@
                     @can('books.manage')<span class="hint"><a href="{{ route('books.create') }}">{{ __('Book not listed? Add it') }}</a></span>@endcan
                 </div>
                 <div class="form" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-                    <div class="field"><label for="c_formats">{{ __('Formats per book') }}</label><input id="c_formats" type="number" min="0" step="0.5"></div>
+                    <div class="field"><label for="c_formats">{{ __('Formats per book') }}</label><input id="c_formats" type="number" min="0" step="0.01"></div>
                     <x-field name="copies" type="number" min="1" :label="__('Copies')" />
-                    <x-field name="wastage_percent" type="number" step="0.5" min="0" :label="__('Wastage %')" :value="$defaultWastage" />
+                    <x-field name="wastage_percent" type="number" step="0.01" min="0" :label="__('Wastage %')" :value="$defaultWastage" />
                 </div>
                 <div class="eq" id="c_eq">{{ __('Formats × copies ÷ sheets per rim, plus wastage %') }}</div>
             </div></div>

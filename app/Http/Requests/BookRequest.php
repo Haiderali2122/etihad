@@ -36,7 +36,7 @@ class BookRequest extends FormRequest
             'formats.*.id' => ['nullable', 'integer'],
             'formats.*.name' => ['required', 'string', 'max:80', 'distinct'],
             'formats.*.size' => ['nullable', 'string', 'max:40'],
-            'formats.*.forms' => ['required', 'numeric', 'min:0.5', 'max:999'],
+            'formats.*.forms' => ['required', 'numeric', 'min:0.01', 'max:999', 'decimal:0,2'],
             'formats.*.pages' => ['nullable', 'integer', 'min:1'],
             'formats.*.paper_type_id' => ['nullable', 'exists:paper_types,id'],
             'formats.*.folding_rate' => ['nullable', 'numeric', 'min:0'],

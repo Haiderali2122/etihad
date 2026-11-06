@@ -4,7 +4,7 @@
     <form method="POST" action="{{ route('contractor-jobs.update', $job) }}" class="card form-card">
         @csrf @method('PUT')
         <div class="card-b"><div class="form">
-            <x-field name="forms" type="number" step="0.5" min="0.5" :label="__('Forms per copy')" :value="\App\Models\InventoryItem::qty($job->forms)" required />
+            <x-field name="forms" type="number" step="0.01" min="0.01" :label="__('Forms per copy')" :value="\App\Models\InventoryItem::qty($job->forms)" required />
             <x-field name="copies" type="number" min="1" :label="__('Total books (copies)')" :value="$job->copies" required />
             @if ($binding)
                 <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form (per 1,000 books)')" :value="(float) $job->form_rate" required />

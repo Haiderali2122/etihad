@@ -660,7 +660,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->post(route('books.store'), ['name' => 'X'])->assertSessionHasErrors(['formats' => 'Add at least one format.']);
         $this->post(route('books.store'), ['name' => '', 'formats' => [['name' => 'A', 'forms' => 1]]])->assertSessionHasErrors('name');
         $this->post(route('books.store'), ['name' => 'Urdu Reader Class 5', 'formats' => [['name' => 'A', 'forms' => 1]]])->assertSessionHasErrors('name');
-        $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 0.25]]])->assertSessionHasErrors('formats.0.forms');
+        $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 0.001]]])->assertSessionHasErrors('formats.0.forms');
         $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 1000]]])->assertSessionHasErrors('formats.0.forms');
         $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 1], ['name' => 'A', 'forms' => 2]]])->assertSessionHasErrors('formats.1.name');
         $this->post(route('books.store'), ['name' => 'X', 'formats' => [['name' => 'A', 'forms' => 1, 'folding_rate' => -1]]])->assertSessionHasErrors('formats.0.folding_rate');

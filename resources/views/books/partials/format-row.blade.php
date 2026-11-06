@@ -11,7 +11,7 @@
     </td>
     <td><input name="formats[{{ $i }}][size]" value="{{ $row['size'] ?? '' }}" placeholder="20 × 30" aria-label="{{ __('Size') }}"></td>
     <td>
-        <input type="number" step="0.5" min="0.5" name="formats[{{ $i }}][forms]" value="{{ $trim($row['forms'] ?? '') }}" placeholder="10" aria-label="{{ __('Forms') }}" required>
+        <input type="number" step="0.01" min="0.01" name="formats[{{ $i }}][forms]" value="{{ $trim($row['forms'] ?? '') }}" placeholder="10" aria-label="{{ __('Forms') }}" required>
         @if ($err('forms'))<span class="err">{{ $err('forms') }}</span>@endif
     </td>
     <td><input type="number" min="1" name="formats[{{ $i }}][pages]" value="{{ $row['pages'] ?? '' }}" aria-label="{{ __('Pages') }}"></td>

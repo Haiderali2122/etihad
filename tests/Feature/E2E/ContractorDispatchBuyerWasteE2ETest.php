@@ -278,7 +278,7 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
         $this->actingAs($this->owner);
 
         $this->post(route('contractor-jobs.store'), ['folding_rate' => null] + $base)->assertSessionHasErrors('folding_rate');
-        $this->post(route('contractor-jobs.store'), ['forms' => 0.25] + $base)->assertSessionHasErrors('forms');
+        $this->post(route('contractor-jobs.store'), ['forms' => 0.001] + $base)->assertSessionHasErrors('forms');
         $this->post(route('contractor-jobs.store'), ['copies' => 0] + $base)->assertSessionHasErrors('copies');
         $this->post(route('contractor-jobs.store'), ['copies' => 2.5] + $base)->assertSessionHasErrors('copies');
         $this->post(route('contractor-jobs.store'), ['kind' => 'gluing'] + $base)->assertSessionHasErrors('kind');
