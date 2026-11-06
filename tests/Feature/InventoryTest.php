@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\PartyKind;
 use App\Models\Employee;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
@@ -12,6 +13,7 @@ use App\Models\Party;
 use App\Models\Purchase;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\OtherOption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -83,6 +85,31 @@ class InventoryTest extends TestCase
         ])->assertRedirect(route('inventory.index', ['tab' => 'issues']));
 
         $this->assertSame(16.5, $item->fresh()->balance());
+    }
+
+    public function test_a_new_supplier_can_be_typed_in_and_is_offered_next_time(): void
+    {
+        $manager = User::factory()->create();
+        $item = InventoryItem::factory()->create();
+        $existing = Party::factory()->create(['name' => 'Ravi Traders']);
+
+        $this->actingAs($manager)->get(route('purchases.create'))->assertOk()->assertSee('Other… (type a new one)');
+        $purchase = fn (string $name) => $this->actingAs($manager)->post(route('purchases.store'), [
+            'purchased_on' => today()->toDateString(), 'party_id' => OtherOption::Value, 'party_id_other' => $name,
+            'inventory_item_id' => $item->id, 'quantity' => 2, 'rate' => 100,
+        ])->assertSessionHasNoErrors();
+
+        $purchase('  Hafiz   Paint House ');
+        $new = Party::query()->where('name', 'Hafiz Paint House')->sole();
+        $this->assertSame(PartyKind::Supplier, $new->kind);
+        $this->assertSame($new->id, Purchase::query()->latest('id')->first()->party_id);
+
+        // The same name typed again, in any case, is reused rather than duplicated.
+        $purchase('ravi traders');
+        $this->assertSame($existing->id, Purchase::query()->latest('id')->first()->party_id);
+        $this->assertSame(1, Party::query()->whereRaw('LOWER(name) = ?', ['ravi traders'])->count());
+
+        $this->actingAs($manager)->get(route('purchases.create'))->assertSee('Hafiz Paint House');
     }
 
     public function test_cannot_move_out_more_than_the_balance(): void

@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\PartyKind;
+use App\Models\Party;
+use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,6 +17,14 @@ class StorePurchaseRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * A supplier typed in under "Other…" is added to Parties as a supplier, or matched to an existing party.
+     */
+    protected function prepareForValidation(): void
+    {
+        OtherOption::resolve($this, 'party_id', Party::class, ['kind' => PartyKind::Supplier, 'is_active' => true]);
     }
 
     /**

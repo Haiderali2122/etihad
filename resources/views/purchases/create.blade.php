@@ -12,7 +12,7 @@
             @csrf
             <div class="card-b"><div class="form">
                 <x-field name="purchased_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                <x-field name="party_id" :label="__('Supplier')" :options="$parties->pluck('name', 'id')" :placeholder="__('Choose supplier')" required />
+                <x-field-other name="party_id" :label="__('Supplier')" :options="$parties->pluck('name', 'id')" :placeholder="__('Choose supplier')" required />
                 <div @class(['field', 'full', 'has-err' => $errors->has('inventory_item_id')])>
                     <label for="f_inventory_item_id">{{ __('Item') }} <span class="muted">*</span></label>
                     <select id="f_inventory_item_id" name="inventory_item_id" required>
