@@ -103,4 +103,17 @@ class Party extends Model
             || $this->buyerEntries()->exists()
             || WorkOrder::query()->where(fn (Builder $q) => $q->where('party_id', $this->id)->orWhere('press_id', $this->id)->orWhere('buyer_id', $this->id))->exists();
     }
+
+    /**
+     * A party with any paper, purchases, orders, loadings or payments recorded stays, so those records keep their name.
+     */
+    public function deletionBlocker(): ?string
+    {
+        $used = $this->purchases()->exists() || $this->paperReceipts()->exists() || $this->paperIssues()->exists()
+            || $this->machineRepairs()->exists() || $this->plateJobs()->exists() || $this->dispatches()->exists() || $this->buyerEntries()->exists()
+            || WorkOrder::query()->where(fn ($q) => $q->where('party_id', $this->id)->orWhere('press_id', $this->id)->orWhere('buyer_id', $this->id))->exists()
+            || InventoryIssue::query()->where('party_id', $this->id)->exists();
+
+        return $used ? __(':name has records against it. Mark it inactive instead so old records keep the name.', ['name' => $this->name]) : null;
+    }
 }

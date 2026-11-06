@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use App\Support\PaperStock;
 use Database\Factories\PaperReceiptFactory;
@@ -17,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PaperReceipt extends Model
 {
     /** @use HasFactory<PaperReceiptFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -116,5 +118,25 @@ class PaperReceipt extends Model
     public function approvalUrl(): string
     {
         return route('paper-receipts.show', $this);
+    }
+
+    /**
+     * A slip whose rims have already gone out cannot be removed; the stock would go below zero.
+     */
+    public function deletionBlocker(): ?string
+    {
+        if ($this->status === ApprovalStatus::Rejected) {
+            return null;
+        }
+        $available = app(PaperStock::class)->available($this->paper_type_id, $this->party_id);
+
+        return $available < $this->quantity
+            ? __('Rims from slip :no have already been issued (:n left in stock), so it cannot be deleted.', ['no' => $this->slip_no, 'n' => number_format($available)])
+            : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Slip').' '.$this->slip_no.' — '.number_format($this->quantity).' '.($this->paperType?->code ?? '').', '.($this->party?->name ?? '');
     }
 }

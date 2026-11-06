@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ApprovalStatus;
 use App\Enums\PaperIssueKind;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\PaperIssueFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PaperIssue extends Model
 {
     /** @use HasFactory<PaperIssueFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -140,5 +141,17 @@ class PaperIssue extends Model
     public function approvalUrl(): string
     {
         return route('paper.index', ['tab' => 'issues']);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        $order = WorkOrder::query()->where('paper_issue_id', $this->id)->value('number');
+
+        return $order ? __('This paper was issued for work order :no; change or delete that order instead.', ['no' => $order]) : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return number_format($this->quantity).' '.($this->paperType?->code ?? '').' — '.($this->party?->name ?? '').', '.$this->issued_on?->format('j M Y');
     }
 }

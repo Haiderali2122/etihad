@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BuyerEntryKind;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\BuyerEntryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BuyerEntry extends Model
 {
     /** @use HasFactory<BuyerEntryFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -41,5 +42,10 @@ class BuyerEntry extends Model
     public function dispatch(): BelongsTo
     {
         return $this->belongsTo(Dispatch::class);
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->buyer?->name ?? '').' — '.$this->kind->label().' Rs '.number_format($this->amount).', '.$this->entry_on?->format('j M Y');
     }
 }

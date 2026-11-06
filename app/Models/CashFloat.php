@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\CashFloatFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CashFloat extends Model
 {
     /** @use HasFactory<CashFloatFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -31,5 +32,10 @@ class CashFloat extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Cash given to :name', ['name' => $this->user?->name]).' — Rs '.number_format($this->amount).', '.$this->given_on?->format('j M Y');
     }
 }

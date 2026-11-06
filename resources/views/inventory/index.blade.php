@@ -71,7 +71,7 @@
                         <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
-                        <td class="r"><a class="btn sm" href="{{ route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a></td>
+                        <td class="r"><a class="btn sm" href="{{ route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="6"><div class="empty"><b>{{ __('No payments yet') }}</b>{{ __('Record who was paid, for what and when with Add payment.') }}</div></td></tr>
@@ -84,7 +84,7 @@
                     <thead><tr><th>{{ __('Item') }}</th><th class="r">{{ __('In stock') }}</th><th></th></tr></thead>
                     <tbody>
                     @foreach ($materialItems as $item)
-                        <tr><td><a class="main" href="{{ route('inventory-items.show', $item) }}" style="color:inherit">{{ $item->localName() }}</a></td><td class="r num"><b>{{ InventoryItem::qty($item->balance()) }}</b> {{ $item->unit }}</td><td class="r">@can('inventory.issue')@if ($item->balance() > 0)<a class="btn sm" href="{{ route('inventory-issues.create', ['item' => $item->id]) }}"><x-icon name="send" />{{ __('Move out') }}</a>@endif @endcan</td></tr>
+                        <tr><td><a class="main" href="{{ route('inventory-items.show', $item) }}" style="color:inherit">{{ $item->localName() }}</a></td><td class="r num"><b>{{ InventoryItem::qty($item->balance()) }}</b> {{ $item->unit }}</td><td class="r">@can('inventory.issue')@if ($item->balance() > 0)<a class="btn sm" href="{{ route('inventory-issues.create', ['item' => $item->id]) }}"><x-icon name="send" />{{ __('Move out') }}</a>@endif @endcan @can('inventory.manage')<x-delete-button :action="route('inventory-items.destroy', $item)" :confirm="__('Delete :name?', ['name' => $item->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td></tr>
                     @endforeach
                     </tbody>
                 </table></div>
@@ -92,10 +92,10 @@
             @if ($materialIssues->isNotEmpty())
                 <div class="card-h"><div><h3>{{ __('Moved out') }}</h3></div></div>
                 <div class="tbl-wrap"><table>
-                    <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Item') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th></tr></thead>
+                    <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Item') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th></th></tr></thead>
                     <tbody>
                     @foreach ($materialIssues as $i)
-                        <tr><td>{{ $i->issued_on->format('j M Y') }}</td><td>{{ $i->item->localName() }}</td><td class="r num">{{ InventoryItem::qty($i->quantity) }} {{ $i->item->unit }}</td><td>{{ $i->issued_to }}@if ($i->machine)<div class="meta">{{ $i->machine->code }}</div>@endif</td></tr>
+                        <tr><td>{{ $i->issued_on->format('j M Y') }}</td><td>{{ $i->item->localName() }}</td><td class="r num">{{ InventoryItem::qty($i->quantity) }} {{ $i->item->unit }}</td><td>{{ $i->issued_to }}@if ($i->machine)<div class="meta">{{ $i->machine->code }}</div>@endif</td><td class="r">@can('inventory.issue')<x-delete-button :action="route('records.destroy', ['inventory-issue', $i->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td></tr>
                     @endforeach
                     </tbody>
                 </table></div>
@@ -119,6 +119,7 @@
                                 @can('inventory.issue')@if ($item->balance() > 0)<a class="btn sm" href="{{ route('inventory-issues.create', ['item' => $item->id]) }}"><x-icon name="send" />{{ __('Move out') }}</a>@endif @endcan
                                 @can('purchases.create')<a class="btn sm" href="{{ route('purchases.create', ['item' => $item->id]) }}" aria-label="{{ __('Add purchase') }}"><x-icon name="plus" /></a>@endcan
                             @endif
+                            @can('inventory.manage')<x-delete-button :action="route('inventory-items.destroy', $item)" :confirm="__('Delete :name?', ['name' => $item->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan
                         </td>
                     </tr>
                 @empty
@@ -139,7 +140,7 @@
                         <td class="r num">{{ number_format((float) $p->rate, 2) }}</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge>@if ($p->review_note)<div class="meta">{{ $p->review_note }}</div>@endif</td>
-                        <td class="r">@include('partials.attachment', ['path' => $p->attachment])</td>
+                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $p->attachment])@can('purchases.create')<x-delete-button :action="route('records.destroy', ['purchase', $p->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="8"><div class="empty"><b>{{ __('No purchases yet') }}</b></div></td></tr>
@@ -149,7 +150,7 @@
             {{ $purchases->links() }}
         @else
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
                     <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
@@ -176,9 +177,10 @@
                                 —
                             @endif
                         </td>
+                        <td class="r">@can('inventory.issue')<x-delete-button :action="route('records.destroy', ['inventory-issue', $i->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="7"><div class="empty"><b>{{ __('Nothing moved out yet') }}</b></div></td></tr>
+                    <tr><td colspan="8"><div class="empty"><b>{{ __('Nothing moved out yet') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

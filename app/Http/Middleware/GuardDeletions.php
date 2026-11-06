@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Every delete (any DELETE request) needs the "Delete records" permission and a reason. This checks both in
- * one place, so no delete button, existing or new, can skip the permission or the note.
+ * Every delete (any DELETE request) needs the "Delete records" permission. The reason is optional;
+ * when given it is kept (trimmed) for the deletion log.
  */
 class GuardDeletions
 {
@@ -19,9 +19,7 @@ class GuardDeletions
             abort_unless(Gate::allows('records.delete'), 403, __('You do not have permission to delete records.'));
 
             $note = trim((string) $request->input('delete_note'));
-            abort_if($note === '', 422, __('A reason is needed to delete this.'));
-
-            $request->merge(['delete_note' => mb_substr($note, 0, 255)]);
+            $request->merge(['delete_note' => $note === '' ? null : mb_substr($note, 0, 255)]);
         }
 
         return $next($request);

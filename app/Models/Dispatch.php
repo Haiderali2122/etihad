@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\WorkOrderStage;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\DispatchFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Dispatch extends Model
 {
     /** @use HasFactory<DispatchFactory> */
-    use HasFactory, RecordsCashOut;
+    use HasFactory, RecordsCashOut, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -98,5 +99,27 @@ class Dispatch extends Model
     public function cashOutUrl(): string
     {
         return route('dispatches.show', $this);
+    }
+
+    /**
+     * An order closes once every copy is loaded, and opens again if a load is reduced, moved or deleted.
+     */
+    public static function syncOrderStage(?WorkOrder $order): void
+    {
+        if (! $order) {
+            return;
+        }
+
+        $loaded = (int) $order->dispatches()->sum('copies');
+        if ($loaded >= $order->copies && $order->stage !== WorkOrderStage::Dispatched) {
+            $order->update(['stage' => WorkOrderStage::Dispatched]);
+        } elseif ($loaded < $order->copies && $order->stage === WorkOrderStage::Dispatched) {
+            $order->update(['stage' => WorkOrderStage::Ready]);
+        }
+    }
+
+    protected static function booted(): void
+    {
+        static::deleted(fn (self $dispatch) => self::syncOrderStage($dispatch->workOrder));
     }
 }

@@ -5,6 +5,7 @@
     'icon' => 'x',
     'small' => false,
     'danger' => true,
+    'redirect' => null,
 ])
 {{--
     A delete button that asks for a reason before submitting. Shows only for roles with the "Delete records"
@@ -15,6 +16,7 @@
         @csrf
         @method('DELETE')
         <input type="hidden" name="delete_note" value="">
+        @if ($redirect)<input type="hidden" name="return_to" value="{{ $redirect }}">@endif
         <button type="submit" {{ $attributes->class(['btn', 'sm' => $small])->merge($danger ? ['style' => 'color:var(--bad)'] : []) }}>
             @if ($icon)<x-icon :name="$icon" />@endif{{ $label ?? $slot }}
         </button>

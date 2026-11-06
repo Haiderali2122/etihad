@@ -80,6 +80,11 @@ class RimLoading extends Model
         return route('rim-loadings.index');
     }
 
+    public function deletionBlocker(): ?string
+    {
+        return $this->isPaid() ? __('A paid loading cannot be deleted.') : null;
+    }
+
     public function deletionLabel(): string
     {
         return __('Rim loading').' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' rims)';

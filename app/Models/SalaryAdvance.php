@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AdvanceKind;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\SalaryAdvanceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SalaryAdvance extends Model
 {
     /** @use HasFactory<SalaryAdvanceFactory> */
-    use HasFactory, RecordsCashOut, RequiresApproval;
+    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -130,5 +131,19 @@ class SalaryAdvance extends Model
     public function cashOutUrl(): string
     {
         return route('salary-advances.show', $this);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        return match (true) {
+            $this->payroll_run_id !== null => __('This advance was already deducted from a finalized payroll. Reopen that payroll to change it.'),
+            $this->foreman_sheet_id !== null => __('This advance is part of a foreman sheet; change or delete the sheet instead.'),
+            default => null,
+        };
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->employee?->name ?? '').' — Rs '.number_format($this->amount).', '.$this->given_on?->format('j M Y');
     }
 }

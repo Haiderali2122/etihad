@@ -4,6 +4,7 @@
             @if ($loan->isCleared())<x-badge tone="good">{{ __('Cleared') }}</x-badge>@else<x-badge :tone="$loan->status->tone()">{{ $loan->status->label() }}</x-badge>@endif
             <a class="btn" href="{{ route('loans.index') }}">{{ __('Back') }}</a>
             @can('advances.create')@if ($loan->repayments->isEmpty())<a class="btn" href="{{ route('loans.edit', $loan) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endif @endcan
+            @can('advances.create')<x-delete-button :action="route('records.destroy', ['loan', $loan->id])" :confirm="__('Delete this loan and its cash repayments?')" :label="__('Delete')" :redirect="route('loans.index')" />@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print') }}</button>
         </x-slot:actions>
     </x-page-head>
@@ -28,12 +29,12 @@
             <div class="card">
                 <div class="card-h"><div><h3>{{ __('Repayments') }}</h3></div></div>
                 <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
-                    <thead><tr><th>{{ __('Date') }}</th><th>{{ __('How') }}</th><th class="r">{{ __('Amount') }}</th></tr></thead>
+                    <thead><tr><th>{{ __('Date') }}</th><th>{{ __('How') }}</th><th class="r">{{ __('Amount') }}</th><th></th></tr></thead>
                     <tbody>
                     @forelse ($loan->repayments as $r)
-                        <tr><td>{{ $r->paid_on->format('j M Y') }}</td><td>{{ $r->payrollRun ? __('Salary :month', ['month' => $r->payrollRun->label()]) : ($r->note ?: __('Cash')) }}</td><td class="r num"><b>Rs {{ number_format($r->amount) }}</b></td></tr>
+                        <tr><td>{{ $r->paid_on->format('j M Y') }}</td><td>{{ $r->payrollRun ? __('Salary :month', ['month' => $r->payrollRun->label()]) : ($r->note ?: __('Cash')) }}</td><td class="r num"><b>Rs {{ number_format($r->amount) }}</b></td><td class="r">@unless ($r->payroll_run_id)@can('advances.create')<x-delete-button :action="route('records.destroy', ['loan-repayment', $r->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan @endunless</td></tr>
                     @empty
-                        <tr><td colspan="3"><div class="empty">{{ __('Nothing repaid yet') }}</div></td></tr>
+                        <tr><td colspan="4"><div class="empty">{{ __('Nothing repaid yet') }}</div></td></tr>
                     @endforelse
                     </tbody>
                 </table></div></div>

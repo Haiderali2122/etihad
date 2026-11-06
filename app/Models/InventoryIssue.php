@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\InventoryIssueFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class InventoryIssue extends Model
 {
     /** @use HasFactory<InventoryIssueFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -124,5 +125,10 @@ class InventoryIssue extends Model
     public function party(): BelongsTo
     {
         return $this->belongsTo(Party::class);
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->item?->name ?? '').' × '.($this->quantity + 0).' to '.$this->issued_to.', '.$this->issued_on?->format('j M Y');
     }
 }

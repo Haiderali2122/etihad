@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\PurchaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */
-    use HasFactory, RecordsCashOut, RequiresApproval;
+    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -116,5 +118,25 @@ class Purchase extends Model
     public function cashOutUrl(): string
     {
         return route('inventory-items.show', $this->inventory_item_id);
+    }
+
+    /**
+     * Stock bought and already moved out cannot be removed; the item would go below zero.
+     */
+    public function deletionBlocker(): ?string
+    {
+        if ($this->status === ApprovalStatus::Rejected || ! $this->item) {
+            return null;
+        }
+        $balance = $this->item->balance();
+
+        return $balance < (float) $this->quantity
+            ? __('Some of this :item has already been moved out (:n left in stock), so the purchase cannot be deleted.', ['item' => $this->item->name, 'n' => $balance + 0])
+            : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->item?->name ?? '').' × '.($this->quantity + 0).' — Rs '.number_format($this->amount).', '.($this->party?->name ?? '');
     }
 }

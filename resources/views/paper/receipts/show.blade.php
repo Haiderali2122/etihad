@@ -8,6 +8,7 @@
             @include('partials.attachment', ['path' => $receipt->attachment])
             <a class="btn" href="{{ route('paper.index', ['tab' => 'receipts']) }}">{{ __('Back') }}</a>
             @can('paper.receive')<a class="btn" href="{{ route('paper-receipts.edit', $receipt) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+            @can('paper.receive')<x-delete-button :action="route('records.destroy', ['paper-receipt', $receipt->id])" :confirm="__('Delete slip :no?', ['no' => $receipt->slip_no])" :label="__('Delete')" :redirect="route('paper.index', ['tab' => 'receipts'])" />@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print slip') }}</button>
         </x-slot:actions>
     </x-page-head>

@@ -19,7 +19,7 @@
                 <td class="r num">Rs {{ number_format($paid) }}</td>
                 <td class="r num"><b @style(['color:var(--bad)' => $billed > $paid])>Rs {{ number_format($billed - $paid) }}</b></td>
                 <td><x-badge :tone="$p->is_active ? 'good' : 'mute'">{{ $p->is_active ? __('Active') : __('Inactive') }}</x-badge></td>
-                <td class="r" style="white-space:nowrap">@can('plates.manage')<a class="btn sm" href="{{ route('processors.edit', $p) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan</td>
+                <td class="r" style="white-space:nowrap">@can('plates.manage')<a class="btn sm" href="{{ route('processors.edit', $p) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@can('plates.manage')<x-delete-button :action="route('processors.destroy', $p)" :confirm="__('Delete :n?', ['n' => $p->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan @endcan</td>
             </tr>
         @empty
             <tr><td colspan="9"><div class="empty"><b>{{ __('No processors yet') }}</b>{{ __('Add the plate processors you work with.') }}</div></td></tr>

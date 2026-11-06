@@ -5,11 +5,21 @@ namespace App\Http\Controllers;
 use App\Enums\ApprovalStatus;
 use App\Http\Requests\StoreExpenseRequest;
 use App\Models\CashFloat;
+use App\Models\ContractorPayment;
+use App\Models\Dispatch;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
 use App\Models\ExpenseItem;
 use App\Models\InventoryCategory;
+use App\Models\Loan;
 use App\Models\Machine;
+use App\Models\MachineRepair;
+use App\Models\OutsidePrintReceipt;
+use App\Models\PayrollRun;
+use App\Models\PlateJob;
+use App\Models\Purchase;
+use App\Models\RimLoading;
+use App\Models\SalaryAdvance;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\OtherOption;
@@ -17,6 +27,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class ExpenseController extends Controller
@@ -142,13 +153,43 @@ class ExpenseController extends Controller
      */
     public function destroy(Expense $expense): RedirectResponse
     {
-        abort_if($expense->isLinked(), 409, __('This payment was made on another tab; delete it there.'));
-
         $number = $expense->receiptNumber();
+        $source = $expense->isLinked() ? $expense->source : null;
+
+        if ($source) {
+            // A mirrored payment is deleted together with the record it came from, so the two tabs never disagree.
+            abort_unless(Gate::allows(self::SourcePermissions[$source::class] ?? 'records.delete'), 403);
+            if ($blocker = $source->deletionBlocker()) {
+                return back()->withErrors(['delete' => $blocker]);
+            }
+            $kind = $source->cashOutSource();
+            DB::transaction(fn () => $source->delete());
+
+            return redirect()->route('expenses.index')->with('status', __(':kind deleted; it is gone from Cash-out too.', ['kind' => $kind]));
+        }
+
         $expense->delete();
 
         return redirect()->route('expenses.index')->with('status', __('Expense :no deleted.', ['no' => $number]));
     }
+
+    /**
+     * The permission that manages each kind of payment mirrored into Cash-out.
+     *
+     * @var array<class-string, string>
+     */
+    private const SourcePermissions = [
+        Purchase::class => 'purchases.create',
+        MachineRepair::class => 'machines.repair',
+        ContractorPayment::class => 'contractors.manage',
+        PlateJob::class => 'plates.manage',
+        OutsidePrintReceipt::class => 'orders.manage',
+        Dispatch::class => 'dispatch.manage',
+        RimLoading::class => 'orders.manage',
+        SalaryAdvance::class => 'advances.create',
+        Loan::class => 'advances.create',
+        PayrollRun::class => 'payroll.prepare',
+    ];
 
     /**
      * Header fields from the form. The amount is the total of the lines; the head is the first line's, and the
@@ -163,9 +204,9 @@ class ExpenseController extends Controller
             'expense_head_id' => (int) $items->first()['expense_head_id'],
             'machine_id' => $request->validated('machine_id'),
             'inventory_category_id' => $request->validated('inventory_category_id'),
-            'paid_to' => mb_substr($items->pluck('paid_to')->unique()->implode(', '), 0, 255),
+            'paid_to' => mb_substr($items->pluck('paid_to')->filter()->unique()->implode(', ') ?: '—', 0, 255),
             'amount' => (int) $items->sum('amount'),
-            'reason' => mb_substr($items->map(fn (array $i) => $i['description'] ?: ExpenseHead::query()->whereKey($i['expense_head_id'])->value('name'))->implode(', '), 0, 255),
+            'reason' => mb_substr($items->map(fn (array $i) => ($i['description'] ?? null) ?: ExpenseHead::query()->whereKey($i['expense_head_id'])->value('name'))->implode(', '), 0, 255),
         ]);
 
         if ($request->hasFile('attachment')) {
@@ -184,14 +225,14 @@ class ExpenseController extends Controller
     }
 
     /**
-     * @param  list<array{expense_head_id: int|string, paid_to: string, description: ?string, amount: int|string}>  $items
+     * @param  list<array{expense_head_id: int|string, paid_to: ?string, description: ?string, amount: int|string}>  $items
      */
     private function saveItems(Expense $expense, array $items): void
     {
         foreach ($items as $item) {
             $expense->items()->create([
-                'expense_head_id' => (int) $item['expense_head_id'], 'paid_to' => $item['paid_to'],
-                'description' => $item['description'] ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'), 'amount' => (int) $item['amount'],
+                'expense_head_id' => (int) $item['expense_head_id'], 'paid_to' => ($item['paid_to'] ?? null) ?: null,
+                'description' => ($item['description'] ?? null) ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'), 'amount' => (int) $item['amount'],
             ]);
         }
     }

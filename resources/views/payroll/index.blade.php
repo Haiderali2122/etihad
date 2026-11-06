@@ -24,7 +24,7 @@
                 <td class="r num">{{ $run->lines_count }}</td>
                 <td class="r num"><b>Rs {{ number_format($run->lines_sum_net_pay ?? 0) }}</b></td>
                 <td><x-badge :tone="$run->status->tone()">{{ $run->status->label() }}</x-badge></td>
-                <td class="r"><a class="btn sm" href="{{ route('payroll.show', $run) }}">{{ __('Open') }}</a></td>
+                <td class="r"><a class="btn sm" href="{{ route('payroll.show', $run) }}">{{ __('Open') }}</a>@if ($run->isDraft())@can('payroll.prepare')<x-delete-button :action="route('records.destroy', ['payroll-run', $run->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan @endif</td>
             </tr>
         @empty
             <tr><td colspan="6"><div class="empty"><b>{{ __('No payroll yet') }}</b>{{ __('Pick a month above to prepare the first one.') }}</div></td></tr>

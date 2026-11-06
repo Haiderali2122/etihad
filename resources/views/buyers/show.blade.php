@@ -43,13 +43,13 @@
     <div class="card">
         <div class="card-h"><div><h3>{{ __('Advances and adjustments') }}</h3></div></div>
         <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
-            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Load') }}</th><th>{{ __('Note') }}</th><th class="r">{{ __('Amount') }}</th></tr></thead>
+            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Load') }}</th><th>{{ __('Note') }}</th><th class="r">{{ __('Amount') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($entries as $e)
                 <tr><td>{{ $e->entry_on->format('j M Y') }}</td><td>{{ $e->kind->label() }}</td><td>{{ $e->dispatch?->number ?? '—' }}</td><td>{{ $e->note ?: '—' }}</td>
-                    <td class="r num"><b>{{ $e->kind->value === 'adjustment' ? '−' : '+' }} Rs {{ number_format($e->amount) }}</b></td></tr>
+                    <td class="r num"><b>{{ $e->kind->value === 'adjustment' ? '−' : '+' }} Rs {{ number_format($e->amount) }}</b></td><td class="r">@can('buyers.manage')<x-delete-button :action="route('records.destroy', ['buyer-entry', $e->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td></tr>
             @empty
-                <tr><td colspan="5"><div class="empty">{{ __('No advances yet') }}</div></td></tr>
+                <tr><td colspan="6"><div class="empty">{{ __('No advances yet') }}</div></td></tr>
             @endforelse
             </tbody>
         </table></div></div>

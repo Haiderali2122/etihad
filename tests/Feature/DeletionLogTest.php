@@ -38,15 +38,15 @@ class DeletionLogTest extends TestCase
         $this->assertSame('Sheikh Sahib', $log->deleted_by_name);
     }
 
-    public function test_a_delete_without_a_reason_is_refused_and_nothing_is_removed(): void
+    public function test_the_reason_is_optional_and_a_blank_one_is_logged_as_none(): void
     {
         $owner = User::factory()->owner()->create();
         $godown = Godown::factory()->create();
 
-        $this->actingAs($owner)->delete(route('godowns.destroy', $godown), ['delete_note' => '  '])->assertStatus(422);
+        $this->actingAs($owner)->delete(route('godowns.destroy', $godown), ['delete_note' => '  '])->assertRedirect(route('godowns.index'));
 
-        $this->assertModelExists($godown);
-        $this->assertSame(0, Deletion::query()->count());
+        $this->assertModelMissing($godown);
+        $this->assertNull(Deletion::query()->sole()->note);
     }
 
     public function test_a_role_without_the_delete_permission_cannot_delete_and_sees_no_button(): void
@@ -91,10 +91,9 @@ class DeletionLogTest extends TestCase
         $job = PlateJob::factory()->create(['paid_on' => today(), 'amount' => 4000, 'created_by' => $owner->id]);
         $mirror = $job->cashOutExpense()->sole();
 
-        // The mirrored row cannot be deleted from Cash-out and shows no delete button there.
-        $this->actingAs($owner)->get(route('expenses.index'))->assertDontSee('value="DELETE"', false);
-        $this->actingAs($owner)->get(route('expenses.show', $mirror))->assertDontSee('value="DELETE"', false);
-        $this->actingAs($owner)->delete(route('expenses.destroy', $mirror), ['delete_note' => 'x'])->assertStatus(409);
+        // The mirrored row has a delete button in Cash-out too; it would delete the plate job itself.
+        $this->actingAs($owner)->get(route('expenses.index'))->assertSee('value="DELETE"', false);
+        $this->actingAs($owner)->get(route('expenses.show', $mirror))->assertSee('value="DELETE"', false);
 
         $this->actingAs($owner)->get(route('plate-jobs.index', ['show' => 'all']))->assertSee(route('plate-jobs.destroy', $job), false);
         $this->actingAs($owner)->delete(route('plate-jobs.destroy', $job), ['delete_note' => 'Wrong processor'])->assertRedirect();

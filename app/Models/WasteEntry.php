@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\WasteDisposal;
 use App\Enums\WasteStage;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\WasteEntryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class WasteEntry extends Model
 {
     /** @use HasFactory<WasteEntryFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -36,5 +37,10 @@ class WasteEntry extends Model
     public function workOrder(): BelongsTo
     {
         return $this->belongsTo(WorkOrder::class);
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Waste').' '.($this->quantity + 0).' '.$this->unit.', '.$this->recorded_on?->format('j M Y');
     }
 }

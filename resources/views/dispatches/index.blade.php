@@ -20,7 +20,7 @@
                     <td class="r num">{{ number_format($d->bundles) }}<div class="meta">× {{ $d->copies_per_bundle }}</div></td>
                     <td class="r num"><b>{{ number_format($d->copies) }}</b></td>
                     <td class="r num">Rs {{ number_format($d->labour_amount) }}</td>
-                    <td class="r"><a class="btn sm" href="{{ route('dispatches.show', $d) }}"><x-icon name="printer" />{{ __('Slip') }}</a></td>
+                    <td class="r"><a class="btn sm" href="{{ route('dispatches.show', $d) }}"><x-icon name="printer" />{{ __('Slip') }}</a>@can('dispatch.manage')<x-delete-button :action="route('records.destroy', ['dispatch', $d->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="8"><div class="empty"><b>{{ __('Nothing loaded yet') }}</b></div></td></tr>

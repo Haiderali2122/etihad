@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\RepairKind;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\MachineRepairFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class MachineRepair extends Model
 {
     /** @use HasFactory<MachineRepairFactory> */
-    use HasFactory, RecordsCashOut, RequiresApproval;
+    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -111,5 +112,10 @@ class MachineRepair extends Model
     public function cashOutUrl(): string
     {
         return route('machines.show', $this->machine_id);
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->machine?->code ?? '').' — '.$this->description.', Rs '.number_format((int) $this->amount_paid);
     }
 }

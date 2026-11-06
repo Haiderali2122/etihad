@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PartyKind;
-use App\Enums\WorkOrderStage;
 use App\Http\Requests\StoreDispatchRequest;
 use App\Models\Book;
 use App\Models\Dispatch;
@@ -132,16 +131,7 @@ class DispatchController extends Controller
      */
     private function closeOrderIfLoaded(?WorkOrder $order): void
     {
-        if (! $order) {
-            return;
-        }
-
-        $loaded = (int) $order->dispatches()->sum('copies');
-        if ($loaded >= $order->copies && $order->stage !== WorkOrderStage::Dispatched) {
-            $order->update(['stage' => WorkOrderStage::Dispatched]);
-        } elseif ($loaded < $order->copies && $order->stage === WorkOrderStage::Dispatched) {
-            $order->update(['stage' => WorkOrderStage::Ready]);
-        }
+        Dispatch::syncOrderStage($order);
     }
 
     /**

@@ -34,6 +34,14 @@ trait RecordsDeletion
     }
 
     /**
+     * Why this record cannot be deleted (it would break stock, payroll or other records), or null when it can.
+     */
+    public function deletionBlocker(): ?string
+    {
+        return null;
+    }
+
+    /**
      * Whether this deletion gets its own line in the log. Records removed along with another (logged) record say no.
      */
     public function logsDeletion(): bool

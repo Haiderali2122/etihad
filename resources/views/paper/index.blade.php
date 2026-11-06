@@ -73,7 +73,7 @@
                         <td class="r num"><b>{{ number_format($r->quantity) }}</b></td>
                         <td>{{ $r->received_by }}</td>
                         <td><x-badge :tone="$r->status->tone()">{{ $r->status->label() }}</x-badge></td>
-                        <td class="r"><a class="btn sm" href="{{ route('paper-receipts.show', $r) }}"><x-icon name="eye" />{{ __('View slip') }}</a></td>
+                        <td class="r"><a class="btn sm" href="{{ route('paper-receipts.show', $r) }}"><x-icon name="eye" />{{ __('View slip') }}</a>@can('paper.receive')<x-delete-button :action="route('records.destroy', ['paper-receipt', $r->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="9"><div class="empty"><b>{{ __('No trucks received yet') }}</b></div></td></tr>
@@ -83,7 +83,7 @@
             {{ $receipts->links() }}
         @else
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
                     <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
@@ -112,9 +112,10 @@
                                 —
                             @endif
                         </td>
+                        <td class="r">@can('paper.issue')<x-delete-button :action="route('records.destroy', ['paper-issue', $i->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="9"><div class="empty"><b>{{ __('No paper issued yet') }}</b></div></td></tr>
+                    <tr><td colspan="10"><div class="empty"><b>{{ __('No paper issued yet') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

@@ -31,9 +31,10 @@
                     <td class="r num"><b>Rs {{ number_format($l->balance()) }}</b></td>
                     <td><div class="meter"><i style="width:{{ max(2, $l->repaid() / max(1, $l->amount) * 100) }}%"></i></div></td>
                     <td>@if ($l->isCleared())<x-badge tone="good">{{ __('Cleared') }}</x-badge>@else<x-badge :tone="$l->status->tone()">{{ $l->status->label() }}</x-badge>@endif</td>
+                    <td class="r">@can('advances.create')<x-delete-button :action="route('records.destroy', ['loan', $l->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
-                <tr><td colspan="8"><div class="empty"><b>{{ __('No loans here') }}</b></div></td></tr>
+                <tr><td colspan="9"><div class="empty"><b>{{ __('No loans here') }}</b></div></td></tr>
             @endforelse
             </tbody>
         </table></div>

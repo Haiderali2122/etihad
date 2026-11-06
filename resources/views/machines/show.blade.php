@@ -4,6 +4,7 @@
             <x-badge :tone="$machine->status->tone()">{{ $machine->status->label() }}</x-badge>
             <a class="btn" href="{{ route('machines.index') }}">{{ __('Back') }}</a>
             @can('machines.manage')<a class="btn" href="{{ route('machines.edit', $machine) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+            @can('machines.manage')<x-delete-button :action="route('records.destroy', ['machine', $machine->id])" :confirm="__('Delete machine :code?', ['code' => $machine->code])" :label="__('Delete')" :redirect="route('machines.index')" />@endcan
             @can('machines.repair')<a class="btn primary" href="{{ route('machine-repairs.create', ['machine' => $machine->id]) }}"><x-icon name="wrench" />{{ __('Log repair') }}</a>@endcan
         </x-slot:actions>
     </x-page-head>
@@ -28,7 +29,7 @@
                     <td class="r num">{{ $r->discount ? number_format($r->discount) : '—' }}</td>
                     <td class="r num"><b>Rs {{ number_format($r->amount_paid) }}</b></td>
                     <td><x-badge :tone="$r->status->tone()">{{ $r->status->label() }}</x-badge>@if ($r->review_note)<div class="meta">{{ $r->review_note }}</div>@endif</td>
-                    <td class="r">@include('partials.attachment', ['path' => $r->attachment])</td>
+                    <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $r->attachment])@can('machines.repair')<x-delete-button :action="route('records.destroy', ['machine-repair', $r->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="8"><div class="empty"><b>{{ __('No repairs logged') }}</b></div></td></tr>

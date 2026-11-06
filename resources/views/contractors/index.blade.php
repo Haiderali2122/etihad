@@ -29,7 +29,7 @@
                 <td class="r num"><b @style(['color:var(--bad)' => $balance > 0, 'color:var(--warn)' => $balance < 0])>{{ $balance < 0 ? __('Advance Rs :n', ['n' => number_format(-$balance)]) : 'Rs '.number_format($balance) }}</b></td>
                 <td class="r num">{{ $c->open_jobs }}</td>
                 <td><x-badge :tone="$c->is_active ? 'good' : 'mute'">{{ $c->is_active ? __('Active') : __('Inactive') }}</x-badge></td>
-                <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractors.show', ['contractor' => $c, 'kind' => 'advance']) }}#pay">{{ __('Advance') }}</a> <a class="btn sm primary" href="{{ route('contractors.show', ['contractor' => $c, 'kind' => 'payment']) }}#pay"><x-icon name="wallet" />{{ __('Pay') }}</a>@endcan</td>
+                <td class="r" style="white-space:nowrap">@can('contractors.manage')<a class="btn sm" href="{{ route('contractors.show', ['contractor' => $c, 'kind' => 'advance']) }}#pay">{{ __('Advance') }}</a> <a class="btn sm primary" href="{{ route('contractors.show', ['contractor' => $c, 'kind' => 'payment']) }}#pay"><x-icon name="wallet" />{{ __('Pay') }}</a>@endcan @can('contractors.manage')<x-delete-button :action="route('contractors.destroy', $c)" :confirm="__('Delete :name?', ['name' => $c->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
             </tr>
         @empty
             <tr><td colspan="8"><div class="empty"><b>{{ __('No contractors yet') }}</b></div></td></tr>

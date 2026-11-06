@@ -8,7 +8,7 @@
     $other = \App\Support\OtherOption::Value;
 @endphp
 <x-layouts.app :title="$heading">
-    <x-page-head :back="$back" :title="$heading" :subtitle="__('Add a line for each payment: its head, who was paid and how much. The receipt shows every line and the total. Spends within the daily limit are approved straight away; anything over goes to the owner.')" />
+    <x-page-head :back="$back" :title="$heading" :subtitle="__('Add a line for each payment: its head and how much, and who was paid if you like. The receipt shows every line and the total. Spends within the daily limit are approved straight away; anything over goes to the owner.')" />
     <form method="POST" action="{{ $editing ? route('expenses.update', $expense) : route('expenses.store') }}" enctype="multipart/form-data" class="card form-card">
         @csrf
         @if ($editing) @method('PUT') @endif
@@ -20,7 +20,7 @@
             <div @class(['field', 'full', 'has-err' => $errors->has('items') || $errors->has('items.*')])>
                 <label>{{ __('Payments') }} <span class="muted">*</span></label>
                 <div class="tbl-wrap"><table class="fmt-table no-stack">
-                    <thead><tr><th style="min-width:180px">{{ __('Head') }}</th><th style="min-width:160px">{{ __('Paid to') }}</th><th style="min-width:160px">{{ __('What for (optional)') }}</th><th class="r" style="width:140px">{{ __('Amount (Rs)') }}</th><th style="width:44px"></th></tr></thead>
+                    <thead><tr><th style="min-width:180px">{{ __('Head') }}</th><th style="min-width:160px">{{ __('Paid to (optional)') }}</th><th class="r" style="width:140px">{{ __('Amount (Rs)') }}</th><th style="width:44px"></th></tr></thead>
                     <tbody id="itemRows">
                     @foreach ($rows as $i => $row)
                         @php $isOther = (string) ($row['expense_head_id'] ?? '') === $other; @endphp
@@ -33,14 +33,13 @@
                                 </select>
                                 <input type="text" name="items[{{ $i }}][head_other]" value="{{ $row['head_other'] ?? '' }}" maxlength="80" placeholder="{{ __('Type the name') }}" aria-label="{{ __('New head') }}" @if (! $isOther) hidden @else required @endif style="margin-top:6px" data-head-other>
                             </td>
-                            <td><input type="text" name="items[{{ $i }}][paid_to]" value="{{ $row['paid_to'] ?? '' }}" maxlength="120" list="payees" aria-label="{{ __('Paid to') }}" required></td>
-                            <td><input type="text" name="items[{{ $i }}][description]" value="{{ $row['description'] ?? '' }}" maxlength="255" aria-label="{{ __('What for (optional)') }}"></td>
+                            <td><input type="text" name="items[{{ $i }}][paid_to]" value="{{ $row['paid_to'] ?? '' }}" maxlength="120" list="payees" aria-label="{{ __('Paid to (optional)') }}"></td>
                             <td><input type="number" min="1" name="items[{{ $i }}][amount]" value="{{ $row['amount'] ?? '' }}" aria-label="{{ __('Amount (Rs)') }}" required style="text-align:end" data-amount></td>
                             <td><button type="button" class="icon-btn danger" data-remove aria-label="{{ __('Remove item') }}"><x-icon name="x" /></button></td>
                         </tr>
                     @endforeach
                     </tbody>
-                    <tfoot><tr><td colspan="3"><button type="button" class="btn sm" id="addItem"><x-icon name="plus" />{{ __('Add item') }}</button></td><td class="r num"><b id="itemsTotal">Rs 0</b></td><td></td></tr></tfoot>
+                    <tfoot><tr><td colspan="2"><button type="button" class="btn sm" id="addItem"><x-icon name="plus" />{{ __('Add item') }}</button></td><td class="r num"><b id="itemsTotal">Rs 0</b></td><td></td></tr></tfoot>
                 </table></div>
                 <datalist id="payees">@foreach ($payees as $p)<option value="{{ $p }}">@endforeach</datalist>
                 @error('items')<span class="err">{{ $message }}</span>@enderror
@@ -64,7 +63,7 @@
                     const tr = rows.lastElementChild.cloneNode(true);
                     tr.querySelectorAll('input, select').forEach(el => {
                         el.name = el.name.replace(/items\[\d+]/, `items[${next}]`);
-                        if (el.matches('[data-amount], [data-head-other]') || el.name.endsWith('[description]')) { el.value = ''; }
+                        if (el.matches('[data-amount], [data-head-other]')) { el.value = ''; }
                     });
                     const box = tr.querySelector('[data-head-other]');
                     box.hidden = tr.querySelector('[data-head]').value !== other;

@@ -42,6 +42,7 @@
                     <td class="r" style="white-space:nowrap">
                         <a class="btn sm" href="{{ route('employees.show', $e) }}"><x-icon name="eye" />{{ __('View') }}</a>
                         @can('staff.manage')<a class="btn sm" href="{{ route('employees.edit', $e) }}" aria-label="{{ __('Edit :name', ['name' => $e->name]) }}"><x-icon name="edit" /></a>@endcan
+                        @can('staff.manage')<x-delete-button :action="route('employees.destroy', $e)" :confirm="__('Delete :name?', ['name' => $e->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan
                     </td>
                 </tr>
             @empty

@@ -4,6 +4,7 @@
             <x-badge :tone="$sheet->status->tone()">{{ $sheet->status->label() }}</x-badge>
             <a class="btn" href="{{ route('salary-advances.index') }}">{{ __('Back') }}</a>
             @can('advances.create')<a class="btn" href="{{ route('foreman-sheets.edit', $sheet) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+            @can('advances.create')<x-delete-button :action="route('records.destroy', ['foreman-sheet', $sheet->id])" :confirm="__('Delete this foreman sheet and all its advances?')" :label="__('Delete')" :redirect="route('salary-advances.index')" />@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print') }}</button>
         </x-slot:actions>
     </x-page-head>

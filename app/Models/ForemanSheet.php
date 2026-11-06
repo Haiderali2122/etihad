@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\ForemanSheetFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ForemanSheet extends Model
 {
     /** @use HasFactory<ForemanSheetFactory> */
-    use HasFactory, RequiresApproval;
+    use HasFactory, RecordsDeletion, RequiresApproval;
 
     /**
      * When the owner approves or sends back the sheet, its advances follow.
@@ -30,6 +31,8 @@ class ForemanSheet extends Model
                 SalaryAdvance::syncWithSheet($sheet);
             }
         });
+        // Its advances go with it, one by one so each also leaves Cash-out.
+        static::deleting(fn (self $sheet) => $sheet->advances()->get()->each->delete());
     }
 
     protected function casts(): array
@@ -100,5 +103,17 @@ class ForemanSheet extends Model
     public function approvalUrl(): string
     {
         return route('foreman-sheets.show', $this);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        return $this->advances()->whereNotNull('payroll_run_id')->exists()
+            ? __('Advances on this sheet are already deducted in a finalized payroll. Reopen that payroll first.')
+            : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Foreman sheet').' — '.($this->foreman?->name ?? '').', Rs '.number_format($this->amount).', '.$this->given_on?->format('j M Y');
     }
 }

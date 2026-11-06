@@ -294,22 +294,19 @@ class CashOutApprovalsE2ETest extends TestCase
             ->assertSee(Storage::disk('public')->url($expense->attachment));
     }
 
-    public function test_expense_can_be_edited_and_deleted_only_with_a_reason_and_a_manager_edit_waits_for_the_owner(): void
+    public function test_expense_can_be_edited_and_deleted_and_a_manager_edit_waits_for_the_owner(): void
     {
         $this->setLimitViaSettings(5000);
         $expense = $this->spend($this->manager, 1000);
         $this->assertSame(ApprovalStatus::Approved, $expense->status);
 
-        $this->actingAs($this->manager)->get(route('expenses.edit', $expense))->assertOk()->assertSee('Petrol for van');
+        $this->actingAs($this->manager)->get(route('expenses.edit', $expense))->assertOk()->assertSee('value="1000"', false)->assertDontSee('What for');
         $this->put(route('expenses.update', $expense), $this->expensePayload(['amount' => 1500]))->assertRedirect(route('expenses.show', $expense));
         $expense->refresh();
         $this->assertSame(1500, $expense->amount);
         $this->assertSame(ApprovalStatus::Pending, $expense->status);
 
-        $this->delete('/expenses/'.$expense->id)->assertStatus(422);
-        $this->assertModelExists($expense);
-
-        $this->delete('/expenses/'.$expense->id, ['delete_note' => 'Entered twice'])->assertRedirect(route('expenses.index'));
+        $this->delete('/expenses/'.$expense->id)->assertRedirect(route('expenses.index'));
         $this->assertModelMissing($expense);
     }
 

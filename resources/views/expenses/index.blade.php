@@ -40,8 +40,8 @@
                         </td>
                         <td class="r num"><b>Rs {{ number_format($e->amount) }}</b></td>
                         <td><x-badge :tone="$e->status->tone()">{{ $e->status->label() }}</x-badge>@if ($e->review_note)<div class="meta">{{ $e->review_note }}</div>@endif</td>
-                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $e->attachment])<a class="btn sm" href="{{ route('expenses.show', $e) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')@unless ($e->isLinked())
-                            <x-delete-button :action="route('expenses.destroy', $e)" :confirm="__('Delete expense :no?', ['no' => $e->receiptNumber()])" :label="''" small aria-label="{{ __('Delete') }}" />@endunless @endcan</td>
+                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $e->attachment])<a class="btn sm" href="{{ route('expenses.show', $e) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')
+                            <x-delete-button :action="route('expenses.destroy', $e)" :confirm="$e->isLinked() && $e->source ? __('Delete this :kind? It is also removed from its own tab.', ['kind' => mb_strtolower($e->source->cashOutSource())]) : __('Delete expense :no?', ['no' => $e->receiptNumber()])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="7"><div class="empty"><b>{{ __('No expenses yet') }}</b></div></td></tr>
@@ -69,7 +69,7 @@
                 <div class="card-h"><div><h3>{{ __('Cash given') }}</h3><div class="sub">{{ __('Latest 10') }}</div></div></div>
                 <div class="card-b"><div class="list">
                     @forelse ($floats as $f)
-                        <div class="row"><span class="ic-tile good"><x-icon name="wallet" /></span><div class="grow"><div class="t">{{ $f->user->name }}</div><div class="s">{{ $f->given_on->format('j M Y') }}{{ $f->note ? ' — '.$f->note : '' }}</div></div><b class="num">Rs {{ number_format($f->amount) }}</b></div>
+                        <div class="row"><span class="ic-tile good"><x-icon name="wallet" /></span><div class="grow"><div class="t">{{ $f->user->name }}</div><div class="s">{{ $f->given_on->format('j M Y') }}{{ $f->note ? ' — '.$f->note : '' }}</div></div><b class="num">Rs {{ number_format($f->amount) }}</b>@can('give-cash')<x-delete-button :action="route('records.destroy', ['cash-float', $f->id])" :label="''" small aria-label="{{ __('Delete') }}" :danger="false" />@endcan</div>
                     @empty
                         <div class="empty"><b>{{ __('No cash given yet') }}</b></div>
                     @endforelse

@@ -19,7 +19,7 @@
                     <td>{{ $party->phone }}</td>
                     <td class="r num">{{ $party->purchases_sum_amount ? 'Rs '.number_format($party->purchases_sum_amount) : '—' }}</td>
                     <td><x-badge :tone="$party->is_active ? 'good' : 'mute'">{{ $party->is_active ? __('Active') : __('Inactive') }}</x-badge></td>
-                    <td class="r"><a class="btn sm" href="{{ route('parties.edit', array_filter(['party' => $party, 'tab' => $kind?->value])) }}"><x-icon name="edit" />{{ __('Edit') }}</a></td>
+                    <td class="r"><a class="btn sm" href="{{ route('parties.edit', array_filter(['party' => $party, 'tab' => $kind?->value])) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@can('parties.manage')<x-delete-button :action="route('records.destroy', ['party', $party->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                 </tr>
             @empty
                 <tr><td colspan="6"><div class="empty"><b>{{ __('No parties yet') }}</b></div></td></tr>

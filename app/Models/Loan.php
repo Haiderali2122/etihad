@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\LoanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Loan extends Model
 {
     /** @use HasFactory<LoanFactory> */
-    use HasFactory, RecordsCashOut, RequiresApproval;
+    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -127,5 +128,17 @@ class Loan extends Model
     public function cashOutUrl(): string
     {
         return route('loans.show', $this);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        return $this->repayments()->whereNotNull('payroll_run_id')->exists()
+            ? __('Instalments of this loan were already deducted in a finalized payroll. Reopen that payroll first.')
+            : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return ($this->employee?->name ?? '').' — Rs '.number_format($this->amount).', '.$this->issued_on?->format('j M Y');
     }
 }

@@ -82,7 +82,7 @@
                 <div class="card-h"><div><h3>{{ __('Outside printing') }}</h3><div class="sub">{{ __(':n copies received back · :r rims returned', ['n' => number_format($printedBack), 'r' => number_format($order->outsideReceipts->sum('leftover_rims'))]) }}</div></div></div>
                 <div class="card-b">
                     @foreach ($order->outsideReceipts as $r)
-                        <div class="stat-line"><span>{{ $r->received_on->format('j M Y') }}</span><b>{{ number_format($r->printed_copies) }} {{ __('copies') }}@if ($r->leftover_rims) · {{ $r->leftover_rims }} {{ __('rims back') }}@endif @if ($r->bill_amount) · Rs {{ number_format($r->bill_amount) }}@endif</b></div>
+                        <div class="stat-line"><span>{{ $r->received_on->format('j M Y') }}</span><b>{{ number_format($r->printed_copies) }} {{ __('copies') }}@if ($r->leftover_rims) · {{ $r->leftover_rims }} {{ __('rims back') }}@endif @if ($r->bill_amount) · Rs {{ number_format($r->bill_amount) }}@endif @can('orders.manage')<x-delete-button :action="route('records.destroy', ['outside-print-receipt', $r->id])" :label="''" small aria-label="{{ __('Delete') }}" :danger="false" />@endcan</b></div>
                     @endforeach
                     @can('orders.manage')
                         @if ($order->paper_issue_id)

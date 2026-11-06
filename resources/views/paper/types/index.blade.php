@@ -14,7 +14,7 @@
                 <td>{{ __($type->unit) }} <span class="meta">({{ $type->sheets_per_unit }} {{ __('sheets') }})</span></td>
                 <td class="r num">{{ number_format($type->reorder_level) }}</td>
                 <td><x-badge :tone="$type->is_active ? 'good' : 'mute'">{{ $type->is_active ? __('Active') : __('Inactive') }}</x-badge></td>
-                <td class="r"><a class="btn sm" href="{{ route('paper-types.edit', $type) }}"><x-icon name="edit" />{{ __('Edit') }}</a></td>
+                <td class="r"><a class="btn sm" href="{{ route('paper-types.edit', $type) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@can('paper.types')<x-delete-button :action="route('records.destroy', ['paper-type', $type->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
             </tr>
         @endforeach
         </tbody>

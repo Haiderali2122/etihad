@@ -35,7 +35,7 @@
                         @if ($a->isDeducted())<x-badge tone="mute">{{ __('Deducted in :month', ['month' => $a->payrollRun->label()]) }}</x-badge>
                         @else<x-badge :tone="$a->status->tone()">{{ $a->status->label() }}</x-badge>@endif
                     </td>
-                    <td class="r"><a class="btn sm" href="{{ route('salary-advances.show', $a) }}"><x-icon name="printer" />{{ __('Receipt') }}</a></td>
+                    <td class="r"><a class="btn sm" href="{{ route('salary-advances.show', $a) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@unless ($a->foreman_sheet_id)@can('advances.create')<x-delete-button :action="route('records.destroy', ['salary-advance', $a->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan @endunless</td>
                 </tr>
             @empty
                 <tr><td colspan="6"><div class="empty"><b>{{ __('No advances here') }}</b></div></td></tr>

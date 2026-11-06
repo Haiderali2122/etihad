@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\LoanRepaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class LoanRepayment extends Model
 {
     /** @use HasFactory<LoanRepaymentFactory> */
-    use HasFactory;
+    use HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -39,5 +40,15 @@ class LoanRepayment extends Model
     public function payrollRun(): BelongsTo
     {
         return $this->belongsTo(PayrollRun::class);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        return $this->payroll_run_id !== null ? __('This instalment was deducted in a finalized payroll. Reopen that payroll to change it.') : null;
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Loan repayment').' — '.($this->loan?->employee?->name ?? '').', Rs '.number_format($this->amount).', '.$this->paid_on?->format('j M Y');
     }
 }

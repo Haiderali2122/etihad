@@ -8,6 +8,7 @@
             <x-badge :tone="$run->status->tone()">{{ $run->status->label() }}</x-badge>
             <a class="btn" href="{{ route('payroll.index') }}">{{ __('Back') }}</a>
             <a class="btn" href="{{ route('payroll.slips', $run) }}"><x-icon name="printer" />{{ __('All slips') }}</a>
+            @if ($run->isDraft())@can('payroll.prepare')<x-delete-button :action="route('records.destroy', ['payroll-run', $run->id])" :confirm="__('Delete the :month payroll draft?', ['month' => $run->label()])" :label="__('Delete')" :redirect="route('payroll.index')" />@endcan @endif
             @if ($run->isDraft())
                 @can('payroll.prepare')
                     <form method="POST" action="{{ route('payroll.recalculate', $run) }}">@csrf<button class="btn" type="submit"><x-icon name="swap" />{{ __('Recalculate') }}</button></form>

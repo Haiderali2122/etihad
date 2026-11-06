@@ -19,7 +19,7 @@ class StoreExpenseRequest extends FormRequest
     }
 
     /**
-     * Each line is its own payment: head, who was paid, what for, and the amount. A head picked as "Other…" is saved
+     * Each line is its own payment: a head and an amount, and optionally who was paid. A head picked as "Other…" is saved
      * to the list (or a matching one reused). A single head, payee, amount and reason make a one-line receipt.
      */
     protected function prepareForValidation(): void
@@ -28,7 +28,7 @@ class StoreExpenseRequest extends FormRequest
 
         // Blank rows the form always shows are not payments.
         $items = collect($this->input('items', []))
-            ->filter(fn ($row) => is_array($row) && collect(['description', 'amount', 'paid_to'])->contains(fn ($f) => trim((string) ($row[$f] ?? '')) !== ''))
+            ->filter(fn ($row) => is_array($row) && collect(['amount', 'paid_to'])->contains(fn ($f) => trim((string) ($row[$f] ?? '')) !== ''))
             ->values();
         if ($items->isEmpty() && ($this->filled('amount') || $this->filled('reason'))) {
             $items = collect([['description' => $this->input('reason'), 'amount' => $this->input('amount')]]);
@@ -77,7 +77,7 @@ class StoreExpenseRequest extends FormRequest
             // One line per payment; the expense amount is their total.
             'items' => ['required', 'array', 'min:1', 'max:30'],
             'items.*.expense_head_id' => ['required', Rule::exists('expense_heads', 'id')->where('is_active', true)],
-            'items.*.paid_to' => ['required', 'string', 'max:120'],
+            'items.*.paid_to' => ['nullable', 'string', 'max:120'],
             'items.*.description' => ['nullable', 'string', 'max:255'],
             'items.*.amount' => ['required', 'integer', 'min:1'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],

@@ -3,6 +3,7 @@
         <x-slot:actions>
             <a class="btn" href="{{ route('dispatches.index') }}">{{ __('Back') }}</a>
             @can('dispatch.manage')<a class="btn" href="{{ route('dispatches.edit', $dispatch) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+            @can('dispatch.manage')<x-delete-button :action="route('records.destroy', ['dispatch', $dispatch->id])" :confirm="__('Delete loading :no?', ['no' => $dispatch->number])" :label="__('Delete')" :redirect="route('dispatches.index')" />@endcan
             <button class="btn primary" type="button" onclick="window.print()"><x-icon name="printer" />{{ __('Print / save as PDF') }}</button>
         </x-slot:actions>
     </x-page-head>

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PayrollStatus;
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\PayrollRunFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PayrollRun extends Model
 {
     /** @use HasFactory<PayrollRunFactory> */
-    use HasFactory, RecordsCashOut;
+    use HasFactory, RecordsCashOut, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -90,5 +91,15 @@ class PayrollRun extends Model
     public function cashOutUrl(): string
     {
         return route('payroll.show', $this);
+    }
+
+    public function deletionBlocker(): ?string
+    {
+        return $this->isDraft() ? null : __('This payroll is finalized. Reopen it first; then it can be deleted.');
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Payroll').' '.$this->label();
     }
 }

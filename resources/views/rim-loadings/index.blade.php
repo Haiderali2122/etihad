@@ -15,7 +15,7 @@
             @endforeach
         </div></div>
         <div class="tbl-wrap"><table>
-            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Work order') }}</th><th>{{ __('Loaded by') }}</th><th class="r">{{ __('Rims') }}</th><th class="r">{{ __('Rate per rim') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Paid') }}</th></tr></thead>
+            <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Work order') }}</th><th>{{ __('Loaded by') }}</th><th class="r">{{ __('Rims') }}</th><th class="r">{{ __('Rate per rim') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Paid') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($loadings as $l)
                 <tr>
@@ -39,9 +39,10 @@
                             @endcan
                         @endif
                     </td>
+                    <td class="r">@unless ($l->isPaid())@can('orders.manage')<x-delete-button :action="route('rim-loadings.destroy', $l)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan @endunless</td>
                 </tr>
             @empty
-                <tr><td colspan="7"><div class="empty"><b>{{ __('No loadings yet') }}</b>{{ __('Record them on the work order once printing is done.') }}</div></td></tr>
+                <tr><td colspan="8"><div class="empty"><b>{{ __('No loadings yet') }}</b>{{ __('Record them on the work order once printing is done.') }}</div></td></tr>
             @endforelse
             </tbody>
         </table></div>

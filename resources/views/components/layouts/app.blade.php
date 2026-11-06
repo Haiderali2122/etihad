@@ -2,12 +2,16 @@
 @php
     $user = auth()->user();
     $pendingCount = $user->can('approve') ? app(\App\Http\Controllers\ApprovalController::class)->pendingItems()->count() : 0;
+    // Petrol, diesel, glue and ink each get their own sidebar entry, opening their tab on the Inventory page.
+    $materialTab = preg_match('/^material-\d+$/', (string) request()->query('tab')) ? request()->query('tab') : null;
+    $materials = $user->can('purchases.view') ? \App\Models\InventoryCategory::query()->active()->where('show_as_tab', true)->orderBy('name')->get() : collect();
     $activeOrders = $user->can('orders.view') ? \App\Models\WorkOrder::query()->whereIn('stage', ['printing', 'folding', 'binding', 'ready'])->count() : 0;
     $nav = [
         ['route' => 'dashboard', 'match' => 'dashboard', 'icon' => 'dash', 'label' => __('Dashboard')],
         ['group' => __('Control')],
         ['route' => 'paper.index', 'match' => ['paper*', 'godowns.*'], 'icon' => 'paper', 'label' => __('Paper stock'), 'can' => 'paper.view'],
-        ['route' => 'inventory.index', 'match' => ['inventory*', 'purchases.*'], 'icon' => 'box', 'label' => __('Inventory'), 'can' => 'purchases.view'],
+        ['route' => 'inventory.index', 'match' => ['inventory*', 'purchases.*'], 'on' => request()->routeIs('inventory*', 'purchases.*') && ! $materialTab, 'icon' => 'box', 'label' => __('Inventory'), 'can' => 'purchases.view'],
+        ...$materials->map(fn ($m) => ['route' => 'inventory.index', 'params' => ['tab' => 'material-'.$m->id], 'match' => 'inventory.index', 'on' => $materialTab === 'material-'.$m->id, 'icon' => 'drop', 'label' => $m->localName(), 'can' => 'purchases.view'])->all(),
         ['route' => 'expenses.index', 'match' => ['expenses.*', 'expense-heads.*'], 'icon' => 'wallet', 'label' => __('Cash-out'), 'can' => 'expenses.view'],
         ['route' => 'machines.index', 'match' => 'machine*', 'icon' => 'wrench', 'label' => __('Machines'), 'can' => 'machines.view'],
         ['route' => 'approvals.index', 'match' => 'approvals.*', 'icon' => 'check', 'label' => __('Approvals'), 'count' => $pendingCount, 'can' => 'approve'],
@@ -64,8 +68,8 @@
                 @elseif (isset($item['soon']))
                     <a class="soon" aria-disabled="true" title="{{ $item['label'] }}"><x-icon :name="$item['icon']" /><span>{{ $item['label'] }}</span><span class="soon-tag">{{ $item['soon'] }}</span></a>
                 @else
-                    @php $on = request()->routeIs($item['match']); @endphp
-                    <a href="{{ route($item['route']) }}" title="{{ $item['label'] }}" @class(['on' => $on]) @if ($on) aria-current="page" @endif>
+                    @php $on = $item['on'] ?? request()->routeIs($item['match']); @endphp
+                    <a href="{{ route($item['route'], $item['params'] ?? []) }}" title="{{ $item['label'] }}" @class(['on' => $on]) @if ($on) aria-current="page" @endif>
                         <x-icon :name="$item['icon']" /><span>{{ $item['label'] }}</span>
                         @if (! empty($item['count']))<span class="count">{{ $item['count'] }}</span>@endif
                     </a>
@@ -117,6 +121,9 @@
             @if (session('status'))
                 <div class="flash" role="status"><x-icon name="check" />{{ session('status') }}</div>
             @endif
+            @error('delete')
+                <div class="alert" role="alert"><x-icon name="alert" /><div>{{ $message }}</div></div>
+            @enderror
             {{ $slot }}
         </main>
     </div>
@@ -127,7 +134,7 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle" style="width:min(460px,100%)">
         <div class="modal-h"><div><h2 id="deleteTitle">{{ __('Delete record') }}</h2><p id="deleteText">{{ __('This cannot be undone.') }}</p></div></div>
         <div class="modal-b">
-            <label for="deleteNote" style="display:block;font-weight:600;margin-bottom:6px">{{ __('Reason for deleting') }} <span class="muted">*</span></label>
+            <label for="deleteNote" style="display:block;font-weight:600;margin-bottom:6px">{{ __('Reason for deleting (optional)') }}</label>
             <textarea id="deleteNote" rows="3" maxlength="255" style="width:100%" placeholder="{{ __('Why is this being deleted?') }}"></textarea>
             <span class="err" id="deleteErr" hidden>{{ __('Please give a reason.') }}</span>
         </div>
@@ -155,7 +162,6 @@
         });
         document.getElementById('deleteConfirm').addEventListener('click', () => {
             const reason = note.value.trim();
-            if (!reason) { err.hidden = false; note.focus(); return; }
             pending.querySelector('input[name="delete_note"]').value = reason;
             const form = pending;
             pending = null;

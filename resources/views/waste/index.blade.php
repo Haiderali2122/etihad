@@ -5,7 +5,7 @@
     <div class="grid g-main">
         <div class="card">
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Order') }}</th><th>{{ __('Stage') }}</th><th class="r">{{ __('Quantity') }}</th><th>{{ __('Responsible') }}</th><th>{{ __('Disposal') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Order') }}</th><th>{{ __('Stage') }}</th><th class="r">{{ __('Quantity') }}</th><th>{{ __('Responsible') }}</th><th>{{ __('Disposal') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($entries as $w)
                     <tr>
@@ -15,9 +15,10 @@
                         <td class="r num"><b>{{ \App\Models\InventoryItem::qty($w->quantity) }}</b> {{ $w->unit }}</td>
                         <td>{{ $w->responsible ?: '—' }}</td>
                         <td><x-badge :tone="$w->disposal->tone()">{{ $w->disposal->label() }}</x-badge>@if ($w->sale_amount)<div class="meta">Rs {{ number_format($w->sale_amount) }}{{ $w->sold_to ? ' · '.$w->sold_to : '' }}</div>@endif</td>
+                        <td class="r">@can('waste.manage')<x-delete-button :action="route('records.destroy', ['waste-entry', $w->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6"><div class="empty"><b>{{ __('No waste recorded') }}</b></div></td></tr>
+                    <tr><td colspan="7"><div class="empty"><b>{{ __('No waste recorded') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

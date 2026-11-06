@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\OutsidePrintReceiptFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class OutsidePrintReceipt extends Model
 {
     /** @use HasFactory<OutsidePrintReceiptFactory> */
-    use HasFactory, RecordsCashOut;
+    use HasFactory, RecordsCashOut, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -61,5 +62,23 @@ class OutsidePrintReceipt extends Model
     public function cashOutUrl(): string
     {
         return route('work-orders.show', $this->work_order_id);
+    }
+
+    /**
+     * The leftover rims came back as a paper slip; that slip goes with this receipt, if its rims are still in stock.
+     */
+    public function deletionBlocker(): ?string
+    {
+        return $this->paperReceipt?->deletionBlocker();
+    }
+
+    protected static function booted(): void
+    {
+        static::deleted(fn (self $receipt) => $receipt->paperReceipt?->delete());
+    }
+
+    public function deletionLabel(): string
+    {
+        return __('Outside print receipt').' '.($this->workOrder?->number ?? '').' — '.number_format($this->printed_copies).' copies';
     }
 }

@@ -28,6 +28,7 @@
                     <td><x-badge :tone="$book->is_active ? 'good' : 'mute'">{{ $book->is_active ? __('Active') : __('Inactive') }}</x-badge></td>
                     <td class="r" style="white-space:nowrap">
                         @can('books.manage')<a class="btn sm" href="{{ route('books.edit', $book) }}"><x-icon name="edit" />{{ __('Edit') }}</a>@endcan
+                        @can('books.manage')<x-delete-button :action="route('books.destroy', $book)" :confirm="__('Delete :name and all its formats?', ['name' => $book->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan
                     </td>
                 </tr>
             @empty

@@ -34,6 +34,7 @@ use App\Http\Controllers\PayrollRunController;
 use App\Http\Controllers\PlateJobController;
 use App\Http\Controllers\ProcessorController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\RecordDeletionController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RimLoadingController;
 use App\Http\Controllers\RoleController;
@@ -214,4 +215,5 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('deletions', [DeletionController::class, 'index'])->middleware('can:deletions.view')->name('deletions.index');
+    Route::delete('records/{type}/{id}', [RecordDeletionController::class, 'destroy'])->whereNumber('id')->name('records.destroy');
 });
