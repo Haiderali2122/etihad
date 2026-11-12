@@ -40,6 +40,22 @@ class BookTest extends TestCase
         $this->assertNull($book->formats[1]->folding_rate);
     }
 
+    public function test_the_book_form_and_page_have_no_folding_rate(): void
+    {
+        $user = User::factory()->create();
+        $format = BookFormat::factory()->create(['folding_rate' => 35]);
+
+        $this->actingAs($user)->get(route('books.create'))->assertOk()->assertDontSee('Folding rate')->assertDontSee('[folding_rate]', false);
+        $this->actingAs($user)->get(route('books.edit', $format->book))->assertOk()->assertDontSee('Folding rate');
+        $this->actingAs($user)->get(route('books.show', $format->book))->assertOk()->assertDontSee('Folding rate')->assertDontSee('Folding / 10,000');
+
+        // Saving the book from the form keeps any rate stored earlier.
+        $this->actingAs($user)->put(route('books.update', $format->book), [
+            'name' => $format->book->name, 'is_active' => 1, 'formats' => [['id' => $format->id, 'name' => $format->name, 'forms' => 12]],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('35.00', $format->fresh()->folding_rate);
+    }
+
     public function test_forms_take_any_value_up_to_two_decimals(): void
     {
         $user = User::factory()->create();

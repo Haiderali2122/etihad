@@ -449,6 +449,6 @@ class PressNotesChangesTest extends TestCase
 
     public function test_book_form_no_longer_asks_for_a_binding_rate(): void
     {
-        $this->actingAs($this->owner)->get(route('books.create'))->assertOk()->assertSee('Folding rate')->assertDontSee('Binding rate');
+        $this->actingAs($this->owner)->get(route('books.create'))->assertOk()->assertDontSee('Folding rate')->assertDontSee('Binding rate');
     }
 }

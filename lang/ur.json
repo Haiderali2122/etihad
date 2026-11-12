@@ -1376,5 +1376,6 @@
     "Type or pick an item that is in stock.": "اسٹاک میں موجود چیز لکھیں یا چنیں۔",
     "Raddi sold, with a slip for each sale.": "فروخت شدہ ردی، ہر فروخت کی پرچی کے ساتھ۔",
     ":name expenses: each entry with its items, quantity and price.": ":name کے اخراجات: ہر اندراج اپنی اشیاء، مقدار اور قیمت کے ساتھ۔",
-    "General": "عام"
+    "General": "عام",
+    "Example: rims for 10,000 copies at 3% wastage": "مثال: 10,000 کاپیوں کے لیے 3% ضیاع کے ساتھ رم"
 }
