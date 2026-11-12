@@ -240,13 +240,36 @@ class ExpenseController extends Controller
      */
     private function saveItems(Expense $expense, array $items): void
     {
+        $category = $expense->category;
         foreach ($items as $item) {
             $expense->items()->create([
+                'inventory_item_id' => $this->stockItemFor($category, $item),
                 'expense_head_id' => (int) $item['expense_head_id'], 'paid_to' => ($item['paid_to'] ?? null) ?: null,
                 'description' => ($item['item'] ?? null) ?: ($item['description'] ?? null) ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'),
                 'quantity' => $item['quantity'] ?? null, 'rate' => $item['rate'] ?? null, 'amount' => (int) $item['amount'],
             ]);
         }
+    }
+
+    /**
+     * On the Ink and Glue tabs each line adds to stock: the item with that name in the category, made the first time.
+     *
+     * @param  array{item?: ?string, quantity?: mixed}  $line
+     */
+    private function stockItemFor(?InventoryCategory $category, array $line): ?int
+    {
+        $name = trim((string) ($line['item'] ?? ''));
+        if (! $category?->addsStock() || $name === '' || ! is_numeric($line['quantity'] ?? null)) {
+            return null;
+        }
+
+        $item = $category->items()->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first()
+            ?? $category->items()->create(['name' => $name, 'unit' => $category->defaultUnit(), 'is_active' => true]);
+        if (! $item->is_active) {
+            $item->update(['is_active' => true]);
+        }
+
+        return $item->getKey();
     }
 
     /**

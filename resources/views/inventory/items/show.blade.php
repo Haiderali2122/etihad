@@ -22,7 +22,7 @@
 
     <div class="grid g4">
         <x-kpi icon="box" :tone="['ok' => 'good', 'low' => 'warn', 'out' => 'bad', 'none' => ''][$level]" :label="__('Balance')" :foot="(float) $item->reorder_level ? __('Reorder at :n', ['n' => InventoryItem::qty($item->reorder_level)]) : __('No reorder level set')">{{ InventoryItem::qty($item->balance()) }}<small>{{ $item->unit }}</small></x-kpi>
-        <x-kpi icon="download" :label="__('Bought')">{{ InventoryItem::qty($item->stock_in) }}<small>{{ $item->unit }}</small></x-kpi>
+        <x-kpi icon="download" :label="__('Bought')">{{ InventoryItem::qty($item->stockIn()) }}<small>{{ $item->unit }}</small></x-kpi>
         <x-kpi icon="send" :label="__('Moved out')">{{ InventoryItem::qty($item->stock_out) }}<small>{{ $item->unit }}</small></x-kpi>
         <x-kpi icon="clock" :label="__('Entries')">{{ $ledger->count() }}</x-kpi>
     </div>

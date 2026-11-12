@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\ApprovalStatus;
 use App\Enums\PartyKind;
 use App\Models\Employee;
+use App\Models\Expense;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
@@ -140,6 +141,37 @@ class InventoryTest extends TestCase
         $this->actingAs($manager)->post(route('inventory-issues.store'), [
             'issued_on' => today()->toDateString(), 'item_name' => 'Nothing like this', 'quantity' => 1, 'issued_to' => 'Binding',
         ])->assertSessionHasErrors('inventory_item_id');
+    }
+
+    public function test_ink_and_glue_bought_on_their_tab_go_into_stock(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $ink = InventoryCategory::query()->where('name', 'Ink')->sole();
+        $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
+        $black = InventoryItem::factory()->create(['inventory_category_id' => $ink->id, 'name' => 'Black ink', 'unit' => 'kg']);
+
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(), 'inventory_category_id' => $ink->id,
+            'items' => [['item' => 'black ink', 'quantity' => 12, 'rate' => 900], ['item' => 'Cyan ink', 'quantity' => 3.5, 'rate' => 1200]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(12.0, $black->fresh()->balance());
+        $cyan = $ink->items()->where('name', 'Cyan ink')->sole();
+        $this->assertSame(3.5, $cyan->balance());
+        $this->actingAs($owner)->get(route('inventory-items.show', $black))->assertOk()->assertSee(Expense::query()->sole()->receiptNumber());
+        $this->actingAs($owner)->get(route('inventory.index'))->assertSee('Cyan ink');
+
+        // Stock bought this way can be moved out, and deleting the expense takes it back off.
+        $this->actingAs($owner)->post(route('inventory-issues.store'), ['issued_on' => today()->toDateString(), 'item_name' => 'Black ink', 'quantity' => 2, 'issued_to' => 'Press 1'])->assertSessionHasNoErrors();
+        $this->assertSame(10.0, $black->fresh()->balance());
+        $this->actingAs($owner)->delete(route('expenses.destroy', Expense::query()->sole()))->assertRedirect();
+        $this->assertSame(-2.0, $black->fresh()->balance());
+
+        // Diesel is used up, not stocked: its expense lines add nothing to inventory.
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id, 'items' => [['item' => 'Diesel', 'quantity' => 20, 'rate' => 280]],
+        ])->assertSessionHasNoErrors();
+        $this->assertNull(Expense::query()->sole()->items()->sole()->inventory_item_id);
     }
 
     public function test_material_tabs_show_no_inventory_header_warning_or_totals(): void

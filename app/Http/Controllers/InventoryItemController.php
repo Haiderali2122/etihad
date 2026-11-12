@@ -8,7 +8,6 @@ use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class InventoryItemController extends Controller
@@ -33,12 +32,17 @@ class InventoryItemController extends Controller
      */
     public function show(InventoryItem $inventoryItem): View
     {
-        $inventoryItem->load('category')->loadSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')->loadSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
+        $inventoryItem->load('category');
 
         $in = $inventoryItem->purchases()->with('party')->get()->map(fn ($p) => [
             'date' => $p->purchased_on, 'sort' => $p->purchased_on->format('Ymd').'0'.str_pad((string) $p->id, 8, '0', STR_PAD_LEFT),
             'kind' => 'in', 'qty' => (float) $p->quantity, 'who' => $p->party->name, 'ref' => $p->bill_no, 'status' => $p->status, 'model' => $p,
         ]);
+        // Ink and glue bought through their tab's expense form.
+        $in = $in->concat($inventoryItem->expenseLines()->with('expense')->get()->filter(fn ($l) => $l->expense)->map(fn ($l) => [
+            'date' => $l->expense->spent_on, 'sort' => $l->expense->spent_on->format('Ymd').'0'.str_pad((string) ($l->expense_id * 1000 + $l->id), 8, '0', STR_PAD_LEFT),
+            'kind' => 'in', 'qty' => (float) $l->quantity, 'who' => $l->expense->receiptNumber(), 'ref' => null, 'status' => $l->expense->status, 'model' => $l->expense,
+        ]));
         $out = $inventoryItem->issues()->with(['machine', 'employee'])->get()->map(fn (InventoryIssue $i) => [
             'date' => $i->issued_on, 'sort' => $i->issued_on->format('Ymd').'1'.str_pad((string) $i->id, 8, '0', STR_PAD_LEFT),
             'kind' => 'out', 'qty' => $i->used(), 'who' => $i->issued_to, 'ref' => $i->reference, 'status' => $i->status, 'model' => $i,
@@ -74,7 +78,7 @@ class InventoryItemController extends Controller
      */
     public function destroy(InventoryItem $inventoryItem): RedirectResponse
     {
-        if ($inventoryItem->purchases()->exists() || $inventoryItem->issues()->exists()) {
+        if ($inventoryItem->purchases()->exists() || $inventoryItem->issues()->exists() || $inventoryItem->expenseLines()->exists()) {
             return back()->withErrors(['item' => __(':name has stock history. Deactivate it instead so the history stays.', ['name' => $inventoryItem->name])]);
         }
 

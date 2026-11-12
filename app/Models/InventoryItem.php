@@ -45,6 +45,7 @@ class InventoryItem extends Model
     public function scopeWithStock(Builder $query): void
     {
         $query->withSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')
+            ->withSum(['expenseLines as stock_in_expenses' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected())], 'quantity')
             ->withSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
     }
 
@@ -72,14 +73,42 @@ class InventoryItem extends Model
         return $this->hasMany(InventoryIssue::class);
     }
 
+    /**
+     * Ink and glue lines bought through their tab's expense form.
+     *
+     * @return HasMany<ExpenseItem, $this>
+     */
+    public function expenseLines(): HasMany
+    {
+        return $this->hasMany(ExpenseItem::class);
+    }
+
+    /**
+     * Everything that came in: purchases plus ink and glue bought through their tab (not sent back).
+     */
+    public function stockIn(): float
+    {
+        $this->loadStock();
+
+        return round((float) $this->stock_in + (float) $this->stock_in_expenses, 2);
+    }
+
     public function balance(): float
     {
-        if (! array_key_exists('stock_in', $this->attributes)) {
-            $this->loadSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')
-                ->loadSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
-        }
+        return round($this->stockIn() - (float) $this->stock_out, 2);
+    }
 
-        return round((float) $this->stock_in - (float) $this->stock_out, 2);
+    private function loadStock(): void
+    {
+        if (! array_key_exists('stock_in', $this->attributes)) {
+            $this->loadSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity');
+        }
+        if (! array_key_exists('stock_in_expenses', $this->attributes)) {
+            $this->loadSum(['expenseLines as stock_in_expenses' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected())], 'quantity');
+        }
+        if (! array_key_exists('stock_out', $this->attributes)) {
+            $this->loadSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
+        }
     }
 
     /**
@@ -90,7 +119,7 @@ class InventoryItem extends Model
         $balance = $this->balance();
 
         return match (true) {
-            (float) $this->stock_in <= 0 && (float) $this->stock_out <= 0 => 'none',
+            $this->stockIn() <= 0 && (float) $this->stock_out <= 0 => 'none',
             $balance <= 0 => 'out',
             $balance < (float) $this->reorder_level => 'low',
             default => 'ok',

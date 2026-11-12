@@ -138,7 +138,7 @@
                     <tr @if (! $item->is_active) style="opacity:.6" @endif>
                         <td><a class="main" href="{{ route('inventory-items.show', $item) }}" style="color:inherit;text-decoration:none">{{ $item->localName() }}</a>@unless ($item->is_active)<div class="meta">{{ __('Inactive') }}</div>@endunless</td>
                         <td>{{ $item->category->localName() }}</td>
-                        <td class="r num">{{ InventoryItem::qty($item->stock_in) }}</td>
+                        <td class="r num">{{ InventoryItem::qty($item->stockIn()) }}</td>
                         <td class="r num">{{ InventoryItem::qty($item->stock_out) }}</td>
                         <td class="r num"><b>{{ InventoryItem::qty($item->balance()) }}</b> <span class="meta">{{ $item->unit }}</span></td>
                         <td class="r num">{{ (float) $item->reorder_level ? InventoryItem::qty($item->reorder_level) : '—' }}</td>

@@ -60,6 +60,14 @@ class InventoryCategory extends Model
     }
 
     /**
+     * Ink and glue bought through their tab's expense form are added to stock.
+     */
+    public function addsStock(): bool
+    {
+        return in_array(mb_strtolower(trim($this->name)), ['glue', 'ink'], true);
+    }
+
+    /**
      * Raddi is sold, not bought: its tab records sales (money in) instead of expenses.
      */
     public function isSale(): bool
