@@ -161,15 +161,15 @@ class PressNotesChangesTest extends TestCase
         CashFloat::factory()->create(['user_id' => $this->manager->id, 'amount' => 50000]);
 
         $this->actingAs($this->owner)->get(route('inventory.index'))->assertSee('Petrol')->assertSee('Diesel')->assertSee('Glue')->assertSee('Ink');
-        $this->actingAs($this->manager)->get(route('expenses.create', ['category' => $diesel->id]))->assertOk()->assertSee('Payment for Diesel');
+        $this->actingAs($this->manager)->get(route('expenses.create', ['category' => $diesel->id]))->assertOk()->assertSee('Diesel expense');
 
         $this->actingAs($this->manager)->post(route('expenses.store'), [
             'spent_on' => today()->toDateString(), 'expense_head_id' => ExpenseHead::query()->where('name', 'Diesel')->value('id'),
-            'inventory_category_id' => $diesel->id, 'paid_to' => 'PSO Ravi Road', 'items' => [['description' => 'Generator, 40 litres', 'amount' => 12000]],
+            'inventory_category_id' => $diesel->id, 'paid_to' => 'PSO Ravi Road', 'items' => [['item' => 'Generator, 40 litres', 'quantity' => 40, 'rate' => 300]],
         ])->assertSessionHasNoErrors();
 
         $this->actingAs($this->owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertOk()
-            ->assertSee('PSO Ravi Road')->assertSee('Rs 12,000');
+            ->assertSee('Generator, 40 litres')->assertSee('Rs 12,000');
         $this->assertSame(38000, $this->manager->cashInHand());
     }
 
@@ -340,14 +340,14 @@ class PressNotesChangesTest extends TestCase
         $this->assertSame([$glue->id, $ink->id, $diesel->id], $expense->items->pluck('expense_head_id')->all());
 
         $this->actingAs($this->owner)->get(route('expenses.show', $expense))->assertOk()
-            ->assertSeeInOrder(['Glue', 'Fahad', '2,000', 'Ink', 'Black ink, 2 kg', '2,000', 'Diesel', 'PSO Ravi Road', '5,000', 'Rs 9,000']);
+            ->assertSeeInOrder(['Fahad, PSO Ravi Road', 'Glue', '2,000', 'Black ink, 2 kg', '2,000', 'Diesel', '5,000', 'Rs 9,000']);
         $this->actingAs($this->owner)->get(route('expenses.index'))->assertSeeInOrder(['Glue', 'Ink', 'Diesel', 'Fahad, PSO Ravi Road', 'Rs 9,000']);
         $this->actingAs($this->owner)->get(route('expenses.index', ['head' => $diesel->id]))->assertSee('Rs 9,000');
 
         // Spending by head counts each payment under its own head.
         $this->actingAs($this->owner)->get(route('reports.index'))->assertViewHas('expenses_by_head', fn ($rows) => $rows->keyBy('Head')->map(fn ($r) => $r['Amount (Rs)'])->sortKeys()->all() === ['Diesel' => 5000, 'Glue' => 2000, 'Ink' => 2000]);
         // Heads and payees used before are offered next time.
-        $this->actingAs($this->owner)->get(route('expenses.create'))->assertSee('<option value="'.$diesel->id.'"', false)->assertSee('<option value="PSO Ravi Road">', false);
+        $this->actingAs($this->owner)->get(route('expenses.create'))->assertSee('<option value="Diesel">', false);
     }
 
     public function test_a_payment_made_on_another_tab_shows_where_it_came_from(): void

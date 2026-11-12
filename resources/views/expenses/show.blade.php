@@ -2,8 +2,11 @@
     $items = $expense->items->isNotEmpty() ? $expense->items : collect([(object) ['description' => $expense->reason, 'amount' => $expense->amount, 'paid_to' => $expense->paid_to, 'head' => $expense->head]]);
     $heads = $items->map(fn ($i) => ($i->head ?? $expense->head)->name)->unique()->implode(', ');
     $payees = $items->map(fn ($i) => $i->paid_to ?: $expense->paid_to)->filter(fn ($p) => filled($p) && $p !== '—')->unique()->implode(', ');
-    // The "For" column only when a line says more than its head; new receipts have no separate note.
-    $showFor = $items->contains(fn ($i) => filled($i->description) && $i->description !== ($i->head ?? $expense->head)->name);
+    // Quantity and rate columns only when the lines carry them (Diesel, Glue and Ink).
+    $showQty = $items->contains(fn ($i) => isset($i->quantity) && $i->quantity !== null);
+    $cell = 'padding:6px 4px;border-bottom:1px dashed #E1E5F1';
+    $th = 'border-bottom:1px solid #C9CFE4;padding:6px 4px';
+    $num = fn ($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
 @endphp
 <x-layouts.app :title="$expense->receiptNumber()">
     <x-page-head :title="__('Expense receipt :no', ['no' => $expense->receiptNumber()])" :subtitle="$expense->head->localName().', '.$expense->spent_on->format('j M Y')">
@@ -36,19 +39,19 @@
                 <div class="wm"><x-mark :size="240" ring="#262B7E" fill="#262B7E" /></div>
                 <div class="slip-line" style="border-bottom:0"><span class="slip-no">EXPENSE RECEIPT</span><span class="k">رسید خرچ<small>{{ __('No. :no', ['no' => $expense->receiptNumber()]) }}</small></span></div>
                 <div class="slip-line"><span class="v">{{ $expense->spent_on->format('j M Y') }}&nbsp;</span><span class="k">تاریخ<small>Date</small></span></div>
-                <div class="slip-line"><span class="v">{{ $payees }}&nbsp;</span><span class="k">ادائیگی بنام<small>Paid to</small></span></div>
+                @if ($payees)<div class="slip-line"><span class="v">{{ $payees }}&nbsp;</span><span class="k">ادائیگی بنام<small>Paid to</small></span></div>@endif
                 <div class="slip-line"><span class="v">{{ $heads }}{{ $expense->machine ? ' — '.$expense->machine->code : '' }}{{ $expense->category ? ' — '.$expense->category->name : '' }}&nbsp;</span><span class="k">مد<small>Head</small></span></div>
                 @if ($expense->isLinked() && $expense->source)
                     <div class="slip-line"><span class="v">{{ $expense->source->cashOutSource() }}&nbsp;</span><span class="k">ذریعہ<small>Recorded as</small></span></div>
                 @endif
                 <table style="width:100%;margin-top:14px;border-collapse:collapse;font-size:14px">
-                    <thead><tr><th style="text-align:start;border-bottom:1px solid #C9CFE4;padding:6px 4px">Head</th><th style="text-align:start;border-bottom:1px solid #C9CFE4;padding:6px 4px">Paid to</th>@if ($showFor)<th style="text-align:start;border-bottom:1px solid #C9CFE4;padding:6px 4px">For</th>@endif<th style="text-align:end;border-bottom:1px solid #C9CFE4;padding:6px 4px">Amount (Rs)</th></tr></thead>
+                    <thead><tr><th style="text-align:start;{{ $th }};width:36px">#</th><th style="text-align:start;{{ $th }}">Item</th>@if ($showQty)<th style="text-align:end;{{ $th }}">Qty</th><th style="text-align:end;{{ $th }}">Rate</th>@endif<th style="text-align:end;{{ $th }}">Amount (Rs)</th></tr></thead>
                     <tbody>
                     @foreach ($items as $item)
-                        <tr><td style="padding:6px 4px;border-bottom:1px dashed #E1E5F1">{{ ($item->head ?? $expense->head)->name }}</td><td style="padding:6px 4px;border-bottom:1px dashed #E1E5F1">{{ $item->paid_to ?: $expense->paid_to }}</td>@if ($showFor)<td style="padding:6px 4px;border-bottom:1px dashed #E1E5F1">{{ $item->description }}</td>@endif<td style="padding:6px 4px;text-align:end;border-bottom:1px dashed #E1E5F1;font-variant-numeric:tabular-nums">{{ number_format($item->amount) }}</td></tr>
+                        <tr><td style="{{ $cell }}">{{ $loop->iteration }}</td><td style="{{ $cell }}">{{ $item->description ?: ($item->head ?? $expense->head)->name }}</td>@if ($showQty)<td style="{{ $cell }};text-align:end;font-variant-numeric:tabular-nums">{{ isset($item->quantity) && $item->quantity !== null ? $num($item->quantity) : '' }}</td><td style="{{ $cell }};text-align:end;font-variant-numeric:tabular-nums">{{ isset($item->rate) && $item->rate !== null ? $num($item->rate) : '' }}</td>@endif<td style="{{ $cell }};text-align:end;font-variant-numeric:tabular-nums">{{ number_format($item->amount) }}</td></tr>
                     @endforeach
                     </tbody>
-                    <tfoot><tr><td colspan="{{ $showFor ? 3 : 2 }}" style="padding:8px 4px;font-weight:700">Total / کل رقم</td><td style="padding:8px 4px;text-align:end;font-weight:700;font-variant-numeric:tabular-nums">Rs {{ number_format($expense->amount) }}</td></tr></tfoot>
+                    <tfoot><tr><td colspan="{{ $showQty ? 4 : 2 }}" style="padding:8px 4px;font-weight:700">Total / کل رقم</td><td style="padding:8px 4px;text-align:end;font-weight:700;font-variant-numeric:tabular-nums">Rs {{ number_format($expense->amount) }}</td></tr></tfoot>
                 </table>
                 <div class="slip-sign">
                     <div><div class="sig" style="font-family:inherit;font-size:14px">&nbsp;</div><div style="font-family:var(--urdu);font-size:13px;margin-top:4px">دستخط وصول کنندہ <span style="font-family:var(--ui);font-size:11px;color:var(--faint)">Received by</span></div></div>

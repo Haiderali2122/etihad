@@ -7,6 +7,7 @@ use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
 use App\Models\Purchase;
+use App\Models\Sale;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -53,6 +54,10 @@ class InventoryController extends Controller
             'materialPayments' => $material ? Expense::query()->with(['head', 'user', 'source'])->where('inventory_category_id', $material->id)->latest('spent_on')->latest('id')->limit(50)->get() : collect(),
             'materialIssues' => $material ? InventoryIssue::query()->with(['item', 'machine'])->whereHas('item', fn ($q) => $q->where('inventory_category_id', $material->id))->latest('issued_on')->latest('id')->limit(20)->get() : collect(),
             'categoryId' => $categoryId,
+            // Raddi is sold: its tab lists sales and totals them for last month and this month.
+            'sales' => $material?->isSale() ? Sale::query()->with(['items', 'creator'])->where('inventory_category_id', $material->id)->latest('sold_on')->latest('id')->limit(100)->get() : collect(),
+            'soldLastMonth' => $material?->isSale() ? (int) Sale::query()->where('inventory_category_id', $material->id)->whereBetween('sold_on', [now()->subMonthNoOverflow()->startOfMonth()->toDateString(), now()->subMonthNoOverflow()->endOfMonth()->toDateString()])->sum('total') : 0,
+            'soldThisMonth' => $material?->isSale() ? (int) Sale::query()->where('inventory_category_id', $material->id)->where('sold_on', '>=', $monthStart->toDateString())->sum('total') : 0,
         ]);
     }
 }

@@ -51,6 +51,22 @@ class InventoryCategory extends Model
         return mb_strtolower(trim($this->name)) === 'diesel' ? 'litre' : 'kg';
     }
 
+    /**
+     * Diesel, Glue and Ink expenses are entered as quantity × price per quantity; other tabs take a price.
+     */
+    public function usesQuantity(): bool
+    {
+        return in_array(mb_strtolower(trim($this->name)), ['diesel', 'glue', 'ink'], true);
+    }
+
+    /**
+     * Raddi is sold, not bought: its tab records sales (money in) instead of expenses.
+     */
+    public function isSale(): bool
+    {
+        return mb_strtolower(trim($this->name)) === 'raddi';
+    }
+
     public function localName(): string
     {
         return app()->getLocale() === 'ur' && $this->name_ur ? $this->name_ur : $this->name;

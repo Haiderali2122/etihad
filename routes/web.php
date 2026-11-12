@@ -39,6 +39,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RimLoadingController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SalaryAdvanceController;
+use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WasteEntryController;
@@ -143,6 +144,9 @@ Route::middleware('auth')->group(function () {
     Route::get('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'createMaterial'])->middleware('can:purchases.create')->name('materials.purchase');
     Route::post('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'storeMaterial'])->middleware('can:purchases.create')->name('materials.purchase.store');
     Route::get('inventory/purchases/{purchase}/receipt', [PurchaseController::class, 'materialReceipt'])->middleware('can:purchases.view')->name('materials.receipt');
+    Route::get('inventory/materials/{inventory_category}/sales/create', [SaleController::class, 'create'])->middleware('can:expenses.create')->name('sales.create');
+    Route::post('inventory/materials/{inventory_category}/sales', [SaleController::class, 'store'])->middleware('can:expenses.create')->name('sales.store');
+    Route::get('sales/{sale}', [SaleController::class, 'show'])->middleware('can:purchases.view')->name('sales.show');
 
     Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->middlewareFor(['index', 'show'], 'can:expenses.view')

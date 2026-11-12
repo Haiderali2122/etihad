@@ -30,6 +30,7 @@ use App\Models\Purchase;
 use App\Models\RimLoading;
 use App\Models\Role;
 use App\Models\SalaryAdvance;
+use App\Models\Sale;
 use App\Models\User;
 use App\Models\WorkOrder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -533,6 +534,7 @@ class AuthAccessE2ETest extends TestCase
                     'plateJob' => PlateJob::factory()->create(),
                     'processor' => Party::factory()->kind(PartyKind::PlateProcessor)->create(),
                     'purchase' => Purchase::factory()->create(),
+                    'sale' => Sale::factory()->create(),
                     'rimLoading' => RimLoading::factory()->create(),
                     'role' => Role::factory()->create(),
                     'salary_advance' => SalaryAdvance::factory()->create(),

@@ -19,6 +19,7 @@ use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\Purchase;
 use App\Models\SalaryAdvance;
+use App\Models\Sale;
 use App\Models\WasteEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
@@ -54,6 +55,7 @@ class RecordDeletionController extends Controller
         'loan-repayment' => [LoanRepayment::class, 'advances.create'],
         'payroll-run' => [PayrollRun::class, 'payroll.prepare'],
         'cash-float' => [CashFloat::class, 'give-cash'],
+        'sale' => [Sale::class, 'expenses.create'],
     ];
 
     public function destroy(Request $request, string $type, int $id): RedirectResponse

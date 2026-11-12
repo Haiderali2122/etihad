@@ -60,9 +60,13 @@ class ExpenseController extends Controller
     /**
      * Opened from a material tab (?category=), the payment is filed under that material.
      */
-    public function create(Request $request): View
+    public function create(Request $request): View|RedirectResponse
     {
         $category = InventoryCategory::query()->where('show_as_tab', true)->find($request->integer('category'));
+        // Raddi is sold, not bought: its tab records sales.
+        if ($category?->isSale()) {
+            return redirect()->route('sales.create', $category);
+        }
 
         return view('expenses.create', [
             'expense' => new Expense([
@@ -73,7 +77,7 @@ class ExpenseController extends Controller
             'category' => $category,
             'heads' => ExpenseHead::query()->active()->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
-            'payees' => $this->payees(),
+            'suggestions' => $this->suggestions($category),
             'back' => $category ? route('inventory.index', ['tab' => 'material-'.$category->id]) : route('expenses.index'),
         ]);
     }
@@ -117,7 +121,7 @@ class ExpenseController extends Controller
             'category' => $expense->category,
             'heads' => ExpenseHead::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($expense->expense_head_id))->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
-            'payees' => $this->payees(),
+            'suggestions' => $this->suggestions($expense->category),
             'back' => route('expenses.show', $expense),
         ]);
     }
@@ -206,7 +210,7 @@ class ExpenseController extends Controller
             'inventory_category_id' => $request->validated('inventory_category_id'),
             'paid_to' => mb_substr($items->pluck('paid_to')->filter()->unique()->implode(', ') ?: '—', 0, 255),
             'amount' => (int) $items->sum('amount'),
-            'reason' => mb_substr($items->map(fn (array $i) => ($i['description'] ?? null) ?: ExpenseHead::query()->whereKey($i['expense_head_id'])->value('name'))->implode(', '), 0, 255),
+            'reason' => mb_substr($items->map(fn (array $i) => ($i['item'] ?? null) ?: ($i['description'] ?? null) ?: ExpenseHead::query()->whereKey($i['expense_head_id'])->value('name'))->implode(', '), 0, 255),
         ]);
 
         if ($request->hasFile('attachment')) {
@@ -215,24 +219,32 @@ class ExpenseController extends Controller
     }
 
     /**
-     * People and shops paid before, offered as suggestions so the same name is typed the same way next time.
+     * The item dropdown: in Cash-out the expense heads; on a material tab that material's items and the item
+     * names typed there before. Anything else can simply be typed.
      *
      * @return list<string>
      */
-    private function payees(): array
+    private function suggestions(?InventoryCategory $category): array
     {
-        return ExpenseItem::query()->whereNotNull('paid_to')->distinct()->orderBy('paid_to')->limit(300)->pluck('paid_to')->all();
+        if (! $category) {
+            return ExpenseHead::query()->active()->orderBy('name')->pluck('name')->all();
+        }
+
+        return $category->items()->active()->pluck('name')
+            ->merge(ExpenseItem::query()->whereHas('expense', fn ($q) => $q->where('inventory_category_id', $category->id))->whereNotNull('description')->distinct()->pluck('description'))
+            ->map(fn ($n) => trim((string) $n))->filter()->unique(fn ($n) => mb_strtolower($n))->sort()->values()->all();
     }
 
     /**
-     * @param  list<array{expense_head_id: int|string, paid_to: ?string, description: ?string, amount: int|string}>  $items
+     * @param  list<array{expense_head_id: int|string, item: ?string, paid_to: ?string, description: ?string, quantity: ?string, rate: ?string, amount: int|string}>  $items
      */
     private function saveItems(Expense $expense, array $items): void
     {
         foreach ($items as $item) {
             $expense->items()->create([
                 'expense_head_id' => (int) $item['expense_head_id'], 'paid_to' => ($item['paid_to'] ?? null) ?: null,
-                'description' => ($item['description'] ?? null) ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'), 'amount' => (int) $item['amount'],
+                'description' => ($item['item'] ?? null) ?: ($item['description'] ?? null) ?: ExpenseHead::query()->whereKey($item['expense_head_id'])->value('name'),
+                'quantity' => $item['quantity'] ?? null, 'rate' => $item['rate'] ?? null, 'amount' => (int) $item['amount'],
             ]);
         }
     }

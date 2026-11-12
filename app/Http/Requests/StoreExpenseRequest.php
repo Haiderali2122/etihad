@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\ExpenseHead;
+use App\Models\InventoryCategory;
 use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,33 +20,52 @@ class StoreExpenseRequest extends FormRequest
     }
 
     /**
-     * Each line is its own payment: a head and an amount, and optionally who was paid. A head picked as "Other…" is saved
-     * to the list (or a matching one reused). A single head, payee, amount and reason make a one-line receipt.
+     * Each row is an item and its price (and, on a material tab, its quantity). The item is typed or picked from
+     * the suggestions: in Cash-out it is the expense head (a new name is added to the heads); on the Diesel,
+     * Glue, Ink or Raddi tab every row is filed under that tab (Diesel, Glue and Ink rows also take quantity × rate) and the item name is kept on the line.
+     * Empty rows the form always shows at the end are dropped.
      */
     protected function prepareForValidation(): void
     {
         OtherOption::resolve($this, 'expense_head_id', ExpenseHead::class);
 
-        // Blank rows the form always shows are not payments.
+        $category = InventoryCategory::query()->where('show_as_tab', true)->find($this->integer('inventory_category_id'));
+        $materialHead = $category ? OtherOption::findOrCreate(ExpenseHead::class, $category->name)->getKey() : null;
+        $byQuantity = (bool) $category?->usesQuantity();
+
         $items = collect($this->input('items', []))
-            ->filter(fn ($row) => is_array($row) && collect(['amount', 'paid_to'])->contains(fn ($f) => trim((string) ($row[$f] ?? '')) !== ''))
+            ->filter(fn ($row) => is_array($row) && collect(['item', 'amount', 'paid_to', 'quantity', 'rate'])->contains(fn ($f) => trim((string) ($row[$f] ?? '')) !== ''))
             ->values();
+        // An older single-payment form posts one head, amount and reason without rows.
         if ($items->isEmpty() && ($this->filled('amount') || $this->filled('reason'))) {
-            $items = collect([['description' => $this->input('reason'), 'amount' => $this->input('amount')]]);
+            $items = collect([['expense_head_id' => $this->input('expense_head_id'), 'item' => $this->input('reason'), 'amount' => $this->input('amount'), 'paid_to' => $this->input('paid_to')]]);
         }
 
-        $items = $items->map(function (array $row) {
-            if (($row['expense_head_id'] ?? null) === OtherOption::Value) {
-                $name = trim((string) preg_replace('/\s+/u', ' ', (string) ($row['head_other'] ?? '')));
-                $row['expense_head_id'] = $name === '' ? null : OtherOption::findOrCreate(ExpenseHead::class, $name)->getKey();
-            }
+        $items = $items->map(function (array $row) use ($materialHead, $byQuantity): array {
+            $name = trim((string) preg_replace('/\s+/u', ' ', (string) ($row['item'] ?? '')));
+            $headId = $row['expense_head_id'] ?? null;
 
-            // Lines without their own head or payee take the receipt's.
+            if ($materialHead) {
+                $headId = $materialHead;
+            } elseif ($headId === OtherOption::Value) {
+                $typed = trim((string) ($row['head_other'] ?? ''));
+                $headId = $typed === '' ? null : OtherOption::findOrCreate(ExpenseHead::class, $typed)->getKey();
+            } elseif (! $headId && $name !== '') {
+                $headId = OtherOption::findOrCreate(ExpenseHead::class, $name)->getKey();
+            }
+            $headId = $headId ?: $this->input('expense_head_id');
+
             return [
-                'expense_head_id' => ($row['expense_head_id'] ?? null) ?: $this->input('expense_head_id'),
-                'paid_to' => trim((string) ($row['paid_to'] ?? '')) ?: $this->input('paid_to'),
-                'description' => $row['description'] ?? null,
-                'amount' => $row['amount'] ?? null,
+                'expense_head_id' => $headId,
+                'item' => $name !== '' ? $name : null,
+                'description' => $name !== '' ? $name : ($row['description'] ?? null),
+                'quantity' => $byQuantity ? ($row['quantity'] ?? null) : null,
+                'rate' => $byQuantity ? ($row['rate'] ?? null) : null,
+                'paid_to' => trim((string) ($row['paid_to'] ?? '')) ?: (trim((string) $this->input('paid_to')) ?: null),
+                // On the Diesel, Glue and Ink tabs the line total is worked out from quantity × rate.
+                'amount' => $byQuantity && is_numeric($row['quantity'] ?? null) && is_numeric($row['rate'] ?? null)
+                    ? (int) round((float) $row['quantity'] * (float) $row['rate'])
+                    : ($row['amount'] ?? null),
             ];
         });
 
@@ -58,8 +78,8 @@ class StoreExpenseRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'items.*.expense_head_id' => __('head'), 'items.*.paid_to' => __('paid to'),
-            'items.*.description' => __('what for'), 'items.*.amount' => __('amount'),
+            'items.*.expense_head_id' => __('item'), 'items.*.item' => __('item'), 'items.*.quantity' => __('quantity'), 'items.*.rate' => __('price per quantity'),
+            'items.*.paid_to' => __('paid to'), 'items.*.amount' => __('price'),
         ];
     }
 
@@ -70,15 +90,19 @@ class StoreExpenseRequest extends FormRequest
      */
     public function rules(): array
     {
+        $byQuantity = (bool) InventoryCategory::query()->where('show_as_tab', true)->find($this->integer('inventory_category_id'))?->usesQuantity();
+
         return [
             'spent_on' => ['required', 'date', 'before_or_equal:today'],
             'machine_id' => ['nullable', 'exists:machines,id'],
-            'inventory_category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('show_as_tab', true)],
-            // One line per payment; the expense amount is their total.
-            'items' => ['required', 'array', 'min:1', 'max:30'],
+            'inventory_category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('show_as_tab', true)->where(fn ($q) => $q->whereRaw('LOWER(name) != ?', ['raddi']))],
+            'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.expense_head_id' => ['required', Rule::exists('expense_heads', 'id')->where('is_active', true)],
-            'items.*.paid_to' => ['nullable', 'string', 'max:120'],
+            'items.*.item' => ['nullable', 'string', 'max:120'],
             'items.*.description' => ['nullable', 'string', 'max:255'],
+            'items.*.quantity' => ['nullable', Rule::requiredIf($byQuantity), 'numeric', 'min:0.01', 'max:99999999'],
+            'items.*.rate' => ['nullable', Rule::requiredIf($byQuantity), 'numeric', 'min:0', 'max:99999999'],
+            'items.*.paid_to' => ['nullable', 'string', 'max:120'],
             'items.*.amount' => ['required', 'integer', 'min:1'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];

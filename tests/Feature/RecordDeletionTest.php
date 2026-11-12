@@ -19,6 +19,7 @@ use App\Models\PayrollRun;
 use App\Models\Purchase;
 use App\Models\Role;
 use App\Models\SalaryAdvance;
+use App\Models\Sale;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Support\OtherOption;
@@ -153,7 +154,7 @@ class RecordDeletionTest extends TestCase
         $owner = User::factory()->owner()->create();
         $head = ExpenseHead::factory()->create(['name' => 'Tea']);
 
-        $this->actingAs($owner)->get(route('expenses.create'))->assertOk()->assertDontSee('What for')->assertSee('Paid to (optional)');
+        $this->actingAs($owner)->get(route('expenses.create'))->assertOk()->assertDontSee('What for')->assertDontSee('Paid to')->assertSee('Price')->assertSee('<option value="Tea">', false);
         $this->actingAs($owner)->post(route('expenses.store'), [
             'spent_on' => today()->toDateString(),
             'items' => [['expense_head_id' => $head->id, 'paid_to' => '', 'amount' => 350]],
@@ -251,18 +252,79 @@ class RecordDeletionTest extends TestCase
             ->assertDontSee(route('inventory.index', ['tab' => 'material-'.$petrol->id]), false)
             ->assertSeeInOrder(['Diesel', 'Glue', 'Ink', 'Raddi']);
 
-        // A material tab has no Add item button, and its payment form takes one payment.
-        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()->assertDontSee(route('inventory-items.create'), false);
-        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertSee(route('materials.purchase', $raddi), false);
+        // Raddi is sold: its tab has no Add item button, its button opens the sale form, and an expense cannot be filed under it.
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()
+            ->assertDontSee(route('inventory-items.create'), false)->assertSee(route('sales.create', $raddi), false);
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $raddi->id]))->assertRedirect(route('sales.create', $raddi));
+    }
 
-        // Its own purchase form: supplier, quantity and rate, booked on the material and shown on its tab and in Cash-out.
-        $this->actingAs($owner)->get(route('materials.purchase', $raddi))->assertOk()->assertSee('Buy Raddi')->assertDontSee('Head');
-        $item = $raddi->items()->sole();
-        $this->actingAs($owner)->post(route('purchases.store'), [
-            'purchased_on' => today()->toDateString(), 'party_id' => OtherOption::Value, 'party_id_other' => 'Raddi Wala',
-            'inventory_item_id' => $item->id, 'quantity' => 120, 'rate' => 50,
-        ])->assertRedirect(route('inventory.index', ['tab' => 'material-'.$raddi->id]));
-        $this->assertSame(6000, Expense::query()->where('inventory_category_id', $raddi->id)->sole()->amount);
-        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertSee('Raddi Wala')->assertSee('Rs 6,000');
+    public function test_raddi_sales_are_money_in_kept_on_the_raddi_tab_only(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $raddi = InventoryCategory::query()->where('name', 'Raddi')->sole();
+        Sale::factory()->create(['sold_on' => now()->subMonthNoOverflow()->startOfMonth()->addDays(3), 'total' => 7000]);
+
+        $this->actingAs($owner)->get(route('sales.create', $raddi))->assertOk()->assertSee('Sell Raddi')->assertSee('Price per quantity');
+        $this->actingAs($owner)->post(route('sales.store', $raddi), [
+            'sold_on' => today()->toDateString(),
+            'items' => [
+                ['item' => 'Raddi', 'quantity' => 120, 'rate' => 50],
+                ['item' => 'Cut pieces', 'quantity' => 10.5, 'rate' => 40],
+                ['item' => '', 'quantity' => '', 'rate' => ''],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $sale = Sale::query()->latest('id')->first();
+        $this->assertSame(6420, $sale->total);
+        $this->assertSame(['Raddi', 'Cut pieces'], $sale->items->pluck('description')->all());
+        $this->assertSame(0, Expense::query()->count());
+
+        $this->actingAs($owner)->get(route('sales.show', $sale))->assertOk()->assertSeeInOrder(['Raddi', '120', '50', '6,000', 'Cut pieces', '10.5', '40', '420', 'Rs 6,420']);
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()
+            ->assertViewHas('soldThisMonth', 6420)->assertViewHas('soldLastMonth', 7000)->assertSee('Cut pieces');
+
+        $this->deleteRecord($owner, 'sale', $sale->id)->assertSessionHasNoErrors();
+        $this->assertModelMissing($sale);
+        $this->assertSame('Sale', Deletion::query()->sole()->kind);
+    }
+
+    public function test_diesel_expense_rows_take_quantity_and_price_per_quantity(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
+
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $diesel->id]))->assertOk()
+            ->assertSee('Diesel expense')->assertSee('Price per quantity')->assertDontSee('Paid to');
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id,
+            'items' => [['item' => 'Diesel', 'quantity' => 20, 'rate' => 280], ['item' => 'Mitti ka tel', 'quantity' => 5, 'rate' => 200], ['item' => '', 'quantity' => '', 'rate' => '']],
+        ])->assertSessionHasNoErrors();
+
+        $expense = Expense::query()->sole();
+        $this->assertSame(6600, $expense->amount);
+        $this->assertSame('Diesel', $expense->head->name);
+        $this->assertSame([5600, 1000], $expense->items->pluck('amount')->all());
+        $this->actingAs($owner)->get(route('expenses.show', $expense))->assertSeeInOrder(['Diesel', '20', '280', '5,600', 'Mitti ka tel', '5', '200', '1,000', 'Rs 6,600']);
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $diesel->id]))->assertSee('<option value="Mitti ka tel">', false);
+
+        // A row without its quantity is refused on these tabs.
+        $this->actingAs($owner)->post(route('expenses.store'), ['spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id, 'items' => [['item' => 'Diesel', 'rate' => 280]]])
+            ->assertSessionHasErrors('items.0.quantity');
+    }
+
+    public function test_a_typed_item_in_cash_out_becomes_its_head(): void
+    {
+        $owner = User::factory()->owner()->create();
+
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(),
+            'items' => [['item' => 'Rickshaw fare', 'amount' => 200], ['item' => 'tea', 'amount' => 150], ['item' => '', 'amount' => '']],
+        ])->assertSessionHasNoErrors();
+
+        $expense = Expense::query()->sole();
+        $this->assertSame(350, $expense->amount);
+        $this->assertSame(['Rickshaw fare', 'tea'], $expense->items->pluck('description')->all());
+        $this->assertNotNull(ExpenseHead::query()->where('name', 'Rickshaw fare')->first());
+        $this->actingAs($owner)->get(route('expenses.create'))->assertSee('<option value="Rickshaw fare">', false);
     }
 }

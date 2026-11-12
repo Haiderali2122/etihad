@@ -53,27 +53,52 @@
             </form>
         </div>
 
-        @if ($material)
+        @if ($material && $material->isSale())
+            {{-- Raddi is sold: sales are money coming in, kept here and not in Cash-out. --}}
+            <div class="card-b">
+                <div class="grid g3" style="margin-bottom:12px">
+                    <x-kpi icon="download" tone="good" :label="__('Sold last month')" :foot="now()->subMonthNoOverflow()->format('F Y')">Rs {{ number_format($soldLastMonth) }}</x-kpi>
+                    <x-kpi icon="download" :label="__('Sold this month')" :foot="now()->format('F Y')">Rs {{ number_format($soldThisMonth) }}</x-kpi>
+                    <x-kpi icon="file" :label="__('Sales recorded')">{{ number_format($sales->count()) }}</x-kpi>
+                </div>
+                <div style="display:flex;justify-content:flex-end">@can('expenses.create')<a class="btn primary" href="{{ route('sales.create', $material) }}"><x-icon name="plus" />{{ __('Add sale') }}</a>@endcan</div>
+            </div>
+            <div class="tbl-wrap"><table>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Slip') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Total') }}</th><th></th></tr></thead>
+                <tbody>
+                @forelse ($sales as $s)
+                    <tr>
+                        <td>{{ $s->sold_on->format('j M Y') }}<div class="meta">{{ $s->creator?->name }}</div></td>
+                        <td>{{ $s->receiptNumber() }}</td>
+                        <td>{{ $s->items->pluck('description')->implode(', ') }}</td>
+                        <td class="r num"><b>Rs {{ number_format($s->total) }}</b></td>
+                        <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $s->attachment])<a class="btn sm" href="{{ route('sales.show', $s) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('records.destroy', ['sale', $s->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5"><div class="empty"><b>{{ __('No sales yet') }}</b>{{ __('Record each sale with Add sale.') }}</div></td></tr>
+                @endforelse
+                </tbody>
+            </table></div>
+        @elseif ($material)
             <div class="card-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
                 <div><b>{{ $material->localName() }}</b> <span class="meta">{{ __('Paid this month: Rs :n', ['n' => number_format($materialPayments->filter(fn ($p) => $p->status->value !== 'rejected' && $p->spent_on->gte(now()->startOfMonth()))->sum('amount'))]) }}</span></div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    @can('purchases.create')<a class="btn primary" href="{{ route('materials.purchase', $material) }}"><x-icon name="plus" />{{ __('Buy :material', ['material' => $material->localName()]) }}</a>@endcan
+                    @can('expenses.create')<a class="btn primary" href="{{ route('expenses.create', ['category' => $material->id]) }}"><x-icon name="plus" />{{ __('Add expense') }}</a>@endcan
                 </div>
             </div>
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Paid to') }}</th><th>{{ __('For') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($materialPayments as $p)
                     <tr @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
                         <td>{{ $p->spent_on->format('j M Y') }}<div class="meta">{{ $p->user->name }}</div></td>
-                        <td>{{ $p->paid_to }}</td>
-                        <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}</div>@endif</td>
+                        <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
                         <td class="r"><a class="btn sm" href="{{ $p->source?->receipt_no ? route('materials.receipt', $p->source) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6"><div class="empty"><b>{{ __('No purchases yet') }}</b>{{ __('Record each purchase with the Buy button above.') }}</div></td></tr>
+                    <tr><td colspan="5"><div class="empty"><b>{{ __('No expenses yet') }}</b>{{ __('Add them with the Add expense button above.') }}</div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

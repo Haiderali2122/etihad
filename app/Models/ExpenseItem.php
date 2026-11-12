@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * One payment on an expense receipt: its own head, who was paid, what for, and the amount.
  */
-#[Fillable(['expense_id', 'expense_head_id', 'paid_to', 'description', 'amount'])]
+#[Fillable(['expense_id', 'expense_head_id', 'paid_to', 'description', 'quantity', 'rate', 'amount'])]
 class ExpenseItem extends Model
 {
     /** @use HasFactory<ExpenseItemFactory> */
