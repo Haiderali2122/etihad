@@ -9,7 +9,7 @@
         <x-slot:actions>
             @can('inventory.manage')
                 <a class="btn" href="{{ route('inventory-categories.index') }}"><x-icon name="file" />{{ __('Categories') }}</a>
-                <a class="btn" href="{{ route('inventory-items.create', array_filter(['category' => $categoryId])) }}"><x-icon name="plus" />{{ __('Add item') }}</a>
+                @unless ($material)<a class="btn" href="{{ route('inventory-items.create', array_filter(['category' => $categoryId])) }}"><x-icon name="plus" />{{ __('Add item') }}</a>@endunless
             @endcan
             @can('inventory.issue')
                 <a class="btn" href="{{ route('inventory-issues.create') }}"><x-icon name="send" />{{ __('Move out') }}</a>
@@ -57,8 +57,7 @@
             <div class="card-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
                 <div><b>{{ $material->localName() }}</b> <span class="meta">{{ __('Paid this month: Rs :n', ['n' => number_format($materialPayments->filter(fn ($p) => $p->status->value !== 'rejected' && $p->spent_on->gte(now()->startOfMonth()))->sum('amount'))]) }}</span></div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    @can('purchases.create')<a class="btn" href="{{ route('purchases.create') }}"><x-icon name="download" />{{ __('Add purchase') }}</a>@endcan
-                    @can('expenses.create')<a class="btn primary" href="{{ route('expenses.create', ['category' => $material->id]) }}"><x-icon name="plus" />{{ __('Add payment') }}</a>@endcan
+                    @can('purchases.create')<a class="btn primary" href="{{ route('materials.purchase', $material) }}"><x-icon name="plus" />{{ __('Buy :material', ['material' => $material->localName()]) }}</a>@endcan
                 </div>
             </div>
             <div class="tbl-wrap"><table>
@@ -74,7 +73,7 @@
                         <td class="r"><a class="btn sm" href="{{ route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6"><div class="empty"><b>{{ __('No payments yet') }}</b>{{ __('Record who was paid, for what and when with Add payment.') }}</div></td></tr>
+                    <tr><td colspan="6"><div class="empty"><b>{{ __('No purchases yet') }}</b>{{ __('Record each purchase with the Buy button above.') }}</div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

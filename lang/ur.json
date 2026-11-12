@@ -1335,5 +1335,14 @@
     "Payroll run": "پے رول",
     "Cash float": "منیجر کو دی گئی رقم",
     "Plate job": "پلیٹ کا کام",
-    "Reason for deleting (optional)": "حذف کرنے کی وجہ (اختیاری)"
+    "Reason for deleting (optional)": "حذف کرنے کی وجہ (اختیاری)",
+    "New type": "نئی قسم",
+    "Raddi": "ردی",
+    "Buy :material": ":material خریدیں",
+    "Record a :material purchase: who it was bought from, how much and at what rate. It comes off the manager's cash and shows in Cash-out.": ":material کی خریداری درج کریں: کس سے خریدا، کتنا اور کس ریٹ پر۔ یہ منیجر کی رقم سے کٹتی ہے اور کیش آؤٹ میں نظر آتی ہے۔",
+    "Quantity (:unit)": "مقدار (:unit)",
+    "Rate per :unit (Rs)": "ریٹ فی :unit (روپے)",
+    "Record each purchase with the Buy button above.": "ہر خریداری اوپر والے خریدیں بٹن سے درج کریں۔",
+    "litre": "لیٹر",
+    "kg": "کلو"
 }

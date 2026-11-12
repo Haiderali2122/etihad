@@ -39,7 +39,7 @@
                         </tr>
                     @endforeach
                     </tbody>
-                    <tfoot><tr><td colspan="2"><button type="button" class="btn sm" id="addItem"><x-icon name="plus" />{{ __('Add item') }}</button></td><td class="r num"><b id="itemsTotal">Rs 0</b></td><td></td></tr></tfoot>
+                    <tfoot><tr><td colspan="2"><button type="button" class="btn sm" id="addItem" @if ($category) hidden @endif><x-icon name="plus" />{{ __('Add item') }}</button></td><td class="r num"><b id="itemsTotal">Rs 0</b></td><td></td></tr></tfoot>
                 </table></div>
                 <datalist id="payees">@foreach ($payees as $p)<option value="{{ $p }}">@endforeach</datalist>
                 @error('items')<span class="err">{{ $message }}</span>@enderror

@@ -21,6 +21,7 @@ use App\Models\Role;
 use App\Models\SalaryAdvance;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Support\OtherOption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -165,13 +166,48 @@ class RecordDeletionTest extends TestCase
         $this->actingAs($owner)->get(route('expenses.show', $expense))->assertOk()->assertSee('Tea');
     }
 
-    public function test_petrol_diesel_glue_and_ink_have_their_own_sidebar_entries(): void
+    public function test_a_party_of_type_other_takes_a_typed_type_that_is_offered_next_time(): void
     {
         $owner = User::factory()->owner()->create();
+        $save = fn (string $name, array $kind) => $this->actingAs($owner)->post(route('parties.store'), ['name' => $name, 'is_active' => 1] + $kind);
+
+        $save('Bilal', ['kind' => 'other'])->assertSessionHasErrors('kind_other');
+        $save('Bilal', ['kind' => 'other', 'kind_other' => '  Electrician '])->assertSessionHasNoErrors();
+        $this->assertSame('Electrician', Party::query()->where('name', 'Bilal')->sole()->typeLabel());
+
+        $this->actingAs($owner)->get(route('parties.create'))->assertSee('value="custom:Electrician"', false)->assertSee('Other… (type a new one)');
+        $this->actingAs($owner)->get(route('parties.index'))->assertSee('Electrician');
+
+        // Picking the saved type, or typing it again in any case, reuses the same spelling.
+        $save('Kashif', ['kind' => 'custom:Electrician'])->assertSessionHasNoErrors();
+        $save('Nadeem', ['kind' => 'other', 'kind_other' => 'electrician'])->assertSessionHasNoErrors();
+        $this->assertSame(['Electrician'], Party::customTypes());
+        $this->assertSame(3, Party::query()->where('kind_other', 'Electrician')->count());
+    }
+
+    public function test_diesel_glue_ink_and_raddi_have_their_own_sidebar_entries_and_petrol_does_not(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $raddi = InventoryCategory::query()->where('name', 'Raddi')->sole();
         $petrol = InventoryCategory::query()->where('name', 'Petrol')->sole();
 
         $this->actingAs($owner)->get(route('dashboard'))->assertOk()
-            ->assertSee(route('inventory.index', ['tab' => 'material-'.$petrol->id]), false)
-            ->assertSeeInOrder(['Diesel', 'Glue', 'Ink', 'Petrol']);
+            ->assertSee(route('inventory.index', ['tab' => 'material-'.$raddi->id]), false)
+            ->assertDontSee(route('inventory.index', ['tab' => 'material-'.$petrol->id]), false)
+            ->assertSeeInOrder(['Diesel', 'Glue', 'Ink', 'Raddi']);
+
+        // A material tab has no Add item button, and its payment form takes one payment.
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()->assertDontSee(route('inventory-items.create'), false);
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertSee(route('materials.purchase', $raddi), false);
+
+        // Its own purchase form: supplier, quantity and rate, booked on the material and shown on its tab and in Cash-out.
+        $this->actingAs($owner)->get(route('materials.purchase', $raddi))->assertOk()->assertSee('Buy Raddi')->assertDontSee('Head');
+        $item = $raddi->items()->sole();
+        $this->actingAs($owner)->post(route('purchases.store'), [
+            'purchased_on' => today()->toDateString(), 'party_id' => OtherOption::Value, 'party_id_other' => 'Raddi Wala',
+            'inventory_item_id' => $item->id, 'quantity' => 120, 'rate' => 50,
+        ])->assertRedirect(route('inventory.index', ['tab' => 'material-'.$raddi->id]));
+        $this->assertSame(6000, Expense::query()->where('inventory_category_id', $raddi->id)->sole()->amount);
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertSee('Raddi Wala')->assertSee('Rs 6,000');
     }
 }

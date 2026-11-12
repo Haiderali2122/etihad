@@ -15,7 +15,7 @@
             @forelse ($parties as $party)
                 <tr>
                     <td><div class="main">{{ $party->name }}</div><div class="meta">{{ $party->address }}</div></td>
-                    <td>{{ $party->kind->label() }}</td>
+                    <td>{{ $party->typeLabel() }}</td>
                     <td>{{ $party->phone }}</td>
                     <td class="r num">{{ $party->purchases_sum_amount ? 'Rs '.number_format($party->purchases_sum_amount) : '—' }}</td>
                     <td><x-badge :tone="$party->is_active ? 'good' : 'mute'">{{ $party->is_active ? __('Active') : __('Inactive') }}</x-badge></td>

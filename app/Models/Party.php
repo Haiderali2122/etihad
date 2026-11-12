@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * A supplier, paper party, mechanic or outside press.
  */
-#[Fillable(['name', 'kind', 'phone', 'address', 'notes', 'is_active'])]
+#[Fillable(['name', 'kind', 'kind_other', 'phone', 'address', 'notes', 'is_active'])]
 class Party extends Model
 {
     /** @use HasFactory<PartyFactory> */
@@ -92,6 +92,25 @@ class Party extends Model
     /**
      * Whether any record already files this party under its kind, so the kind must not change.
      */
+    /**
+     * The type shown for this party: the typed name for an "Other" party, otherwise the type's label.
+     */
+    public function typeLabel(): string
+    {
+        return $this->kind === PartyKind::Other && filled($this->kind_other) ? $this->kind_other : $this->kind->label();
+    }
+
+    /**
+     * Types typed in for "Other" parties before, offered in the Type list next time.
+     *
+     * @return list<string>
+     */
+    public static function customTypes(): array
+    {
+        return self::query()->where('kind', PartyKind::Other)->whereNotNull('kind_other')
+            ->distinct()->orderBy('kind_other')->pluck('kind_other')->all();
+    }
+
     public function hasHistory(): bool
     {
         return $this->purchases()->exists()
