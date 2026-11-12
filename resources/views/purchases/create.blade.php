@@ -12,7 +12,7 @@
             @csrf
             <div class="card-b"><div class="form">
                 <x-field name="purchased_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                <x-field-other name="party_id" :label="__('Supplier')" :options="$parties->pluck('name', 'id')" :placeholder="__('Choose supplier')" required />
+                <x-supplier-picker :parties="$parties" />
                 <x-item-picker :items="$categories->flatMap(fn ($c) => $c->items->each->setRelation('category', $c))" :selected="$itemId" />
                 <x-field name="quantity" type="number" step="0.01" min="0" :label="__('Quantity')" required />
                 <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate (Rs)')" required />

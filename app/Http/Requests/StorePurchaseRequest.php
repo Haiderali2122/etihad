@@ -28,6 +28,12 @@ class StorePurchaseRequest extends FormRequest
     {
         OtherOption::resolve($this, 'party_id', Party::class, ['kind' => PartyKind::Supplier, 'is_active' => true]);
 
+        // The Supplier box takes a typed or picked name; a new name is added to Parties as a supplier.
+        $supplier = trim((string) preg_replace('/\s+/u', ' ', (string) $this->input('supplier_name')));
+        if ($supplier !== '') {
+            $this->merge(['party_id' => OtherOption::findOrCreate(Party::class, $supplier, ['kind' => PartyKind::Supplier, 'is_active' => true])->getKey()]);
+        }
+
         // The Item box takes a typed or picked name; a new name becomes a new item.
         if ($this->filled('item_name')) {
             $this->merge(['inventory_item_id' => ItemPicker::findOrCreateForPurchase((string) $this->input('item_name'))?->getKey()]);

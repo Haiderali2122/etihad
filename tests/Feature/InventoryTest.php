@@ -14,7 +14,6 @@ use App\Models\Party;
 use App\Models\Purchase;
 use App\Models\Role;
 use App\Models\User;
-use App\Support\OtherOption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -94,9 +93,10 @@ class InventoryTest extends TestCase
         $item = InventoryItem::factory()->create();
         $existing = Party::factory()->create(['name' => 'Ravi Traders']);
 
-        $this->actingAs($manager)->get(route('purchases.create'))->assertOk()->assertSee('Other… (type a new one)');
+        $this->actingAs($manager)->get(route('purchases.create'))->assertOk()
+            ->assertSee('name="supplier_name"', false)->assertSee('<option value="Ravi Traders">', false)->assertDontSee('Choose supplier');
         $purchase = fn (string $name) => $this->actingAs($manager)->post(route('purchases.store'), [
-            'purchased_on' => today()->toDateString(), 'party_id' => OtherOption::Value, 'party_id_other' => $name,
+            'purchased_on' => today()->toDateString(), 'supplier_name' => $name,
             'inventory_item_id' => $item->id, 'quantity' => 2, 'rate' => 100,
         ])->assertSessionHasNoErrors();
 
@@ -110,7 +110,9 @@ class InventoryTest extends TestCase
         $this->assertSame($existing->id, Purchase::query()->latest('id')->first()->party_id);
         $this->assertSame(1, Party::query()->whereRaw('LOWER(name) = ?', ['ravi traders'])->count());
 
-        $this->actingAs($manager)->get(route('purchases.create'))->assertSee('Hafiz Paint House');
+        $this->actingAs($manager)->get(route('purchases.create'))->assertSee('<option value="Hafiz Paint House">', false);
+        // The new supplier is in Parties, ready for its details to be filled in.
+        $this->actingAs(User::factory()->owner()->create())->get(route('parties.index', ['kind' => 'supplier']))->assertSee('Hafiz Paint House');
     }
 
     public function test_the_item_is_typed_or_picked_on_purchase_and_move_out(): void
