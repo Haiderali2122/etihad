@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PayrollStatus;
 use App\Enums\WorkOrderStage;
+use App\Models\Contractor;
 use App\Models\ContractorPayment;
 use App\Models\Deletion;
 use App\Models\Dispatch;
@@ -310,6 +311,17 @@ class RecordDeletionTest extends TestCase
         // A row without its quantity is refused on these tabs.
         $this->actingAs($owner)->post(route('expenses.store'), ['spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id, 'items' => [['item' => 'Diesel', 'rate' => 280]]])
             ->assertSessionHasErrors('items.0.quantity');
+    }
+
+    public function test_each_contractor_row_can_be_opened_and_edited(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $contractor = Contractor::factory()->create(['name' => 'Azeem Daftri']);
+
+        $this->actingAs($owner)->get(route('contractors.index'))->assertOk()
+            ->assertSee('data-href="'.route('contractors.show', $contractor).'"', false)
+            ->assertSee('href="'.route('contractors.edit', $contractor).'"', false);
+        $this->actingAs($owner)->get(route('contractors.edit', $contractor))->assertOk()->assertSee('Azeem Daftri');
     }
 
     public function test_a_typed_item_in_cash_out_becomes_its_head(): void
