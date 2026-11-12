@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\PartyKind;
 use App\Http\Requests\StoreExpenseRequest;
 use App\Models\CashFloat;
 use App\Models\ContractorPayment;
@@ -15,6 +16,7 @@ use App\Models\Loan;
 use App\Models\Machine;
 use App\Models\MachineRepair;
 use App\Models\OutsidePrintReceipt;
+use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\PlateJob;
 use App\Models\Purchase;
@@ -78,6 +80,7 @@ class ExpenseController extends Controller
             'heads' => ExpenseHead::query()->active()->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
             'suggestions' => $this->suggestions($category),
+            'suppliers' => $this->suppliers(),
             'back' => $category ? route('inventory.index', ['tab' => 'material-'.$category->id]) : route('expenses.index'),
         ]);
     }
@@ -122,6 +125,7 @@ class ExpenseController extends Controller
             'heads' => ExpenseHead::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($expense->expense_head_id))->orderBy('name')->get(),
             'machines' => Machine::query()->orderBy('code')->get(),
             'suggestions' => $this->suggestions($expense->category),
+            'suppliers' => $this->suppliers(),
             'back' => route('expenses.show', $expense),
         ]);
     }
@@ -249,6 +253,16 @@ class ExpenseController extends Controller
                 'quantity' => $item['quantity'] ?? null, 'rate' => $item['rate'] ?? null, 'amount' => (int) $item['amount'],
             ]);
         }
+    }
+
+    /**
+     * Suppliers offered in the Supplier box on the Ink and Glue tabs.
+     *
+     * @return list<string>
+     */
+    private function suppliers(): array
+    {
+        return Party::query()->active()->where('kind', PartyKind::Supplier)->orderBy('name')->pluck('name')->all();
     }
 
     /**

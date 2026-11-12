@@ -150,10 +150,21 @@ class InventoryTest extends TestCase
         $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
         $black = InventoryItem::factory()->create(['inventory_category_id' => $ink->id, 'name' => 'Black ink', 'unit' => 'kg']);
 
+        // The Supplier box sits beside the date; it is needed, and a new name is added to Parties as a supplier.
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $ink->id]))->assertOk()->assertSee('name="supplier"', false);
         $this->actingAs($owner)->post(route('expenses.store'), [
-            'spent_on' => today()->toDateString(), 'inventory_category_id' => $ink->id,
+            'spent_on' => today()->toDateString(), 'inventory_category_id' => $ink->id, 'items' => [['item' => 'Black ink', 'quantity' => 1, 'rate' => 900]],
+        ])->assertSessionHasErrors('supplier');
+
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(), 'inventory_category_id' => $ink->id, 'supplier' => '  Hafiz  Ink House ',
             'items' => [['item' => 'black ink', 'quantity' => 12, 'rate' => 900], ['item' => 'Cyan ink', 'quantity' => 3.5, 'rate' => 1200]],
         ])->assertSessionHasNoErrors();
+        $supplier = Party::query()->where('name', 'Hafiz Ink House')->sole();
+        $this->assertSame(PartyKind::Supplier, $supplier->kind);
+        $this->assertSame('Hafiz Ink House', Expense::query()->sole()->paid_to);
+        $this->actingAs($owner)->get(route('expenses.show', Expense::query()->sole()))->assertSee('Hafiz Ink House');
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $ink->id]))->assertSee('<option value="Hafiz Ink House">', false);
 
         $this->assertSame(12.0, $black->fresh()->balance());
         $cyan = $ink->items()->where('name', 'Cyan ink')->sole();

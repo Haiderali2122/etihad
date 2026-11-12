@@ -97,7 +97,7 @@
                 @forelse ($materialPayments as $p)
                     <tr @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
                         <td>{{ $p->spent_on->format('j M Y') }}<div class="meta">{{ $p->user->name }}</div></td>
-                        <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
+                        <td>{{ $p->reason }}@if (! $p->isLinked() && $p->paid_to && $p->paid_to !== '—')<div class="meta">{{ $p->paid_to }}</div>@endif @if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
                         <td class="r"><a class="btn sm" href="{{ $p->source?->receipt_no ? route('materials.receipt', $p->source) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>

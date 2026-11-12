@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\PartyKind;
 use App\Models\ExpenseHead;
 use App\Models\InventoryCategory;
+use App\Models\Party;
 use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -28,6 +30,13 @@ class StoreExpenseRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         OtherOption::resolve($this, 'expense_head_id', ExpenseHead::class);
+
+        // Ink and Glue: the supplier is typed or picked; a new name is added to Parties as a supplier.
+        $supplier = trim((string) preg_replace('/\s+/u', ' ', (string) $this->input('supplier')));
+        if ($supplier !== '') {
+            $party = OtherOption::findOrCreate(Party::class, $supplier, ['kind' => PartyKind::Supplier, 'is_active' => true]);
+            $this->merge(['supplier' => $party->name, 'paid_to' => $party->name]);
+        }
 
         $category = InventoryCategory::query()->where('show_as_tab', true)->find($this->integer('inventory_category_id'));
         $materialHead = $category ? OtherOption::findOrCreate(ExpenseHead::class, $category->name)->getKey() : null;
@@ -104,6 +113,7 @@ class StoreExpenseRequest extends FormRequest
             'items.*.rate' => ['nullable', Rule::requiredIf($byQuantity), 'numeric', 'min:0', 'max:99999999'],
             'items.*.paid_to' => ['nullable', 'string', 'max:120'],
             'items.*.amount' => ['required', 'integer', 'min:1'],
+            'supplier' => ['nullable', Rule::requiredIf((bool) InventoryCategory::query()->where('show_as_tab', true)->find($this->integer('inventory_category_id'))?->addsStock()), 'string', 'max:120'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];
     }

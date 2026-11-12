@@ -22,6 +22,15 @@
         @if ($category)<input type="hidden" name="inventory_category_id" value="{{ $category->id }}">@endif
         <div class="card-b"><div class="form">
             <x-field name="spent_on" type="date" :label="__('Date')" :value="$expense->spent_on?->toDateString() ?? today()->toDateString()" required />
+            @if ($category?->addsStock())
+                {{-- Type the supplier or pick one; a new name is added to Parties as a supplier, details can follow later. --}}
+                <div @class(['field', 'has-err' => $errors->has('supplier')])>
+                    <label for="f_supplier">{{ __('Supplier') }} <span class="muted">*</span></label>
+                    <input type="text" id="f_supplier" name="supplier" value="{{ old('supplier', $expense->paid_to !== '—' ? $expense->paid_to : '') }}" list="supplierList" autocomplete="off" maxlength="120" required>
+                    <datalist id="supplierList">@foreach ($suppliers as $s)<option value="{{ $s }}">@endforeach</datalist>
+                    @error('supplier')<span class="err">{{ $message }}</span>@enderror
+                </div>
+            @endif
 
             <div @class(['field', 'full', 'has-err' => $errors->has('items') || $errors->has('items.*')])>
                 <div class="tbl-wrap"><table class="fmt-table no-stack">
