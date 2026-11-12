@@ -13,20 +13,7 @@
             <div class="card-b"><div class="form">
                 <x-field name="purchased_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                 <x-field-other name="party_id" :label="__('Supplier')" :options="$parties->pluck('name', 'id')" :placeholder="__('Choose supplier')" required />
-                <div @class(['field', 'full', 'has-err' => $errors->has('inventory_item_id')])>
-                    <label for="f_inventory_item_id">{{ __('Item') }} <span class="muted">*</span></label>
-                    <select id="f_inventory_item_id" name="inventory_item_id" required>
-                        <option value="">{{ __('Choose item') }}</option>
-                        @foreach ($categories as $category)
-                            <optgroup label="{{ $category->localName() }}">
-                                @foreach ($category->items as $item)
-                                    <option value="{{ $item->id }}" data-unit="{{ $item->unit }}" @selected((string) old('inventory_item_id', $itemId) === (string) $item->id)>{{ $item->localName() }} ({{ $item->unit }})</option>
-                                @endforeach
-                            </optgroup>
-                        @endforeach
-                    </select>
-                    @error('inventory_item_id')<span class="err">{{ $message }}</span>@enderror
-                </div>
+                <x-item-picker :items="$categories->flatMap(fn ($c) => $c->items->each->setRelation('category', $c))" :selected="$itemId" />
                 <x-field name="quantity" type="number" step="0.01" min="0" :label="__('Quantity')" required />
                 <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate (Rs)')" required />
                 <div class="field"><label>{{ __('Amount') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" id="amountOut" style="font-size:22px">Rs 0</div></div></div>
@@ -43,7 +30,7 @@
                     const qtyLabel = document.querySelector('label[for="f_quantity"]'), base = qtyLabel.firstChild.textContent.trim();
                     const calc = () => {
                         out.textContent = 'Rs ' + Math.round((+q.value || 0) * (+r.value || 0)).toLocaleString('en-PK');
-                        const unit = item.selectedOptions[0]?.dataset.unit;
+                        const unit = item.dataset.unit;
                         qtyLabel.firstChild.textContent = (unit ? `${base} (${unit})` : base) + ' ';
                     };
                     [q, r].forEach(el => el.addEventListener('input', calc));

@@ -112,6 +112,47 @@ class InventoryTest extends TestCase
         $this->actingAs($manager)->get(route('purchases.create'))->assertSee('Hafiz Paint House');
     }
 
+    public function test_the_item_is_typed_or_picked_on_purchase_and_move_out(): void
+    {
+        $manager = User::factory()->create();
+        $ink = InventoryItem::factory()->create(['name' => 'Black ink', 'unit' => 'kg']);
+        $party = Party::factory()->create();
+
+        $this->actingAs($manager)->get(route('purchases.create'))->assertOk()
+            ->assertSee('name="item_name"', false)->assertSee('<option value="Black ink">', false)->assertDontSee('Choose item');
+
+        // A picked name and a brand-new name both work on Add purchase.
+        $buy = fn (string $name) => $this->actingAs($manager)->post(route('purchases.store'), [
+            'purchased_on' => today()->toDateString(), 'party_id' => $party->id, 'item_name' => $name, 'quantity' => 10, 'rate' => 100,
+        ])->assertSessionHasNoErrors();
+        $buy('  black INK ');
+        $buy('Masking tape');
+        $this->assertSame(10.0, $ink->fresh()->balance());
+        $tape = InventoryItem::query()->where('name', 'Masking tape')->sole();
+        $this->assertSame('General', $tape->category->name);
+
+        // Move out takes the typed name of an item in stock, and refuses one that does not exist.
+        $this->actingAs($manager)->get(route('inventory-issues.create'))->assertSee('<option value="Masking tape">', false);
+        $this->actingAs($manager)->post(route('inventory-issues.store'), [
+            'issued_on' => today()->toDateString(), 'item_name' => 'masking tape', 'quantity' => 4, 'issued_to' => 'Binding',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(6.0, $tape->fresh()->balance());
+        $this->actingAs($manager)->post(route('inventory-issues.store'), [
+            'issued_on' => today()->toDateString(), 'item_name' => 'Nothing like this', 'quantity' => 1, 'issued_to' => 'Binding',
+        ])->assertSessionHasErrors('inventory_item_id');
+    }
+
+    public function test_material_tabs_show_no_inventory_header_warning_or_totals(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
+
+        $this->actingAs($owner)->get(route('inventory.index'))->assertSee('Waiting for approval')->assertSee('Purchased this month');
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertOk()
+            ->assertDontSee('Waiting for approval')->assertDontSee('Purchased this month')->assertDontSee('Moved out this month')
+            ->assertDontSee(route('inventory-categories.index'), false);
+    }
+
     public function test_cannot_move_out_more_than_the_balance(): void
     {
         $item = Purchase::factory()->create(['quantity' => 10])->item;

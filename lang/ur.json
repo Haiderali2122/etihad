@@ -1372,5 +1372,9 @@
     "Add sale": "فروخت درج کریں",
     "No sales yet": "ابھی کوئی فروخت نہیں",
     "Record each sale with Add sale.": "ہر فروخت فروخت درج کریں بٹن سے درج کریں۔",
-    "Sale": "فروخت"
+    "Sale": "فروخت",
+    "Type or pick an item that is in stock.": "اسٹاک میں موجود چیز لکھیں یا چنیں۔",
+    "Raddi sold, with a slip for each sale.": "فروخت شدہ ردی، ہر فروخت کی پرچی کے ساتھ۔",
+    ":name expenses: each entry with its items, quantity and price.": ":name کے اخراجات: ہر اندراج اپنی اشیاء، مقدار اور قیمت کے ساتھ۔",
+    "General": "عام"
 }

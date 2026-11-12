@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\PartyKind;
 use App\Models\InventoryItem;
+use App\Support\ItemPicker;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,6 +18,25 @@ class StoreInventoryIssueRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * The Item box takes a typed or picked name; only items already in the list can go out.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('item_name')) {
+            $items = InventoryItem::query()->with('category')->active()->get();
+            $this->merge(['inventory_item_id' => ItemPicker::find((string) $this->input('item_name'), $items)?->getKey()]);
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return ['inventory_item_id.required' => __('Type or pick an item that is in stock.')];
     }
 
     /**

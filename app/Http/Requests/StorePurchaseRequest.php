@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\PartyKind;
 use App\Models\InventoryCategory;
 use App\Models\Party;
+use App\Support\ItemPicker;
 use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -26,6 +27,11 @@ class StorePurchaseRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         OtherOption::resolve($this, 'party_id', Party::class, ['kind' => PartyKind::Supplier, 'is_active' => true]);
+
+        // The Item box takes a typed or picked name; a new name becomes a new item.
+        if ($this->filled('item_name')) {
+            $this->merge(['inventory_item_id' => ItemPicker::findOrCreateForPurchase((string) $this->input('item_name'))?->getKey()]);
+        }
 
         // On a material tab a new item (e.g. "Mitti ka tel" under Diesel) can be typed in; it joins that material.
         if ($this->input('inventory_item_id') === OtherOption::Value) {

@@ -7,22 +7,7 @@
         <form method="POST" action="{{ route('inventory-issues.store') }}" class="card form-card">
             @csrf
             <div class="card-b"><div class="form">
-                <div @class(['field', 'full', 'has-err' => $errors->has('inventory_item_id')])>
-                    <label for="f_inventory_item_id">{{ __('Item') }} <span class="muted">*</span></label>
-                    <select id="f_inventory_item_id" name="inventory_item_id" required>
-                        <option value="">{{ __('Choose item') }}</option>
-                        @foreach ($categories as $category)
-                            <optgroup label="{{ $category->localName() }}">
-                                @foreach ($category->items as $item)
-                                    <option value="{{ $item->id }}" data-balance="{{ $item->balance() }}" data-unit="{{ $item->unit }}" data-machines="{{ $category->for_machines ? 1 : 0 }}" @selected((string) old('inventory_item_id', $itemId) === (string) $item->id) @disabled($item->balance() <= 0)>
-                                        {{ $item->localName() }} — {{ \App\Models\InventoryItem::qty($item->balance()) }} {{ $item->unit }} {{ __('in stock') }}
-                                    </option>
-                                @endforeach
-                            </optgroup>
-                        @endforeach
-                    </select>
-                    @error('inventory_item_id')<span class="err">{{ $message }}</span>@enderror
-                </div>
+                <x-item-picker :items="$categories->flatMap(fn ($c) => $c->items->each->setRelation('category', $c))->filter(fn ($i) => $i->balance() > 0)->values()" :selected="$itemId" stock />
                 <x-field name="quantity" type="number" step="0.01" min="0.01" :label="__('Quantity going out')" required />
                 <div class="field"><label>&nbsp;</label><div id="stockcheck"></div></div>
                 <x-field name="issued_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
@@ -45,7 +30,7 @@
                     const item = document.getElementById('f_inventory_item_id'), qty = document.getElementById('f_quantity'), check = document.getElementById('stockcheck');
                     const fmt = n => (Math.round(n * 100) / 100).toLocaleString('en-PK');
                     const sync = () => {
-                        const opt = item.selectedOptions[0], have = +(opt?.dataset.balance || 0), unit = opt?.dataset.unit || '', need = +qty.value || 0;
+                        const have = +(item.dataset.balance || 0), unit = item.dataset.unit || '', need = +qty.value || 0;
                         if (!item.value || !need) { check.innerHTML = ''; return; }
                         check.innerHTML = need <= have
                             ? `<div class="stockcheck ok">${fmt(have - need)} ${unit} {{ __('left after this') }}</div>`
@@ -53,7 +38,7 @@
                     };
                     // Machine parts go to a kharadia; everything else to an employee.
                     const who = () => {
-                        const machines = item.selectedOptions[0]?.dataset.machines === '1';
+                        const machines = item.dataset.machines === '1';
                         document.getElementById('f_party_id').closest('.field').hidden = !machines;
                         document.getElementById('f_employee_id').closest('.field').hidden = machines;
                     };

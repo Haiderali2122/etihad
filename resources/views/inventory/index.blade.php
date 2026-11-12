@@ -4,7 +4,11 @@
     $levelLabel = ['ok' => __('OK'), 'low' => __('Low'), 'out' => __('Out of stock'), 'none' => __('No stock yet')];
     $tabs = ['stock' => [__('Stock'), $items->count()], 'purchases' => [__('Purchases'), $purchaseCount], 'issues' => [__('Moved out'), $issueCount]];
 @endphp
-<x-layouts.app :title="__('Inventory')">
+<x-layouts.app :title="$material ? $material->localName() : __('Inventory')">
+    @if ($material)
+        {{-- Diesel, Glue, Ink and Raddi are tabs of their own: no inventory header, stock warning or totals here. --}}
+        <x-page-head :title="$material->localName()" :subtitle="$material->isSale() ? __('Raddi sold, with a slip for each sale.') : __(':name expenses: each entry with its items, quantity and price.', ['name' => $material->localName()])" />
+    @else
     <x-page-head :title="__('Inventory')" :subtitle="__('Ink, plates, glue, parts and other stores: what was bought, what went out, and what is left.')">
         <x-slot:actions>
             @can('inventory.manage')
@@ -33,6 +37,7 @@
         <x-kpi icon="clock" tone="warn" :label="__('Waiting for approval')" :foot="trans_choice(':count bill|:count bills', $pendingCount)">Rs {{ number_format($pendingTotal) }}</x-kpi>
         <x-kpi icon="send" :label="__('Moved out this month')" :foot="__('Entries')">{{ $issuedThisMonth }}</x-kpi>
     </div>
+    @endif
 
     <div class="card">
         <div class="toolbar">
