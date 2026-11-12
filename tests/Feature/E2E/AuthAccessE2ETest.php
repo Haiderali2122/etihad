@@ -26,6 +26,7 @@ use App\Models\PaperType;
 use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\PlateJob;
+use App\Models\Purchase;
 use App\Models\RimLoading;
 use App\Models\Role;
 use App\Models\SalaryAdvance;
@@ -531,6 +532,7 @@ class AuthAccessE2ETest extends TestCase
                     'payrollRun' => PayrollRun::factory()->create(),
                     'plateJob' => PlateJob::factory()->create(),
                     'processor' => Party::factory()->kind(PartyKind::PlateProcessor)->create(),
+                    'purchase' => Purchase::factory()->create(),
                     'rimLoading' => RimLoading::factory()->create(),
                     'role' => Role::factory()->create(),
                     'salary_advance' => SalaryAdvance::factory()->create(),

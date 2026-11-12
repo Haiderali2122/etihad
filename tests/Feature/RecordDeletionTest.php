@@ -207,6 +207,39 @@ class RecordDeletionTest extends TestCase
         $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertSee('Mitti ka tel')->assertSee('Rs 3,000');
     }
 
+    public function test_one_diesel_bill_holds_several_items_and_one_receipt_lists_them_all(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
+        $this->actingAs($owner)->get(route('materials.purchase', $diesel))->assertOk()->assertSee('id="addItem"', false);
+        $dieselItem = $diesel->items()->sole();
+
+        $this->actingAs($owner)->post(route('materials.purchase.store', $diesel), [
+            'purchased_on' => today()->toDateString(), 'party_id' => OtherOption::Value, 'party_id_other' => 'Shell Ravi Road', 'bill_no' => 'B-77',
+            'items' => [
+                ['inventory_item_id' => $dieselItem->id, 'quantity' => 20, 'rate' => 280],
+                ['inventory_item_id' => OtherOption::Value, 'item_other' => 'Mitti ka tel', 'quantity' => 5, 'rate' => 200],
+                ['inventory_item_id' => '', 'quantity' => '', 'rate' => ''],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $purchases = Purchase::query()->orderBy('id')->get();
+        $this->assertCount(2, $purchases);
+        $this->assertSame([5600, 1000], $purchases->pluck('amount')->all());
+        $receiptNo = $purchases->first()->receipt_no;
+        $this->assertNotNull($receiptNo);
+        $this->assertSame($receiptNo, $purchases->last()->receipt_no);
+
+        $this->actingAs($owner)->get(route('materials.receipt', $purchases->first()))->assertOk()
+            ->assertSeeInOrder(['Shell Ravi Road', 'Diesel', 'Mitti ka tel', 'Rs 6,600']);
+        // Both lines come off the manager's cash, and the tab's Receipt opens the combined receipt.
+        $this->assertSame(6600, (int) Expense::query()->where('inventory_category_id', $diesel->id)->sum('amount'));
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertSee(route('materials.receipt', $purchases->first()), false);
+
+        $this->actingAs($owner)->post(route('materials.purchase.store', $diesel), ['purchased_on' => today()->toDateString(), 'party_id' => $purchases->first()->party_id, 'items' => []])
+            ->assertSessionHasErrors('items');
+    }
+
     public function test_diesel_glue_ink_and_raddi_have_their_own_sidebar_entries_and_petrol_does_not(): void
     {
         $owner = User::factory()->owner()->create();

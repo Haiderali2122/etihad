@@ -141,6 +141,8 @@ Route::middleware('auth')->group(function () {
     Route::redirect('purchases', 'inventory?tab=purchases')->name('purchases.index');
     Route::resource('purchases', PurchaseController::class)->only(['create', 'store'])->middleware('can:purchases.create');
     Route::get('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'createMaterial'])->middleware('can:purchases.create')->name('materials.purchase');
+    Route::post('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'storeMaterial'])->middleware('can:purchases.create')->name('materials.purchase.store');
+    Route::get('inventory/purchases/{purchase}/receipt', [PurchaseController::class, 'materialReceipt'])->middleware('can:purchases.view')->name('materials.receipt');
 
     Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->middlewareFor(['index', 'show'], 'can:expenses.view')

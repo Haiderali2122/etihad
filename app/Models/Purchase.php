@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * A supplier bill for an inventory item. Bills that aren't sent back add to the item's stock.
  */
-#[Fillable(['purchased_on', 'party_id', 'inventory_item_id', 'quantity', 'rate', 'amount', 'bill_no', 'attachment', 'note', 'created_by'])]
+#[Fillable(['purchased_on', 'party_id', 'inventory_item_id', 'quantity', 'rate', 'amount', 'bill_no', 'receipt_no', 'attachment', 'note', 'created_by'])]
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */

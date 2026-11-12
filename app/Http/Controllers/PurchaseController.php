@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PartyKind;
+use App\Http\Requests\StoreMaterialPurchaseRequest;
 use App\Http\Requests\StorePurchaseRequest;
 use App\Models\InventoryCategory;
 use App\Models\Party;
 use App\Models\Purchase;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class PurchaseController extends Controller
@@ -48,6 +50,48 @@ class PurchaseController extends Controller
             'items' => $category->items()->active()->orderBy('id')->get(),
             'parties' => Party::query()->active()->where('kind', '!=', PartyKind::Press)->orderBy('name')->get(),
             'back' => route('inventory.index', ['tab' => 'material-'.$category->id]),
+        ]);
+    }
+
+    /**
+     * One bill on a material tab: each line becomes a purchase of that item, all sharing one receipt number.
+     */
+    public function storeMaterial(StoreMaterialPurchaseRequest $request, InventoryCategory $inventoryCategory): RedirectResponse
+    {
+        abort_unless($inventoryCategory->show_as_tab, 404);
+        $data = $request->validated();
+        $attachment = $this->storeAttachment($request, 'purchases');
+
+        $first = DB::transaction(function () use ($data, $attachment, $request): Purchase {
+            $purchases = collect($data['items'])->map(fn (array $line) => Purchase::create([
+                'purchased_on' => $data['purchased_on'], 'party_id' => $data['party_id'],
+                'inventory_item_id' => $line['inventory_item_id'], 'quantity' => $line['quantity'], 'rate' => $line['rate'],
+                'amount' => (int) round((float) $line['quantity'] * (float) $line['rate']),
+                'bill_no' => $data['bill_no'] ?? null, 'note' => $data['note'] ?? null,
+                'attachment' => $attachment, 'created_by' => $request->user()->id,
+            ]));
+            $receiptNo = 'MP-'.str_pad((string) $purchases->first()->id, 5, '0', STR_PAD_LEFT);
+            Purchase::query()->whereKey($purchases->pluck('id'))->update(['receipt_no' => $receiptNo]);
+
+            return $purchases->first();
+        });
+
+        return redirect()->route('materials.receipt', $first)->with('status', __('Purchase saved.'));
+    }
+
+    /**
+     * The printable receipt for one material bill: every line and the total.
+     */
+    public function materialReceipt(Purchase $purchase): View
+    {
+        $purchases = $purchase->receipt_no
+            ? Purchase::query()->with(['item.category', 'party'])->where('receipt_no', $purchase->receipt_no)->orderBy('id')->get()
+            : collect([$purchase->load(['item.category', 'party'])]);
+
+        return view('purchases.receipt', [
+            'receiptNo' => $purchase->receipt_no ?? 'PUR-'.str_pad((string) $purchase->id, 5, '0', STR_PAD_LEFT),
+            'purchases' => $purchases,
+            'first' => $purchases->first(),
         ]);
     }
 

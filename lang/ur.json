@@ -1344,5 +1344,9 @@
     "Rate per :unit (Rs)": "ریٹ فی :unit (روپے)",
     "Record each purchase with the Buy button above.": "ہر خریداری اوپر والے خریدیں بٹن سے درج کریں۔",
     "litre": "لیٹر",
-    "kg": "کلو"
+    "kg": "کلو",
+    "One bill: the supplier, then a line for each item bought with its quantity and rate. The receipt shows every line and the total; it comes off the manager's cash and shows in Cash-out.": "ایک بل: فروخت کنندہ، پھر ہر خریدی گئی چیز کی لائن اس کی مقدار اور ریٹ کے ساتھ۔ رسید پر ہر لائن اور کل رقم نظر آئے گی؛ یہ منیجر کی رقم سے کٹتی ہے اور کیش آؤٹ میں نظر آتی ہے۔",
+    "Purchase receipt :no": "رسید خریداری :no",
+    "quantity": "مقدار",
+    "rate": "ریٹ"
 }

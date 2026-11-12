@@ -70,7 +70,7 @@
                         <td>{{ $p->reason }}@if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
-                        <td class="r"><a class="btn sm" href="{{ route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
+                        <td class="r"><a class="btn sm" href="{{ $p->source?->receipt_no ? route('materials.receipt', $p->source) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="6"><div class="empty"><b>{{ __('No purchases yet') }}</b>{{ __('Record each purchase with the Buy button above.') }}</div></td></tr>
