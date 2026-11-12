@@ -239,17 +239,18 @@ class PayrollTest extends TestCase
         ])->assertSessionHasErrors('amount');
     }
 
-    public function test_mid_month_advance_is_not_given_twice_in_a_month(): void
+    public function test_advance_salary_is_one_per_person_a_month_and_can_be_changed(): void
     {
         $manager = User::factory()->create();
         $employee = Employee::factory()->create(['monthly_salary' => 30000]);
-        $post = fn () => $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-10-22', 'amounts' => [$employee->id => 15000]]);
+        $post = fn (int $amount) => $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['month' => '2026-10', 'given_on' => '2026-10-22', 'as' => [$employee->id => $amount]]);
 
-        $post();
-        $post();
+        $post(15000);
+        $post(15000);
+        $post(18000);
 
         $this->assertSame(1, SalaryAdvance::query()->where('employee_id', $employee->id)->count());
-        $this->assertSame(15000, (int) SalaryAdvance::query()->where('employee_id', $employee->id)->sum('amount'));
+        $this->assertSame(18000, (int) SalaryAdvance::query()->where('employee_id', $employee->id)->sum('amount'));
     }
 
     public function test_attendance_day_sheet_saves_status_and_overtime(): void

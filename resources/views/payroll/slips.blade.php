@@ -34,6 +34,10 @@
                         <tr><td>Loan instalment <span class="ur">قسط قرض</span></td><td>@if ($line->loan_deducted) balance after: Rs {{ number_format(max(0, $line->employee->loanBalance() - ($run->isDraft() ? $line->loan_deducted : 0))) }}@endif</td><td class="r">− {{ number_format($line->loan_deducted) }}</td></tr>
                         @if ($line->other_deduction)<tr><td>Other deductions <span class="ur">دیگر کٹوتی</span></td><td>{{ $line->note }}</td><td class="r">− {{ number_format($line->other_deduction) }}</td></tr>@endif
                         <tr class="net"><td>Net pay <span class="ur">خالص تنخواہ</span></td><td>rounded to nearest Rs 10</td><td class="r">Rs {{ number_format($line->net_pay) }}</td></tr>
+                        @if ($line->taken_from_foreman)
+                        <tr><td>Already taken from foreman <span class="ur">فورمین سے لیا</span></td><td></td><td class="r">− {{ number_format($line->taken_from_foreman) }}</td></tr>
+                        <tr class="net"><td>Paid now <span class="ur">ابھی ادا</span></td><td></td><td class="r">Rs {{ number_format($line->giveNow()) }}</td></tr>
+                        @endif
                     </table>
                     <div class="slip-sign">
                         <div><div class="sig" style="font-family:inherit;font-size:14px">&nbsp;</div><div style="font-family:var(--urdu);font-size:13px;margin-top:4px">دستخط ملازم <span style="font-family:var(--ui);font-size:11px;color:var(--faint)">Employee</span></div></div>

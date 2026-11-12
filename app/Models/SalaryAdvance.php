@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Cash paid to an employee ahead of payday; the next payroll deducts it.
  * Advances that belong to a foreman sheet follow the sheet's approval.
  */
-#[Fillable(['employee_id', 'given_on', 'amount', 'kind', 'foreman_sheet_id', 'note', 'created_by', 'status'])]
+#[Fillable(['employee_id', 'given_on', 'amount', 'taken_from_foreman', 'kind', 'foreman_sheet_id', 'note', 'created_by', 'status'])]
 class SalaryAdvance extends Model
 {
     /** @use HasFactory<SalaryAdvanceFactory> */
@@ -119,8 +119,9 @@ class SalaryAdvance extends Model
      */
     public function cashOut(): ?array
     {
+        // Only what the manager handed over: kharcha already taken from the foreman came out of the foreman's cash.
         return [
-            'amount' => (int) $this->amount,
+            'amount' => (int) $this->amount - (int) $this->taken_from_foreman,
             'date' => $this->given_on,
             'paid_to' => (string) $this->employee?->name,
             'reason' => $this->kind->label(),

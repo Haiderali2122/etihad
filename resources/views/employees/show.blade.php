@@ -4,7 +4,6 @@
             <a class="btn" href="{{ route('employees.index') }}">{{ __('Back') }}</a>
             @can('advances.create')
                 @if ($employee->is_active)
-                    <a class="btn" href="{{ route('salary-advances.create', ['employee' => $employee->id]) }}"><x-icon name="wallet" />{{ __('Give advance') }}</a>
                     <a class="btn" href="{{ route('loans.create', ['employee' => $employee->id]) }}"><x-icon name="users" />{{ __('Give loan') }}</a>
                 @endif
             @endcan

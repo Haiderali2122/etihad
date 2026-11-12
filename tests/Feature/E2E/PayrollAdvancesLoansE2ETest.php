@@ -202,13 +202,14 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->actingAs($this->owner)->get(route('salary-advances.show', $adHoc))->assertOk()->assertSee('Aslam Khan')->assertSee('3,000');
 
         // Mid-month advance on the 22nd at 50%.
-        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['date' => '2026-09-22']))->assertOk()
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-09']))->assertOk()
             ->assertSee('value="22500"', false)->assertSee('value="15500"', false)->assertSee('value="2026-09-22"', false);
-        $this->actingAs($this->owner)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22', 'amounts' => [$aslam->id => 22500, $bilal->id => 10000]])
-            ->assertRedirect(route('salary-advances.index'));
+        $this->actingAs($this->owner)->post(route('salary-advances.mid-month.store'), ['month' => '2026-09', 'given_on' => '2026-09-22', 'as' => [$aslam->id => 22500, $bilal->id => 10000]])
+            ->assertRedirect(route('salary-advances.mid-month', ['month' => '2026-09']));
         $this->assertSame(25500, $aslam->outstandingAdvances());
         $this->assertSame(10000, $bilal->outstandingAdvances());
-        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['date' => '2026-09-22']))->assertSee('Already given Rs 22,500');
+        // Saved amounts show again and stay editable.
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-09']))->assertSee('value="10000"', false)->assertDontSee('value="15500"', false);
 
         $this->actingAs($this->owner)->post(route('loans.store'), [
             'employee_id' => $aslam->id, 'issued_on' => '2026-09-05', 'amount' => 20000, 'monthly_instalment' => 5000, 'first_instalment_month' => '2026-09',
@@ -514,15 +515,15 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->actingAs($this->owner)->get(route('salary-advances.mid-month'))->assertOk()->assertSee('value="2026-02-22"', false);
     }
 
-    public function test_mid_month_store_skips_blank_zero_inactive_and_already_paid(): void
+    public function test_advance_salary_store_skips_blank_zero_and_inactive_and_edits_in_place(): void
     {
         $manager = User::factory()->create();
         [$a, $b, $c] = Employee::factory()->count(3)->create(['monthly_salary' => 30000]);
         $inactive = Employee::factory()->create(['is_active' => false]);
+        $save = fn (string $month, string $date, array $as) => $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['month' => $month, 'given_on' => $date, 'as' => $as]);
 
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22', 'amounts' => [
-            $a->id => 15000, $b->id => 0, $c->id => '', $inactive->id => 5000,
-        ]])->assertRedirect(route('salary-advances.index'))->assertSessionHas('status', 'Mid-month advance recorded for 1 people, Rs 15,000 in all.');
+        $save('2026-09', '2026-09-22', [$a->id => 15000, $b->id => 0, $c->id => '', $inactive->id => 5000])
+            ->assertRedirect(route('salary-advances.mid-month', ['month' => '2026-09']))->assertSessionHas('status', 'Advance salaries for September 2026 saved. Rs 15,000 to hand over now.');
 
         $this->assertSame(1, SalaryAdvance::query()->count());
         $advance = SalaryAdvance::query()->sole();
@@ -530,16 +531,17 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         // Manager cannot approve, so the advance waits.
         $this->assertSame(ApprovalStatus::Pending, $advance->status);
 
-        // Same month again (different day) is ignored; next month is allowed.
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-30', 'amounts' => [$a->id => 1000]]);
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-10-01', 'amounts' => [$a->id => 1000]]);
-        $this->assertSame(16000, (int) SalaryAdvance::query()->where('employee_id', $a->id)->sum('amount'));
+        // Saving the same month again changes the amount in place; next month is a new advance salary.
+        $save('2026-09', '2026-09-22', [$a->id => 16000]);
+        $save('2026-10', '2026-10-22', [$a->id => 1000]);
+        $this->assertSame(17000, (int) SalaryAdvance::query()->where('employee_id', $a->id)->sum('amount'));
+        $this->assertSame(2, SalaryAdvance::query()->where('employee_id', $a->id)->count());
         // Still waiting for the owner, so nothing comes off salary yet.
         $this->assertSame(0, $a->outstandingAdvances());
 
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22', 'amounts' => [$b->id => -5]])->assertSessionHasErrors('amounts.'.$b->id);
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['amounts' => [$b->id => 5]])->assertSessionHasErrors('given_on');
-        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22'])->assertSessionHasErrors('amounts');
+        $save('2026-09', '2026-09-22', [$b->id => -5])->assertSessionHasErrors('as.'.$b->id);
+        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['month' => '2026-09', 'as' => [$b->id => 5]])->assertSessionHasErrors('given_on');
+        $this->actingAs($manager)->post(route('salary-advances.mid-month.store'), ['given_on' => '2026-09-22', 'as' => [$b->id => 5]])->assertSessionHasErrors('month');
     }
 
     public function test_rejected_advances_and_loans_are_ignored_by_payroll(): void

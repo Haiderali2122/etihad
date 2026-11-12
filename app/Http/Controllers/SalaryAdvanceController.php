@@ -5,13 +5,15 @@ namespace App\Http\Controllers;
 use App\Enums\AdvanceKind;
 use App\Http\Requests\StoreSalaryAdvanceRequest;
 use App\Models\Employee;
+use App\Models\ForemanCash;
 use App\Models\SalaryAdvance;
 use App\Models\Setting;
+use App\Support\ForemanTeams;
 use App\Support\PressMath;
-use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -62,59 +64,129 @@ class SalaryAdvanceController extends Controller
     }
 
     /**
-     * The advance paid to everyone around the 22nd, pre-filled at the set percentage of salary.
+     * The 22nd: each person's advance salary (about half the salary, changeable), less the kharcha they already
+     * took from their foreman, gives what is handed over now. Saved amounts stay editable until the 10th's
+     * payroll takes them. A foreman's "already taken" is what he kept of the cash he was given.
      */
     public function midMonth(Request $request): View
     {
         $rules = Setting::payrollRules();
-        $default = today()->day(min($rules['mid_month_day'], today()->daysInMonth));
-        try {
-            $date = Carbon::parse($request->query('date', $default->toDateString()));
-        } catch (InvalidFormatException) {
-            $date = $default;
-        }
-        $already = SalaryAdvance::query()->notRejected()->where('kind', AdvanceKind::MidMonth)
-            ->whereBetween('given_on', [$date->copy()->startOfMonth(), $date->copy()->endOfMonth()->endOfDay()])
-            ->pluck('amount', 'employee_id');
+        $month = $this->payMonth($request->query('month'));
+        $records = $this->monthAdvances($month);
+        $cash = ForemanCash::query()->where('payday', ForemanCash::Advance)->whereDate('month', $month->toDateString())->get()->keyBy('foreman_id');
+
+        $employees = ForemanTeams::ordered(Employee::query()->active()->with('foreman')->get())
+            ->each(function (Employee $e) use ($records, $rules): void {
+                $record = $records->get($e->id);
+                $e->setAttribute('advance_record', $record);
+                $e->setAttribute('as_amount', $record?->amount ?? PressMath::roundToTen($e->monthly_salary * $rules['mid_month_percent'] / 100));
+                $e->setAttribute('taken', (int) ($record?->taken_from_foreman ?? 0));
+            });
 
         return view('advances.mid-month', [
-            'date' => $date,
+            'month' => $month,
+            'paidOn' => $records->first()?->given_on ?? $month->copy()->day(min($rules['mid_month_day'], $month->daysInMonth)),
             'percent' => $rules['mid_month_percent'],
-            'already' => $already,
-            'employees' => Employee::query()->active()->orderBy('name')->get()
-                ->map(fn (Employee $e) => $e->setAttribute('suggested', PressMath::roundToTen($e->monthly_salary * $rules['mid_month_percent'] / 100))),
+            'employees' => $employees,
+            'cash' => $cash,
+            'locked' => $records->contains(fn (SalaryAdvance $a) => $a->payroll_run_id !== null),
         ]);
     }
 
     public function storeMidMonth(Request $request): RedirectResponse
     {
         $data = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
             'given_on' => ['required', 'date'],
-            'amounts' => ['required', 'array'],
-            'amounts.*' => ['nullable', 'integer', 'min:0'],
+            'as' => ['array'], 'as.*' => ['nullable', 'integer', 'min:0'],
+            'taken' => ['array'], 'taken.*' => ['nullable', 'integer', 'min:0'],
+            'cash' => ['array'], 'cash.*' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $given = Carbon::parse($data['given_on']);
-        $alreadyPaid = SalaryAdvance::query()->notRejected()->where('kind', AdvanceKind::MidMonth)
-            ->whereBetween('given_on', [$given->copy()->startOfMonth(), $given->copy()->endOfMonth()->endOfDay()])
-            ->pluck('employee_id');
+        $month = $this->payMonth($data['month']);
+        $records = $this->monthAdvances($month);
+        abort_if($records->contains(fn (SalaryAdvance $a) => $a->payroll_run_id !== null), 409, __('This month\'s salaries are finalized. Reopen the payroll to change the advance salaries.'));
 
-        $amounts = collect($data['amounts'])->map(fn ($v) => (int) $v)->filter();
-        // Nobody gets this month's mid-month advance twice.
-        $employees = Employee::query()->active()->whereIn('id', $amounts->keys())->whereNotIn('id', $alreadyPaid)->pluck('id');
+        $employees = Employee::query()->active()->get();
+        $as = collect($data['as'] ?? [])->map(fn ($v) => (int) $v)->all();
+        $taken = collect($data['taken'] ?? [])->map(fn ($v) => (int) $v)->all();
+        $cash = collect($data['cash'] ?? [])->map(fn ($v) => (int) $v)->all();
 
-        DB::transaction(function () use ($employees, $amounts, $data, $request): void {
-            foreach ($employees as $id) {
-                SalaryAdvance::create([
-                    'employee_id' => $id, 'given_on' => $data['given_on'], 'amount' => $amounts[$id],
-                    'kind' => AdvanceKind::MidMonth, 'created_by' => $request->user()->id,
-                ]);
+        // A foreman's "already taken" is what he kept of the cash he was given.
+        $errors = [];
+        foreach (ForemanTeams::kept($employees, $cash, $taken) as $foremanId => $kept) {
+            if ($kept < 0) {
+                $errors["cash.{$foremanId}"] = __('The team of :name took Rs :n more than the cash given to him.', ['name' => $employees->firstWhere('id', $foremanId)->name, 'n' => number_format(-$kept)]);
+            }
+            $taken[$foremanId] = max(0, $kept);
+        }
+        foreach ($employees as $e) {
+            $amount = $as[$e->id] ?? 0;
+            $took = $taken[$e->id] ?? 0;
+            if ($amount > $e->monthly_salary) {
+                $errors["as.{$e->id}"] = __(':name\'s advance salary cannot be more than the salary (Rs :n).', ['name' => $e->name, 'n' => number_format($e->monthly_salary)]);
+            } elseif ($took > $amount) {
+                $errors["as.{$e->id}"] = __(':name already took Rs :took; raise the advance salary to at least that.', ['name' => $e->name, 'took' => number_format($took)]);
+            }
+        }
+        if ($errors) {
+            return back()->withErrors($errors)->withInput();
+        }
+
+        DB::transaction(function () use ($employees, $as, $taken, $cash, $month, $data, $records, $request): void {
+            foreach ($employees->where('is_foreman', true) as $foreman) {
+                $amount = $cash[$foreman->id] ?? 0;
+                $row = ForemanCash::query()->where('foreman_id', $foreman->id)->where('payday', ForemanCash::Advance)->whereDate('month', $month->toDateString())->first();
+                if ($amount <= 0) {
+                    $row?->delete();
+
+                    continue;
+                }
+                ($row ?? new ForemanCash(['foreman_id' => $foreman->id, 'month' => $month->toDateString(), 'payday' => ForemanCash::Advance, 'created_by' => $request->user()->id]))
+                    ->fill(['given_on' => $data['given_on'], 'amount' => $amount])->save();
+            }
+
+            foreach ($employees as $e) {
+                $amount = $as[$e->id] ?? 0;
+                $record = $records->get($e->id);
+                if ($amount <= 0) {
+                    $record?->delete();
+
+                    continue;
+                }
+                $values = ['given_on' => $data['given_on'], 'amount' => $amount, 'taken_from_foreman' => $taken[$e->id] ?? 0];
+                $record
+                    ? $record->update($values)
+                    : SalaryAdvance::create($values + ['employee_id' => $e->id, 'kind' => AdvanceKind::MidMonth, 'created_by' => $request->user()->id]);
             }
         });
 
-        return redirect()->route('salary-advances.index')->with('status', __('Mid-month advance recorded for :n people, Rs :total in all.', [
-            'n' => $employees->count(), 'total' => number_format($amounts->only($employees->all())->sum()),
-        ]));
+        $ids = $employees->pluck('id')->all();
+        $total = collect($as)->only($ids)->sum() - collect($taken)->only($ids)->sum();
+
+        return redirect()->route('salary-advances.mid-month', ['month' => $month->format('Y-m')])
+            ->with('status', __('Advance salaries for :month saved. Rs :n to hand over now.', ['month' => $month->format('F Y'), 'n' => number_format(max(0, $total))]));
+    }
+
+    private function payMonth(mixed $value): Carbon
+    {
+        try {
+            return is_string($value) && $value !== '' ? Carbon::createFromFormat('!Y-m', $value)->startOfMonth() : today()->startOfMonth();
+        } catch (\Throwable) {
+            return today()->startOfMonth();
+        }
+    }
+
+    /**
+     * This month's advance salary of each person (one per person), keyed by employee.
+     *
+     * @return Collection<int, SalaryAdvance>
+     */
+    private function monthAdvances(Carbon $month): Collection
+    {
+        return SalaryAdvance::query()->notRejected()->where('kind', AdvanceKind::MidMonth)
+            ->whereBetween('given_on', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()->endOfDay()])
+            ->orderBy('id')->get()->keyBy('employee_id');
     }
 
     /**

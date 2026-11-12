@@ -80,7 +80,8 @@ class PayrollRun extends Model
         }
 
         return [
-            'amount' => (int) $this->lines()->sum('net_pay'),
+            // Kharcha the team took from the foreman came out of the foreman's cash, which is recorded on its own.
+            'amount' => (int) $this->lines()->sum('net_pay') - (int) $this->lines()->sum('taken_from_foreman'),
             'date' => $this->pay_date ?? $this->finalized_at ?? now(),
             'paid_to' => 'Staff',
             'reason' => 'Salaries '.$this->label(),

@@ -187,6 +187,7 @@ Route::middleware('auth')->group(function () {
     Route::post('loans/{loan}/repayments', [LoanController::class, 'repay'])->middleware('can:advances.create')->name('loans.repay');
 
     Route::get('payroll', [PayrollRunController::class, 'index'])->middleware('can:staff.view')->name('payroll.index');
+    Route::get('payroll/tenth', [PayrollRunController::class, 'tenth'])->middleware('can:staff.view')->name('payroll.tenth');
     Route::get('payroll/{payrollRun}', [PayrollRunController::class, 'show'])->middleware('can:staff.view')->name('payroll.show');
     Route::get('payroll/{payrollRun}/slips', [PayrollRunController::class, 'slips'])->middleware('can:staff.view')->name('payroll.slips');
     Route::middleware('can:payroll.prepare')->group(function () {

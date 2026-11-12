@@ -15,8 +15,8 @@
             <x-field name="ot_multiplier" type="number" step="0.05" min="0.5" :label="__('Overtime: then multiply by')" :value="$payroll['ot_multiplier']" required :hint="__('1 = straight rate, 1.5 = time and a half (Abdullah).')" />
             <x-field name="standard_hours" type="number" step="0.5" min="1" :label="__('Normal working hours a day')" :value="$payroll['standard_hours']" required :hint="__('Time on the device beyond this counts as overtime (e.g. 9 to 9 with 8 normal hours = 4 hours OT).')" />
             <x-field name="unmarked_as" :label="__('Days with no attendance count as')" :options="['present' => __('Present (no deduction)'), 'absent' => __('Absent (deducted)')]" :value="$payroll['unmarked_as']" required :hint="__('Once the biometric device is in daily use, set this to Absent.')" />
-            <x-field name="mid_month_day" type="number" min="1" max="28" :label="__('Mid-month advance day')" :value="$payroll['mid_month_day']" required />
-            <x-field name="mid_month_percent" type="number" step="1" min="0" max="100" :label="__('Mid-month advance, % of salary')" :value="$payroll['mid_month_percent']" required :hint="__('Pre-filled on the mid-month sheet; each amount can be changed.')" />
+            <x-field name="mid_month_day" type="number" min="1" max="28" :label="__('Advance salary day')" :value="$payroll['mid_month_day']" required />
+            <x-field name="mid_month_percent" type="number" step="1" min="0" max="100" :label="__('Advance salary, % of salary')" :value="$payroll['mid_month_percent']" required :hint="__('Pre-filled on the mid-month sheet; each amount can be changed.')" />
             <x-field name="pay_day" type="number" min="1" max="28" :label="__('Salary paid on (day of next month)')" :value="$payroll['pay_day']" required />
         </div></div>
         <div class="form-actions"><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save settings') }}</button></div>

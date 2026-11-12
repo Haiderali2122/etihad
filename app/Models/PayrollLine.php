@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * One employee's salary for a payroll month.
  */
-#[Fillable(['payroll_run_id', 'employee_id', 'monthly_salary', 'days_in_month', 'present_days', 'absent_days', 'leave_days', 'off_days', 'unmarked_days', 'overtime_hours', 'overtime_amount', 'absence_deduction', 'bonus', 'advances_deducted', 'loan_deducted', 'loan_overridden', 'other_deduction', 'net_pay', 'note'])]
+#[Fillable(['payroll_run_id', 'employee_id', 'monthly_salary', 'days_in_month', 'present_days', 'absent_days', 'leave_days', 'off_days', 'unmarked_days', 'overtime_hours', 'overtime_amount', 'absence_deduction', 'bonus', 'advances_deducted', 'loan_deducted', 'loan_overridden', 'other_deduction', 'net_pay', 'note', 'taken_from_foreman'])]
 class PayrollLine extends Model
 {
     /** @use HasFactory<PayrollLineFactory> */
@@ -64,6 +64,14 @@ class PayrollLine extends Model
     /**
      * Net pay: gross less deductions, rounded to the nearest Rs 10.
      */
+    /**
+     * What is handed over on the 10th: the net pay less the kharcha already taken from the foreman.
+     */
+    public function giveNow(): int
+    {
+        return (int) $this->net_pay - (int) $this->taken_from_foreman;
+    }
+
     public function computeNet(): int
     {
         return PressMath::roundToTen($this->gross() - $this->deductions());
