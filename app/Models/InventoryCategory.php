@@ -43,6 +43,14 @@ class InventoryCategory extends Model
         return $this->hasMany(InventoryItem::class);
     }
 
+    /**
+     * The unit new items in this category start with: litres for Diesel, otherwise kg.
+     */
+    public function defaultUnit(): string
+    {
+        return mb_strtolower(trim($this->name)) === 'diesel' ? 'litre' : 'kg';
+    }
+
     public function localName(): string
     {
         return app()->getLocale() === 'ur' && $this->name_ur ? $this->name_ur : $this->name;

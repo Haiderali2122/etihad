@@ -185,6 +185,28 @@ class RecordDeletionTest extends TestCase
         $this->assertSame(3, Party::query()->where('kind_other', 'Electrician')->count());
     }
 
+    public function test_a_new_item_like_mitti_ka_tel_can_be_typed_in_on_the_diesel_tab(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
+        $supplier = Party::factory()->create();
+
+        $this->actingAs($owner)->get(route('materials.purchase', $diesel))->assertOk()->assertSee('Other… (type a new one)');
+        $buy = fn (string $item) => $this->actingAs($owner)->post(route('purchases.store'), [
+            'purchased_on' => today()->toDateString(), 'party_id' => $supplier->id, 'material_category_id' => $diesel->id,
+            'inventory_item_id' => OtherOption::Value, 'inventory_item_id_other' => $item, 'quantity' => 10, 'rate' => 300,
+        ])->assertRedirect(route('inventory.index', ['tab' => 'material-'.$diesel->id]));
+
+        $buy('Mitti ka tel');
+        $buy('  mitti KA tel ');
+        $mitti = $diesel->items()->where('name', 'Mitti ka tel')->sole();
+        $this->assertSame('litre', $mitti->unit);
+        $this->assertSame(2, Purchase::query()->where('inventory_item_id', $mitti->id)->count());
+
+        $this->actingAs($owner)->get(route('materials.purchase', $diesel))->assertSee('Mitti ka tel (litre)');
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertSee('Mitti ka tel')->assertSee('Rs 3,000');
+    }
+
     public function test_diesel_glue_ink_and_raddi_have_their_own_sidebar_entries_and_petrol_does_not(): void
     {
         $owner = User::factory()->owner()->create();

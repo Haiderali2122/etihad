@@ -35,15 +35,17 @@ class PurchaseController extends Controller
         $category = $inventoryCategory;
         abort_unless($category->show_as_tab && $category->is_active, 404);
 
-        $item = $category->items()->active()->orderBy('id')->first()
-            ?? $category->items()->create([
+        // The material itself is the first item; more (e.g. Mitti ka tel under Diesel) are typed in under "Other…".
+        if (! $category->items()->active()->exists()) {
+            $category->items()->create([
                 'name' => $category->name, 'name_ur' => $category->name_ur,
-                'unit' => mb_strtolower($category->name) === 'diesel' ? 'litre' : 'kg', 'is_active' => true,
+                'unit' => $category->defaultUnit(), 'is_active' => true,
             ]);
+        }
 
         return view('purchases.material', [
             'category' => $category,
-            'item' => $item,
+            'items' => $category->items()->active()->orderBy('id')->get(),
             'parties' => Party::query()->active()->where('kind', '!=', PartyKind::Press)->orderBy('name')->get(),
             'back' => route('inventory.index', ['tab' => 'material-'.$category->id]),
         ]);

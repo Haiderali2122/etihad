@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\PartyKind;
+use App\Models\InventoryCategory;
 use App\Models\Party;
 use App\Support\OtherOption;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -25,6 +26,21 @@ class StorePurchaseRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         OtherOption::resolve($this, 'party_id', Party::class, ['kind' => PartyKind::Supplier, 'is_active' => true]);
+
+        // On a material tab a new item (e.g. "Mitti ka tel" under Diesel) can be typed in; it joins that material.
+        if ($this->input('inventory_item_id') === OtherOption::Value) {
+            $category = InventoryCategory::query()->where('show_as_tab', true)->find($this->integer('material_category_id'));
+            $name = trim((string) preg_replace('/\s+/u', ' ', (string) $this->input('inventory_item_id_other')));
+            $item = null;
+            if ($category && $name !== '') {
+                $item = $category->items()->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first()
+                    ?? $category->items()->create(['name' => $name, 'unit' => $category->defaultUnit(), 'is_active' => true]);
+                if (! $item->is_active) {
+                    $item->update(['is_active' => true]);
+                }
+            }
+            $this->merge(['inventory_item_id' => $item?->getKey()]);
+        }
     }
 
     /**

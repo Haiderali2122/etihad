@@ -2,12 +2,13 @@
     <x-page-head :back="$back" :title="__('Buy :material', ['material' => $category->localName()])" :subtitle="__('Record a :material purchase: who it was bought from, how much and at what rate. It comes off the manager\'s cash and shows in Cash-out.', ['material' => $category->localName()])" />
     <form method="POST" action="{{ route('purchases.store') }}" enctype="multipart/form-data" class="card form-card">
         @csrf
-        <input type="hidden" name="inventory_item_id" value="{{ $item->id }}">
+        <input type="hidden" name="material_category_id" value="{{ $category->id }}">
         <div class="card-b"><div class="form">
             <x-field name="purchased_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+            <x-field-other name="inventory_item_id" :label="__('Item')" :options="$items->mapWithKeys(fn ($i) => [$i->id => $i->localName().' ('.__($i->unit).')'])" :value="$items->count() === 1 ? $items->first()->id : null" :placeholder="$items->count() > 1 ? __('Choose item') : null" required />
             <x-field-other name="party_id" :label="__('Supplier')" :options="$parties->pluck('name', 'id')" :placeholder="__('Choose supplier')" required />
-            <x-field name="quantity" type="number" step="0.01" min="0.01" :label="__('Quantity (:unit)', ['unit' => __($item->unit)])" required />
-            <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate per :unit (Rs)', ['unit' => __($item->unit)])" required />
+            <x-field name="quantity" type="number" step="0.01" min="0.01" :label="__('Quantity')" required />
+            <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate (Rs)')" required />
             <div class="field"><label>{{ __('Amount') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" id="amountOut" style="font-size:22px">Rs 0</div></div></div>
             <x-field name="bill_no" :label="__('Bill no.')" />
             <x-field name="attachment" type="file" :label="__('Bill photo / PDF')" />
