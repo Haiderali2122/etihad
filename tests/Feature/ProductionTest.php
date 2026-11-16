@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\ApprovalStatus;
 use App\Enums\ContractorJobKind;
 use App\Enums\PartyKind;
+use App\Enums\RimMove;
 use App\Enums\WorkOrderStage;
 use App\Http\Controllers\ApprovalController;
 use App\Models\BookFormat;
@@ -141,15 +142,15 @@ class ProductionTest extends TestCase
         // Printing done asks how many copies were printed, and when.
         $advance()->assertSessionHasErrors(['printed_copies', 'printed_on']);
         $this->assertSame(WorkOrderStage::Printing, $order->refresh()->stage);
-        $advance(['printed_copies' => 18100, 'printed_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $advance(['printed_copies' => 18100, 'printed_on' => today()->toDateString(), 'younus_rims' => 371, 'younus_rate' => 5])->assertSessionHasNoErrors();
         $this->assertSame(WorkOrderStage::ToFolding, $order->refresh()->stage);
         $this->assertSame(18100, $order->printed_copies);
 
-        // The printed rims are loaded to folding (Younus ka khata) before folding starts.
+        // At Loading to folding, Younus's line for carrying the printed rims is entered before folding starts.
         $advance()->assertSessionHasErrors('stage');
         $this->actingAs($owner)->post(route('rim-loadings.store', $order), ['loaded_on' => today()->toDateString(), 'rims' => 371, 'rate_per_rim' => 5])
             ->assertSessionHasNoErrors();
-        $this->assertSame(1855, $order->rimLoadings()->sole()->amount);
+        $this->assertSame(1855, $order->rimLoadings()->where('kind', RimMove::ToFolding)->sole()->amount);
         $advance()->assertSessionHasNoErrors();
         $this->assertSame(WorkOrderStage::Folding, $order->refresh()->stage);
 
@@ -177,13 +178,13 @@ class ProductionTest extends TestCase
     {
         $owner = User::factory()->owner()->create();
         $press = Party::factory()->kind(PartyKind::Press)->create();
-        $this->actingAs($owner)->post(route('work-orders.store'), $this->order(['mode' => 'outsource', 'machine_id' => null, 'press_id' => $press->id]))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('work-orders.store'), $this->order(['mode' => 'outsource', 'machine_id' => null, 'press_id' => $press->id, 'printing_rate' => 40]))->assertSessionHasNoErrors();
         $order = WorkOrder::query()->sole();
         $this->assertSame(629, $this->balance());
 
         $this->actingAs($owner)->post(route('work-orders.outside-receipts.store', $order), [
             'received_on' => today()->toDateString(), 'printed_copies' => 18000, 'leftover_rims' => 9,
-            'godown_id' => Godown::factory()->create()->id, 'bill_amount' => 42000,
+            'godown_id' => Godown::factory()->create()->id, 'younus_rims' => 360, 'younus_rate' => 6,
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(638, $this->balance());

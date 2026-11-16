@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\RimMove;
 use App\Models\RimLoading;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -20,6 +21,7 @@ class RimLoadingFactory extends Factory
     {
         return [
             'work_order_id' => WorkOrder::factory(),
+            'kind' => RimMove::ToFolding,
             'loaded_on' => today(),
             'rims' => 100,
             'rate_per_rim' => 5,

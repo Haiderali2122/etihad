@@ -284,7 +284,7 @@ class PayrollTest extends TestCase
 
         $this->assertSame(1, $result['saved']);
         $this->assertSame(1, $result['skipped']);
-        $this->assertSame(['E-099'], $result['unknown']);
+        $this->assertSame(['E-099 Nobody'], $result['unknown']);
         $day = $aslam->attendances()->sole();
         $this->assertSame('08:58', substr($day->check_in, 0, 5));
         $this->assertSame('21:04', substr($day->check_out, 0, 5));

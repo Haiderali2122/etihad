@@ -9,31 +9,34 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Reads an attendance export (CSV) from the biometric device. Two layouts are understood:
+ * Reads an attendance export from the biometric device: the machine software's daily report (.xls, as exported
+ * with its Export button) or a CSV. Three layouts are understood:
  *
- * - One row per punch:  code, date-time           (most devices' raw log)
- *                       code, date, time          (the same log with the date and time split)
+ * - The daily report: AC-No., Name, Date, Clock In, Clock Out, Absent, OT Time (one row per person per day).
+ *   "Absent" marks the day absent; a clock-in or clock-out marks it present, with the report's OT Time as overtime.
+ * - One row per punch:  code, date-time  (or code, date, time)
  * - One row per day:    code, date, in, out
  *
- * The first and last punch of a day become check-in and check-out; time beyond the
- * standard day counts as overtime. Days marked by hand are left alone unless $overwrite is set.
+ * People are matched by their attendance machine number (AC-No.), then by employee no., then by name; a person
+ * matched by name has the machine number saved so the next import matches directly. Days marked by hand are left
+ * alone unless $overwrite is set. A file with a single day imports just that day.
  */
 class AttendanceImporter
 {
     /**
-     * @return array{saved: int, skipped: int, unknown: list<string>, errors: list<string>}
+     * @return array{saved: int, present: int, absent: int, skipped: int, unknown: list<string>, errors: list<string>, from: ?string, to: ?string}
      */
     public function import(string $path, float $standardHours, bool $overwrite = false): array
     {
         ['columns' => $columns, 'rows' => $rows] = $this->read($path);
-        $result = ['saved' => 0, 'skipped' => 0, 'unknown' => [], 'errors' => []];
+        $result = ['saved' => 0, 'present' => 0, 'absent' => 0, 'skipped' => 0, 'unknown' => [], 'errors' => [], 'from' => null, 'to' => null];
 
         if ($rows->isEmpty()) {
             $result['errors'][] = __('The file has no rows.');
 
             return $result;
         }
-        if (! in_array('code', $columns, true)) {
+        if (! in_array('code', $columns, true) && ! in_array('name', $columns, true)) {
             $result['errors'][] = __('No employee number column was found. Name it Code or AC-No.');
         }
         if (! in_array('datetime', $columns, true) && ! in_array('date', $columns, true)) {
@@ -43,45 +46,62 @@ class AttendanceImporter
             return $result;
         }
 
-        $employees = Employee::query()->get()->keyBy(fn (Employee $e) => mb_strtolower(trim($e->code)));
+        $employees = Employee::query()->get();
         $days = [];
 
         foreach ($rows as $number => $row) {
-            $code = mb_strtolower(trim((string) ($row['code'] ?? '')));
-            if ($code === '') {
-                continue;
-            }
-            if (! $employees->has($code)) {
-                $result['unknown'][$row['code']] = (string) $row['code'];
+            $employee = $this->match($employees, $row);
+            if (! $employee) {
+                $label = trim(($row['code'] ?? '').' '.($row['name'] ?? ''));
+                if ($label !== '') {
+                    $result['unknown'][$label] = $label;
+                }
 
                 continue;
             }
 
             try {
-                $punches = isset($row['datetime'])
-                    ? array_filter([filled($row['datetime']) ? Carbon::parse($row['datetime']) : null])
-                    : array_values(array_filter([
-                        filled($row['in'] ?? null) ? Carbon::parse($row['date'].' '.$row['in']) : null,
-                        filled($row['out'] ?? null) ? Carbon::parse($row['date'].' '.$row['out']) : null,
+                if (isset($row['datetime'])) {
+                    $punches = array_filter([filled($row['datetime']) ? Carbon::parse($row['datetime']) : null]);
+                    if ($punches === []) {
+                        continue;
+                    }
+                    $date = $punches[0]->toDateString();
+                } else {
+                    $date = $this->date($row['date'] ?? '')?->toDateString();
+                    if (! $date) {
+                        continue;
+                    }
+                    $punches = array_values(array_filter([
+                        filled($row['in'] ?? null) ? Carbon::parse($date.' '.$row['in']) : null,
+                        filled($row['out'] ?? null) ? Carbon::parse($date.' '.$row['out']) : null,
                     ]));
-                if ($punches === []) {
-                    continue;
                 }
-                $date = isset($row['datetime']) ? $punches[0]->toDateString() : Carbon::parse($row['date'])->toDateString();
             } catch (\Throwable) {
                 $result['errors'][] = __('Row :n: could not read the date or time.', ['n' => $number + 2]);
 
                 continue;
             }
 
-            $key = $employees[$code]->id.'|'.$date;
-            $days[$key] = array_merge($days[$key] ?? [], $punches);
+            $key = $employee->id.'|'.$date;
+            $days[$key] ??= ['punches' => [], 'absent' => false, 'overtime' => null];
+            $days[$key]['punches'] = array_merge($days[$key]['punches'], $punches);
+            if ($this->truthy($row['absent'] ?? '') && $punches === []) {
+                $days[$key]['absent'] = true;
+            }
+            if (isset($row['overtime']) && filled($row['overtime'])) {
+                $days[$key]['overtime'] = ($days[$key]['overtime'] ?? 0) + $this->minutes($row['overtime']);
+            }
         }
 
-        foreach ($days as $key => $punches) {
+        foreach ($days as $key => $day) {
             [$employeeId, $date] = explode('|', $key);
-            $existing = Attendance::query()->where('employee_id', $employeeId)->whereDate('date', $date)->first();
+            $punches = $day['punches'];
+            if ($punches === [] && ! $day['absent']) {
+                continue; // nothing recorded that day (e.g. a weekly off with no mark)
+            }
 
+            $existing = Attendance::query()->where('employee_id', $employeeId)->whereDate('date', $date)->first();
             if ($existing && $existing->source === 'manual' && ! $overwrite) {
                 $result['skipped']++;
 
@@ -92,15 +112,21 @@ class AttendanceImporter
             $in = $punches[0] ?? null;
             $out = count($punches) > 1 ? end($punches) : null;
             $worked = $in && $out ? $in->diffInMinutes($out) : 0;
+            $present = $punches !== [];
 
             ($existing ?? new Attendance(['employee_id' => $employeeId, 'date' => $date]))->fill([
-                'status' => AttendanceStatus::Present,
+                'status' => $present ? AttendanceStatus::Present : AttendanceStatus::Absent,
                 'check_in' => $in?->format('H:i'),
                 'check_out' => $out?->format('H:i'),
-                'overtime_minutes' => (int) max(0, $worked - $standardHours * 60),
+                // The report's own OT Time when it has one; otherwise time beyond the normal day.
+                'overtime_minutes' => $present ? (int) ($day['overtime'] ?? max(0, $worked - $standardHours * 60)) : 0,
                 'source' => 'device',
             ])->save();
+
             $result['saved']++;
+            $result[$present ? 'present' : 'absent']++;
+            $result['from'] = $result['from'] === null || $date < $result['from'] ? $date : $result['from'];
+            $result['to'] = $result['to'] === null || $date > $result['to'] ? $date : $result['to'];
         }
 
         $result['unknown'] = array_values($result['unknown']);
@@ -109,28 +135,113 @@ class AttendanceImporter
     }
 
     /**
-     * Map the CSV header to code / datetime or code / date / in / out. A punch log with separate
+     * The employee a row belongs to: by machine number, then employee no., then name. A person found by name
+     * gets the row's machine number saved so the next import matches them directly.
+     *
+     * @param  Collection<int, Employee>  $employees
+     * @param  array<string, string>  $row
+     */
+    private function match(Collection $employees, array $row): ?Employee
+    {
+        $code = mb_strtolower(trim((string) ($row['code'] ?? '')));
+        $name = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', (string) ($row['name'] ?? ''))));
+
+        if ($code !== '') {
+            $found = $employees->first(fn (Employee $e) => $e->device_code !== null && mb_strtolower(trim($e->device_code)) === $code)
+                ?? $employees->first(fn (Employee $e) => mb_strtolower(trim((string) $e->code)) === $code);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        if ($name !== '') {
+            $found = $employees->first(fn (Employee $e) => mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $e->name))) === $name);
+            if ($found && $code !== '' && blank($found->device_code)) {
+                $found->forceFill(['device_code' => trim((string) $row['code'])])->save();
+            }
+
+            return $found;
+        }
+
+        return null;
+    }
+
+    private function date(string $value): ?Carbon
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+        foreach (['d-M-y', 'd-M-Y', 'Y-m-d', 'd/m/Y', 'd.m.Y', 'd/m/y'] as $format) {
+            try {
+                $date = Carbon::createFromFormat('!'.$format, $value);
+                if ($date && $date->format($format) === $value) {
+                    return $date;
+                }
+            } catch (\Throwable) {
+                // try the next format
+            }
+        }
+
+        return Carbon::parse($value);
+    }
+
+    /**
+     * "01:15" or "1.25" (hours) as minutes.
+     */
+    private function minutes(string $value): int
+    {
+        $value = trim($value);
+        if (preg_match('/^(\d+):(\d{1,2})$/', $value, $m)) {
+            return (int) $m[1] * 60 + (int) $m[2];
+        }
+
+        return is_numeric($value) ? (int) round((float) $value * 60) : 0;
+    }
+
+    private function truthy(string $value): bool
+    {
+        return in_array(mb_strtolower(trim($value)), ['true', 'yes', 'y', '1', 'a', 'absent'], true);
+    }
+
+    /**
+     * Map the header to code / name / datetime or date / in / out / absent / overtime. A punch log with separate
      * date and time columns is read as one date-time per row.
      *
      * @return array{columns: list<string>, rows: Collection<int, array<string, string>>}
      */
     private function read(string $path): array
     {
-        $handle = fopen($path, 'r');
-        $header = fgetcsv($handle) ?: [];
-        $header = array_map(fn ($h) => preg_replace('/[^a-z]/', '', mb_strtolower((string) preg_replace('/^\xEF\xBB\xBF/', '', (string) $h))), $header);
+        if (XlsReader::understands($path)) {
+            $lines = XlsReader::rows($path);
+        } else {
+            $lines = [];
+            $handle = fopen($path, 'r');
+            while (($line = fgetcsv($handle)) !== false) {
+                if ($line !== [null]) {
+                    $lines[] = $line;
+                }
+            }
+            fclose($handle);
+        }
+
+        $header = array_map(fn ($h) => preg_replace('/[^a-z]/', '', mb_strtolower((string) preg_replace('/^\xEF\xBB\xBF/', '', (string) $h))), array_shift($lines) ?? []);
 
         $aliases = [
-            'code' => ['code', 'acno', 'employeecode', 'empcode', 'empid', 'employeeid', 'userid', 'id', 'enrollno', 'badgenumber', 'no'],
+            'code' => ['acno', 'code', 'employeecode', 'empcode', 'empid', 'employeeid', 'userid', 'id', 'enrollno', 'badgenumber', 'no'],
+            'name' => ['name', 'employeename', 'empname'],
             'datetime' => ['datetime', 'time', 'punchtime', 'checktime', 'timestamp', 'logtime'],
             'date' => ['date', 'day'],
-            'in' => ['in', 'checkin', 'timein', 'intime'],
-            'out' => ['out', 'checkout', 'timeout', 'outtime'],
+            'in' => ['clockin', 'in', 'checkin', 'timein', 'intime'],
+            'out' => ['clockout', 'out', 'checkout', 'timeout', 'outtime'],
+            'absent' => ['absent'],
+            'overtime' => ['ottime', 'overtime', 'othours', 'ot'],
         ];
         $map = [];
         foreach ($aliases as $field => $names) {
-            foreach ($header as $index => $name) {
-                if (in_array($name, $names, true) && ! in_array($index, $map, true)) {
+            foreach ($names as $name) {
+                $index = array_search($name, $header, true);
+                if ($index !== false && ! in_array($index, $map, true)) {
                     $map[$field] = $index;
                     break;
                 }
@@ -141,18 +252,14 @@ class AttendanceImporter
             unset($map['datetime']);
         }
 
-        $rows = collect();
-        while (($line = fgetcsv($handle)) !== false) {
-            if ($line === [null]) {
-                continue;
-            }
+        $rows = collect($lines)->map(function (array $line) use ($map, $splitPunch): array {
             $row = collect($map)->map(fn (int $index) => trim((string) ($line[$index] ?? '')))->all();
             if ($splitPunch) {
                 $row['datetime'] = filled($row['datetime']) ? $row['date'].' '.$row['datetime'] : '';
             }
-            $rows->push($row);
-        }
-        fclose($handle);
+
+            return $row;
+        })->filter(fn (array $row) => collect($row)->filter(fn ($v) => $v !== '')->isNotEmpty())->values();
 
         return ['columns' => array_keys($map), 'rows' => $rows];
     }

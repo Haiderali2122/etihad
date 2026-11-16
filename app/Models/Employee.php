@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A member of press staff. Employees are records, not logins.
  * The code matches the employee's number on the biometric device.
  */
-#[Fillable(['code', 'name', 'name_ur', 'father_name', 'cnic', 'phone', 'designation', 'foreman_id', 'is_foreman', 'monthly_salary', 'joined_on', 'left_on', 'is_active', 'notes'])]
+#[Fillable(['code', 'device_code', 'name', 'name_ur', 'father_name', 'cnic', 'phone', 'designation', 'foreman_id', 'is_foreman', 'monthly_salary', 'joined_on', 'left_on', 'is_active', 'notes'])]
 class Employee extends Model
 {
     /** @use HasFactory<EmployeeFactory> */

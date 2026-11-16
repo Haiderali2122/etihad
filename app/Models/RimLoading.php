@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\RimMove;
 use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\RimLoadingFactory;
@@ -11,10 +12,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Printed rims carried from the press to folding by Younus's labourers ("Younus ka khata").
- * Amount = rims × rate per rim. Once paid it shows in Cash-out under Loading labour.
+ * A line in Younus ka khata: rims his labourers moved (godown → our press, our press → folding, godown → outside
+ * press, outside press → back) or the outside printing charge he takes to the press. Amount = rims × rate per rim.
+ * Once paid it shows in Cash-out.
  */
-#[Fillable(['work_order_id', 'loaded_on', 'rims', 'rate_per_rim', 'amount', 'loaded_by', 'paid_on', 'note', 'created_by'])]
+#[Fillable(['work_order_id', 'kind', 'loaded_on', 'rims', 'rate_per_rim', 'amount', 'loaded_by', 'paid_on', 'note', 'created_by'])]
 class RimLoading extends Model
 {
     /** @use HasFactory<RimLoadingFactory> */
@@ -23,6 +25,7 @@ class RimLoading extends Model
     protected function casts(): array
     {
         return [
+            'kind' => RimMove::class,
             'loaded_on' => 'date',
             'paid_on' => 'date',
             'rims' => 'decimal:2',
@@ -34,6 +37,31 @@ class RimLoading extends Model
     public static function price(float $rims, float $ratePerRim): int
     {
         return (int) round($rims * $ratePerRim);
+    }
+
+    /**
+     * The rate used last time for this kind of line, offered as the starting rate in the entry box.
+     */
+    public static function lastRate(RimMove $kind): ?float
+    {
+        $rate = self::query()->where('kind', $kind)->latest('id')->value('rate_per_rim');
+
+        return $rate === null ? null : (float) $rate;
+    }
+
+    /**
+     * A line the manager entered for an order: rims × rate per rim.
+     */
+    public static function record(WorkOrder $order, RimMove $kind, float $rims, float $rate, mixed $on = null, ?int $by = null): ?self
+    {
+        if ($rims <= 0) {
+            return null;
+        }
+
+        return $order->rimLoadings()->create([
+            'kind' => $kind, 'loaded_on' => $on ?? today(), 'rims' => $rims, 'rate_per_rim' => $rate,
+            'amount' => self::price($rims, $rate), 'loaded_by' => 'Younus', 'created_by' => $by,
+        ]);
     }
 
     /**
@@ -70,8 +98,8 @@ class RimLoading extends Model
             'amount' => (int) $this->amount,
             'date' => $this->paid_on,
             'paid_to' => $this->loaded_by,
-            'reason' => 'Rim loading to folding for '.$this->workOrder?->number,
-            'head' => 'Loading labour',
+            'reason' => $this->kind->label().' for '.$this->workOrder?->number.' ('.rtrim(rtrim(number_format((float) $this->rims, 2), '0'), '.').' rims)',
+            'head' => $this->kind->head(),
         ];
     }
 
@@ -87,6 +115,6 @@ class RimLoading extends Model
 
     public function deletionLabel(): string
     {
-        return __('Rim loading').' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' rims)';
+        return $this->kind->label().' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' rims, Rs '.number_format($this->amount).')';
     }
 }

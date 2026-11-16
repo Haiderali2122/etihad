@@ -51,7 +51,8 @@
 
                 <x-field name="mode" :label="__('Print where')" :options="collect(\App\Enums\PrintMode::cases())->mapWithKeys(fn ($m) => [$m->value => $m->label()])" :value="old('mode', 'in_house')" required />
                 <div id="inHouse"><x-field name="machine_id" :label="__('Machine')" :options="$machines->mapWithKeys(fn ($m) => [$m->id => $m->code.' '.$m->name])" :placeholder="__('Choose machine')" /></div>
-                <div id="outside" hidden><x-field name="press_id" :label="__('Outside press')" :options="$presses->pluck('name', 'id')" :placeholder="__('Choose press')" :hint="$presses->isEmpty() ? __('Add the press under Parties & suppliers as an “Outside press”.') : null" /></div>
+                <div id="outside" hidden><x-field name="press_id" :label="__('Outside press')" :options="$presses->pluck('name', 'id')" :placeholder="__('Choose press')" :hint="$presses->isEmpty() ? __('Add the press under Parties & suppliers as an “Outside press”.') : null" />
+                    <x-field name="printing_rate" type="number" step="0.01" min="0" :label="__('Printing rate per rim (Rs)')" :hint="__('Younus takes this to the press; it is added to his khata for the rims sent.')" /></div>
                 <x-field name="buyer_id" :label="__('For buyer (optional)')" :options="$buyers->pluck('name', 'id')" :placeholder="__('Not set')" />
                 <x-field name="ordered_on" type="date" :label="__('Order date')" :value="today()->toDateString()" required />
                 <x-field name="due_on" type="date" :label="__('Due date')" />

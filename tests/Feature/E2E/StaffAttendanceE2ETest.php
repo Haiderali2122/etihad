@@ -512,10 +512,10 @@ class StaffAttendanceE2ETest extends TestCase
 
         $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => $file, 'overwrite' => 0])
             ->assertRedirect(route('attendance.import'))
-            ->assertSessionHas('status', '2 days imported.');
+            ->assertSessionHas('status', '2 days imported: 2 present, 0 absent.');
 
         $result = session('import');
-        $this->assertSame(['E-099'], $result['unknown']);
+        $this->assertSame(['E-099 Nobody'], $result['unknown']);
         $this->assertCount(1, $result['errors']);
         $this->assertStringContainsString('Row 8', $result['errors'][0]);
 
@@ -534,7 +534,7 @@ class StaffAttendanceE2ETest extends TestCase
 
         $this->actingAs($this->owner)->followingRedirects()->post(route('attendance.import.store'), [
             'file' => $this->csv("code,date,in,out\nE-001,2026-10-12,09:00,17:00\nE-001,2026-10-13,09:00,\nE-404,2026-10-13,09:00,17:00\n"),
-        ])->assertOk()->assertSee('E-404')->assertSee('2 days imported.');
+        ])->assertOk()->assertSee('E-404')->assertSee('2 days imported: 2 present, 0 absent.');
 
         $this->assertSame(2, $employee->attendances()->count());
         $this->assertNull($employee->attendances()->whereDate('date', '2026-10-13')->sole()->check_out);
@@ -574,7 +574,7 @@ class StaffAttendanceE2ETest extends TestCase
         $employee = Employee::factory()->create(['code' => 'E-001']);
         $content = "code,datetime\nE-001,2026-10-12 09:00\nE-001,2026-10-12 19:00\n";
 
-        $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => $this->csv($content)])->assertSessionHas('status', '1 days imported.');
+        $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => $this->csv($content)])->assertSessionHas('status', '1 days imported: 1 present, 0 absent.');
         $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => $this->csv($content)])->assertRedirect(route('attendance.import'));
 
         $this->assertSame(1, $employee->attendances()->count());
@@ -584,7 +584,7 @@ class StaffAttendanceE2ETest extends TestCase
     {
         $this->actingAs($this->owner)->post(route('attendance.import.store'), [])->assertSessionHasErrors('file');
         $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => UploadedFile::fake()->image('photo.png')])->assertSessionHasErrors('file');
-        $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => UploadedFile::fake()->create('big.csv', 6000, 'text/csv')])->assertSessionHasErrors('file');
+        $this->actingAs($this->owner)->post(route('attendance.import.store'), ['file' => UploadedFile::fake()->create('big.csv', 11000, 'text/csv')])->assertSessionHasErrors('file');
     }
 
     public function test_import_of_empty_and_header_only_files_reports_no_rows(): void

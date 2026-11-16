@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Enums\ContractorJobKind;
 use App\Enums\PaperIssueKind;
 use App\Enums\PrintMode;
+use App\Enums\RimMove;
 use App\Enums\WorkOrderStage;
 use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A book order through the press: printed in-house or outsourced, then folded, bound and loaded.
  * Its paper leaves stock when the owner approves it.
  */
-#[Fillable(['number', 'ordered_on', 'book_format_id', 'copies', 'forms', 'wastage_percent', 'rims_needed', 'paper_type_id', 'party_id', 'mode', 'machine_id', 'press_id', 'buyer_id', 'due_on', 'stage', 'note', 'created_by'])]
+#[Fillable(['number', 'ordered_on', 'book_format_id', 'copies', 'forms', 'wastage_percent', 'rims_needed', 'paper_type_id', 'party_id', 'mode', 'machine_id', 'press_id', 'printing_rate', 'buyer_id', 'due_on', 'stage', 'note', 'created_by'])]
 class WorkOrder extends Model
 {
     /** @use HasFactory<WorkOrderFactory> */
@@ -39,6 +40,7 @@ class WorkOrder extends Model
             'forms' => 'decimal:2',
             'wastage_percent' => 'decimal:2',
             'rims_needed' => 'integer',
+            'printing_rate' => 'decimal:2',
             'mode' => PrintMode::class,
             'stage' => WorkOrderStage::class,
         ];
@@ -79,6 +81,11 @@ class WorkOrder extends Model
 
     public function issuePaperAndStart(): void
     {
+        // Paper (and Younus's line for carrying it) is issued once per order.
+        if ($this->paper_issue_id) {
+            return;
+        }
+
         // The order itself was approved, so its paper issue is too.
         $issue = (new PaperIssue)->forceFill([
             'status' => ApprovalStatus::Approved,
@@ -184,7 +191,7 @@ class WorkOrder extends Model
             WorkOrderStage::Printing => $this->mode === PrintMode::Outsource && $this->printedCopies() === 0
                 ? __('Record the printed work received from the outside press first.')
                 : null,
-            WorkOrderStage::ToFolding => $this->rimLoadings()->doesntExist()
+            WorkOrderStage::ToFolding => $this->rimLoadings()->whereIn('kind', [RimMove::ToFolding, RimMove::FromOutside])->doesntExist()
                 ? __('Record the rims loaded to folding (Younus ka khata) first.')
                 : null,
             WorkOrderStage::Folding => $jobsDone(ContractorJobKind::Folding),

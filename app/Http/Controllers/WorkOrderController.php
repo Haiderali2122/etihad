@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ApprovalStatus;
 use App\Enums\PartyKind;
 use App\Enums\PrintMode;
+use App\Enums\RimMove;
 use App\Enums\WorkOrderStage;
 use App\Http\Requests\StoreWorkOrderRequest;
 use App\Models\Book;
@@ -14,6 +15,7 @@ use App\Models\Machine;
 use App\Models\OutsidePrintReceipt;
 use App\Models\PaperReceipt;
 use App\Models\Party;
+use App\Models\RimLoading;
 use App\Models\Setting;
 use App\Models\WorkOrder;
 use App\Support\PaperStock;
@@ -70,6 +72,7 @@ class WorkOrderController extends Controller
             'rims_needed' => $request->rimsNeeded(),
             'machine_id' => $isOutsource ? null : $data['machine_id'],
             'press_id' => $isOutsource ? $data['press_id'] : null,
+            'printing_rate' => $isOutsource ? $data['printing_rate'] : null,
             'stage' => WorkOrderStage::Waiting,
             'created_by' => $request->user()->id,
         ]));
@@ -124,6 +127,35 @@ class WorkOrderController extends Controller
     }
 
     /**
+     * Younus carried the paper from the godown to our press, or to the outside press (with the printing charge he
+     * takes there). Entered on the work order when the rims move.
+     */
+    public function carryPaper(Request $request, WorkOrder $workOrder): RedirectResponse
+    {
+        abort_unless($workOrder->paper_issue_id, 409, __('Paper has not been issued for this order yet.'));
+        $outside = $workOrder->mode === PrintMode::Outsource;
+        $data = $request->validate([
+            'carried_on' => ['required', 'date', 'before_or_equal:today'],
+            'younus_rims' => ['required', 'numeric', 'min:0.5'],
+            'younus_rate' => ['required', 'numeric', 'min:0'],
+            'printing_rate' => [$outside && $workOrder->printing_rate === null ? 'required' : 'nullable', 'numeric', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($data, $workOrder, $outside, $request): void {
+            $by = $request->user()->id;
+            RimLoading::record($workOrder, $outside ? RimMove::ToOutside : RimMove::ToPress, (float) $data['younus_rims'], (float) $data['younus_rate'], $data['carried_on'], $by);
+            if ($outside) {
+                if ($workOrder->printing_rate === null) {
+                    $workOrder->forceFill(['printing_rate' => $data['printing_rate']])->save();
+                }
+                RimLoading::record($workOrder, RimMove::Printing, (float) $data['younus_rims'], (float) $workOrder->printing_rate, $data['carried_on'], $by);
+            }
+        });
+
+        return back()->with('status', __('Added to Younus ka khata.'));
+    }
+
+    /**
      * Printed work back from the outside press; unused rims return to the godown as a receipt slip.
      */
     public function receiveOutside(Request $request, WorkOrder $workOrder): RedirectResponse
@@ -135,7 +167,6 @@ class WorkOrderController extends Controller
             'printed_copies' => ['required', 'integer', 'min:0'],
             'leftover_rims' => ['nullable', 'integer', 'min:0', 'max:'.max(0, $workOrder->rimsUsed())],
             'godown_id' => ['nullable', 'required_with:leftover_rims', Rule::exists('godowns', 'id')->where('is_active', true)],
-            'bill_amount' => ['nullable', 'integer', 'min:0'],
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -156,9 +187,10 @@ class WorkOrderController extends Controller
             OutsidePrintReceipt::create([
                 'work_order_id' => $workOrder->id, 'received_on' => $data['received_on'],
                 'printed_copies' => $data['printed_copies'], 'leftover_rims' => (int) ($data['leftover_rims'] ?? 0),
-                'paper_receipt_id' => $receipt?->id, 'bill_amount' => $data['bill_amount'] ?? null,
+                'paper_receipt_id' => $receipt?->id,
                 'note' => $data['note'] ?? null, 'created_by' => $request->user()->id,
             ]);
+
         });
 
         return back()->with('status', __('Printed work received from :press.', ['press' => $workOrder->press?->name]));

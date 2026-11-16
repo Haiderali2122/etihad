@@ -1,10 +1,19 @@
 @php
+    use App\Enums\ContractorJobKind;
+    use App\Enums\PrintMode;
+    use App\Enums\RimMove;
     use App\Enums\WorkOrderStage;
     $next = $order->stage->next();
     $qty = fn ($v) => \App\Models\InventoryItem::qty($v);
     $stages = WorkOrderStage::cases();
     $at = array_search($order->stage, $stages, true);
     $blocker = $order->paper_issue_id && $next ? $order->advanceBlocker() : null;
+    $outside = $order->mode === PrintMode::Outsource;
+    $younus = $order->rimLoadings->sortBy('loaded_on')->values();
+    // The "Move to …" button for steps that only need confirming once their work is recorded.
+    $canMove = $order->paper_issue_id && $next && in_array($order->stage, [WorkOrderStage::ToFolding, WorkOrderStage::Folding, WorkOrderStage::Binding], true)
+        || ($order->stage === WorkOrderStage::Printing && $outside && $order->paper_issue_id);
+    $jobsOf = fn (ContractorJobKind $k) => $order->contractorJobs->where('kind', $k)->values();
 @endphp
 <x-layouts.app :title="$order->number">
     <x-page-head :title="$order->number.' · '.$order->bookName()" :subtitle="__(':copies copies · :forms forms · :where', ['copies' => number_format($order->copies), 'forms' => $qty($order->forms), 'where' => $order->printedAt()])">
@@ -15,177 +24,237 @@
                 @if (! $order->paper_issue_id)
                     <x-delete-button :action="route('work-orders.destroy', $order)" :confirm="__('Delete :n?', ['n' => $order->number])" :label="__('Delete')" />
                 @endif
-                @if ($order->paper_issue_id && (in_array($order->stage, [WorkOrderStage::ToFolding, WorkOrderStage::Folding, WorkOrderStage::Binding], true) || ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'outsource')))
-                    <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit" @disabled($blocker)><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
-                @endif
-            @endcan
-            @can('dispatch.manage')
-                @if ($order->stage === WorkOrderStage::Ready && $order->canBeLoaded())
-                    <a class="btn primary" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>
-                @endif
             @endcan
         </x-slot:actions>
     </x-page-head>
 
     @if ($errors->any())<div class="flash err" role="alert"><x-icon name="alert" />{{ $errors->first() }}</div>@endif
-    @if ($order->isPending())<div class="alert"><x-icon name="clock" /><div><b>{{ __('Waiting for the owner\'s approval.') }}</b> {{ __('Paper is issued from stock once it is approved.') }}</div></div>@endif
     @if ($order->review_note)<div class="alert"><x-icon name="alert" /><div><b>{{ __('Owner note') }}:</b> {{ $order->review_note }}</div></div>@endif
 
+    {{-- Where the order is --}}
     <div class="card"><div class="card-b">
         <div class="stages">
             @foreach ($stages as $i => $s)
                 <div @class(['stg', 'done' => $order->paper_issue_id && $i < $at, 'on' => $i === $at])><i>{{ $i + 1 }}</i><span>{{ $s->label() }}</span></div>
             @endforeach
         </div>
-        @if ($blocker && ! ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'in_house'))
-            <div class="meta" style="margin-top:10px"><b>{{ __('Next step') }}:</b> {{ $blocker }}</div>
-        @endif
     </div></div>
 
-    @if ($order->stage === WorkOrderStage::Printing && $order->mode->value === 'in_house' && $order->paper_issue_id)
-        @can('orders.manage')
-            <form method="POST" action="{{ route('work-orders.advance', $order) }}" class="card form-card">
-                @csrf @method('PATCH')
-                <div class="card-h"><div><h3>{{ __('Printing done') }}</h3><div class="sub">{{ __('Enter the good copies that came off :machine. The printed rims are then loaded to folding.', ['machine' => $order->printedAt()]) }}</div></div></div>
-                <div class="card-b"><div class="form">
-                    <x-field name="printed_copies" type="number" min="1" :label="__('Printed copies')" :value="$order->copies" required />
-                    <x-field name="printed_on" type="date" :label="__('Printing finished on')" :value="today()->toDateString()" required />
-                </div></div>
-                <div class="form-actions"><button class="btn primary" type="submit"><x-icon name="chev" />{{ __('Move to :stage', ['stage' => WorkOrderStage::ToFolding->label()]) }}</button></div>
-            </form>
-        @endcan
-    @endif
-
-    <div class="grid g4">
-        <x-kpi icon="paper" :label="__('Paper')" :foot="$order->paperType->label().' · '.$order->party->name">{{ number_format($order->rims_needed) }}<small>{{ __('rims') }}</small></x-kpi>
-        <x-kpi icon="drop" tone="warn" :label="__('Wastage allowed')" :foot="__(':p% on :base rims', ['p' => $qty($order->wastage_percent), 'base' => number_format($rims['base'])])">{{ number_format($rims['needed'] - $rims['base']) }}<small>{{ __('rims') }}</small></x-kpi>
-        <x-kpi icon="fold" :label="__('Contractor work')" :foot="trans_choice(':count job|:count jobs', $order->contractorJobs->count())">Rs {{ number_format($order->contractorJobs->sum('amount')) }}</x-kpi>
-        <x-kpi icon="truck" tone="good" :label="__('Dispatched')" :foot="__('of :n copies', ['n' => number_format($order->copies)])">{{ number_format($dispatched) }}</x-kpi>
-    </div>
-
-    <div class="grid g-half">
-        <div class="card">
-            <div class="card-h"><div><h3>{{ __('Order') }}</h3></div></div>
-            <div class="card-b">
-                <div class="stat-line"><span>{{ __('Ordered') }}</span><b>{{ $order->ordered_on->format('j M Y') }}</b></div>
-                <div class="stat-line"><span>{{ __('Due') }}</span><b>{{ $order->due_on?->format('j M Y') ?? '—' }}</b></div>
-                <div class="stat-line"><span>{{ __('Buyer') }}</span><b>{{ $order->buyer?->name ?? '—' }}</b></div>
-                @if ($order->printed_on)<div class="stat-line"><span>{{ __('Printed') }}</span><b>{{ $order->printed_on->format('j M Y') }} · {{ number_format($order->printed_copies) }} {{ __('copies') }}</b></div>@endif
-                <div class="stat-line"><span>{{ __('Paper issued') }}</span><b>{{ $order->paperIssue ? $order->paperIssue->issued_on->format('j M Y').' · '.number_format($order->paperIssue->quantity).' '.__('rims') : __('Not yet') }}</b></div>
-                <div class="stat-line"><span>{{ __('Entered by') }}</span><b>{{ $order->creator?->name ?? '—' }}</b></div>
-                @if ($order->note)<div class="stat-line"><span>{{ __('Note') }}</span><b>{{ $order->note }}</b></div>@endif
-            </div>
+    {{-- Only the current step: what to record now --}}
+    <div class="card">
+        <div class="card-h"><div><h3>{{ __('Now: :stage', ['stage' => $order->stage->label()]) }}</h3>@if ($blocker)<div class="sub">{{ $blocker }}</div>@endif</div>
+            @can('orders.manage')
+                @if ($canMove)
+                    <form method="POST" action="{{ route('work-orders.advance', $order) }}">@csrf @method('PATCH')<button class="btn primary" type="submit" @disabled($blocker)><x-icon name="chev" />{{ __('Move to :stage', ['stage' => $next->label()]) }}</button></form>
+                @endif
+            @endcan
         </div>
+        <div class="card-b">
+            @switch($order->stage)
+                @case(WorkOrderStage::Waiting)
+                    <div class="meta"><b>{{ __('Waiting for the owner\'s approval.') }}</b> {{ __('Paper is issued from stock once it is approved.') }}</div>
+                    @break
 
-        @if ($order->mode->value === 'outsource')
-            <div class="card">
-                <div class="card-h"><div><h3>{{ __('Outside printing') }}</h3><div class="sub">{{ __(':n copies received back · :r rims returned', ['n' => number_format($printedBack), 'r' => number_format($order->outsideReceipts->sum('leftover_rims'))]) }}</div></div></div>
-                <div class="card-b">
-                    @foreach ($order->outsideReceipts as $r)
-                        <div class="stat-line"><span>{{ $r->received_on->format('j M Y') }}</span><b>{{ number_format($r->printed_copies) }} {{ __('copies') }}@if ($r->leftover_rims) · {{ $r->leftover_rims }} {{ __('rims back') }}@endif @if ($r->bill_amount) · Rs {{ number_format($r->bill_amount) }}@endif @can('orders.manage')<x-delete-button :action="route('records.destroy', ['outside-print-receipt', $r->id])" :label="''" small aria-label="{{ __('Delete') }}" :danger="false" />@endcan</b></div>
-                    @endforeach
-                    @can('orders.manage')
-                        @if ($order->paper_issue_id)
-                            <form method="POST" action="{{ route('work-orders.outside-receipts.store', $order) }}" class="form" style="margin-top:12px">
+                @case(WorkOrderStage::Printing)
+                    {{-- First move: Younus carries the paper from the godown to the press (and, for an outside press, takes the printing charge). --}}
+                    @php $carried = $younus->whereIn('kind', [RimMove::ToPress, RimMove::ToOutside]); $rate = fn (RimMove $k) => ($r = \App\Models\RimLoading::lastRate($k)) !== null ? $qty($r) : null; @endphp
+                    @if ($carried->isNotEmpty())
+                        @foreach ($younus->whereIn('kind', [RimMove::ToPress, RimMove::ToOutside, RimMove::Printing]) as $l)
+                            <div class="stat-line"><span>{{ __('Younus') }} · {{ $l->kind->label() }}</span><b>{{ $qty($l->rims) }} × {{ $qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}</b></div>
+                        @endforeach
+                    @else
+                        @can('orders.manage')
+                            <form method="POST" action="{{ route('work-orders.younus-paper', $order) }}" class="form" style="margin-bottom:14px" data-younus @if ($outside) data-printing-rate="{{ (float) $order->printing_rate }}" @endif>
                                 @csrf
-                                <x-field name="printed_copies" type="number" min="0" :label="__('Printed copies received')" required />
+                                <div class="field full"><b>{{ $outside ? __('Younus: godown → :press', ['press' => $order->press?->name ?? __('outside press')]) : __('Younus: godown → our press') }}</b></div>
+                                <x-field name="younus_rims" type="number" step="0.5" min="0.5" :label="__('Rims carried')" :value="$order->rims_needed" required data-rims />
+                                <x-field name="younus_rate" type="number" step="0.01" min="0" :label="__('Rate per rim (Rs)')" :value="$rate($outside ? RimMove::ToOutside : RimMove::ToPress)" required data-rate />
+                                @if ($outside && $order->printing_rate === null)
+                                    <x-field name="printing_rate" type="number" step="0.01" min="0" :label="__('Printing rate per rim (Rs)')" required data-print-rate />
+                                @endif
+                                <x-field name="carried_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                                <div class="field full"><div class="calc" style="padding:10px 14px">
+                                    <div class="stat-line"><span>{{ __('Younus carrying: rims × rate') }}</span><b class="num" data-labour>Rs 0</b></div>
+                                    @if ($outside)<div class="stat-line"><span>{{ __('Printing charge: rims × :r', ['r' => $order->printing_rate !== null ? $qty($order->printing_rate) : __('printing rate')]) }}</span><b class="num" data-printing>Rs 0</b></div>@endif
+                                    <div class="stat-line"><span><b>{{ __('To pay Younus') }}</b></span><b class="num" data-total>Rs 0</b></div>
+                                </div></div>
+                                <div class="field full"><button class="btn" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Add to Younus ka khata') }}</button></div>
+                            </form>
+                        @endcan
+                    @endif
+
+                    @if (! $outside)
+                        @can('orders.manage')
+                            <form method="POST" action="{{ route('work-orders.advance', $order) }}" class="form">
+                                @csrf @method('PATCH')
+                                <x-field name="printed_copies" type="number" min="1" :label="__('Printed copies')" :value="$order->copies" required />
+                                <x-field name="printed_on" type="date" :label="__('Printing finished on')" :value="today()->toDateString()" required />
+                                <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="chev" />{{ __('Printing done') }}</button></div>
+                            </form>
+                        @endcan
+                    @else
+                        @foreach ($order->outsideReceipts as $r)
+                            <div class="stat-line"><span>{{ $r->received_on->format('j M Y') }}</span><b>{{ number_format($r->printed_copies) }} {{ __('copies') }}@if ($r->leftover_rims) · {{ $r->leftover_rims }} {{ __('rims back unused') }}@endif @can('orders.manage')<x-delete-button :action="route('records.destroy', ['outside-print-receipt', $r->id])" :label="''" small :danger="false" aria-label="{{ __('Delete') }}" />@endcan</b></div>
+                        @endforeach
+                        @can('orders.manage')
+                            <form method="POST" action="{{ route('work-orders.outside-receipts.store', $order) }}" class="form" style="margin-top:8px">
+                                @csrf
+                                <x-field name="printed_copies" type="number" min="0" :label="__('Printed copies received from :press', ['press' => $order->press?->name])" required />
                                 <x-field name="received_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                                 <x-field name="leftover_rims" type="number" min="0" :label="__('Unused rims returned')" :hint="__('Added back to paper stock')" />
                                 <x-field name="godown_id" :label="__('Unloaded in')" :options="$godowns->pluck('name', 'id')" :placeholder="__('Choose location')" />
-                                <x-field name="bill_amount" type="number" min="0" :label="__('Press bill (Rs)')" />
-                                <x-field name="note" :label="__('Note')" />
-                                <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="download" />{{ __('Record receipt') }}</button></div>
+                                <x-field name="note" :label="__('Note')" full />
+                                <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="download" />{{ __('Record printed work received') }}</button></div>
                             </form>
-                        @endif
-                    @endcan
-                </div>
-            </div>
-        @else
-            <div class="card">
-                <div class="card-h"><div><h3>{{ __('Plates') }}</h3></div>@can('plates.manage')<a class="btn sm" href="{{ route('plate-jobs.create', ['order' => $order->id]) }}"><x-icon name="plus" />{{ __('Add') }}</a>@endcan</div>
-                <div class="card-b">
-                    @forelse ($order->plateJobs as $p)
-                        <div class="stat-line"><span>{{ $p->job_on->format('j M') }} · {{ $p->processor->name }}</span><b>{{ $p->plates }} {{ __('plates') }} · Rs {{ number_format($p->amount) }} @if ($p->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>@endif</b></div>
+                        @endcan
+                    @endif
+                    @break
+
+                @case(WorkOrderStage::ToFolding)
+                    {{-- Younus carries the printed rims to folding: from our press, or back from the outside press. --}}
+                    @php $kind = $outside ? RimMove::FromOutside : RimMove::ToFolding; $loaded = $younus->where('kind', $kind); $last = \App\Models\RimLoading::lastRate($kind); @endphp
+                    @forelse ($loaded as $l)
+                        <div class="stat-line"><span>{{ __('Younus') }} · {{ $l->kind->label() }} · {{ $l->loaded_on->format('j M') }}</span><b>{{ $qty($l->rims) }} × {{ $qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}</b></div>
                     @empty
-                        <div class="empty">{{ __('No plates recorded') }}</div>
+                        @can('orders.manage')
+                            <form method="POST" action="{{ route('rim-loadings.store', $order) }}" class="form" data-younus>
+                                @csrf
+                                <div class="field full"><b>{{ $outside ? __('Younus: outside press → back for folding') : __('Younus: our press → folding') }}</b></div>
+                                <x-field name="rims" type="number" step="0.5" min="0.5" :label="__('Rims carried')" :value="$order->rimsUsed()" required data-rims />
+                                <x-field name="rate_per_rim" type="number" step="0.01" min="0" :label="__('Rate per rim (Rs)')" :value="$last !== null ? $qty($last) : null" required data-rate />
+                                <x-field name="loaded_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                                <div class="field"><label>{{ __('To pay Younus') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" data-total style="font-size:22px">Rs 0</div><div class="meta">{{ __('rims × rate per rim') }}</div></div></div>
+                                <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Add to Younus ka khata') }}</button></div>
+                            </form>
+                        @endcan
                     @endforelse
-                </div>
-            </div>
-        @endif
+                    @break
+
+                @case(WorkOrderStage::Folding)
+                @case(WorkOrderStage::Binding)
+                    @php $kind = $order->stage === WorkOrderStage::Folding ? ContractorJobKind::Folding : ContractorJobKind::Binding; @endphp
+                    @forelse ($jobsOf($kind) as $job)
+                        <div class="stat-line"><span><a href="{{ route('contractors.show', $job->contractor) }}">{{ $job->contractor->name }}</a> · {{ $job->job_on->format('j M') }} · Rs {{ number_format($job->amount) }}</span>
+                            <b>@if ($job->isDone())<x-badge tone="good">{{ __('Done :date', ['date' => $job->done_on?->format('j M')]) }}</x-badge>@else @can('contractors.manage')<form method="POST" action="{{ route('contractor-jobs.done', $job) }}" class="filters" style="flex-wrap:nowrap">@csrf @method('PATCH')<input class="select" type="date" name="done_on" value="{{ today()->toDateString() }}" min="{{ $job->job_on->toDateString() }}" max="{{ today()->toDateString() }}" required aria-label="{{ __('Finished on') }}"><button class="btn sm" type="submit"><x-icon name="check" />{{ __('Done') }}</button></form>@else<x-badge tone="info">{{ __('In progress') }}</x-badge>@endcan @endif</b></div>
+                    @empty
+                        <div class="meta">{{ __('Give the :work job to a contractor.', ['work' => mb_strtolower($kind->label())]) }}</div>
+                    @endforelse
+                    @can('contractors.manage')<div style="margin-top:10px"><a class="btn" href="{{ route('contractor-jobs.create', ['order' => $order->id, 'kind' => $kind->value]) }}"><x-icon name="plus" />{{ __('Give :work job', ['work' => mb_strtolower($kind->label())]) }}</a></div>@endcan
+                    @break
+
+                @case(WorkOrderStage::Ready)
+                    <div class="meta">{{ __(':done of :all copies loaded so far.', ['done' => number_format($dispatched), 'all' => number_format($order->copies)]) }}</div>
+                    @can('dispatch.manage')@if ($order->canBeLoaded())<div style="margin-top:10px"><a class="btn primary" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load on truck') }}</a></div>@endif @endcan
+                    @break
+
+                @default
+                    <div class="meta">{{ __('All :n copies are loaded and dispatched.', ['n' => number_format($order->copies)]) }}</div>
+            @endswitch
+        </div>
     </div>
 
-    @php $canLoadRims = $order->paper_issue_id && ! in_array($order->stage, [WorkOrderStage::Waiting, WorkOrderStage::Printing, WorkOrderStage::Dispatched], true); @endphp
-    @if ($order->rimLoadings->isNotEmpty() || $canLoadRims)
-        <div class="card">
-            <div class="card-h"><div><h3>{{ __('Loading to folding (Younus ka khata)') }}</h3><div class="sub">{{ __(':rims rims loaded · Rs :amount labour', ['rims' => \App\Models\InventoryItem::qty($order->rimLoadings->sum('rims')), 'amount' => number_format($order->rimLoadings->sum('amount'))]) }}</div></div>
-                <a class="btn sm" href="{{ route('rim-loadings.index') }}">{{ __('Ledger') }}</a></div>
-            <div class="card-b">
-                @foreach ($order->rimLoadings as $l)
-                    <div class="stat-line"><span>{{ $l->loaded_on->format('j M') }} · {{ $l->loaded_by }}</span><b>{{ \App\Models\InventoryItem::qty($l->rims) }} {{ __('rims') }} × {{ \App\Models\InventoryItem::qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}
-                        @if ($l->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>
-                            @can('orders.manage')<x-delete-button :action="route('rim-loadings.destroy', $l)" :confirm="__('Delete this loading?')" :label="''" small :danger="false" aria-label="{{ __('Delete') }}" />@endcan
-                        @endif</b></div>
-                @endforeach
-                @can('orders.manage')
-                    @if ($canLoadRims)
-                        <form method="POST" action="{{ route('rim-loadings.store', $order) }}" class="form" style="margin-top:12px">
-                            @csrf
-                            <x-field name="rims" type="number" step="0.5" min="0.5" :label="__('Rims loaded')" :value="$order->rimLoadings->isEmpty() ? $order->rims_needed : null" required />
-                            <x-field name="rate_per_rim" type="number" step="0.01" min="0" :label="__('Labour per rim (Rs)')" required />
-                            <x-field name="loaded_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                            <x-field name="loaded_by" :label="__('Loaded by')" value="Younus" />
-                            <x-field name="note" :label="__('Note')" full />
-                            <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Record loading') }}</button></div>
-                        </form>
-                    @endif
-                @endcan
-            </div>
+    <div class="grid g4">
+        <x-kpi icon="paper" :label="__('Paper')" :foot="$order->paperType->label().' · '.$order->party->name">{{ number_format($order->rims_needed) }}<small>{{ __('rims') }}</small></x-kpi>
+        <x-kpi icon="truck" :label="__('Younus ka khata')" :foot="__('Rs :n unpaid', ['n' => number_format($younus->whereNull('paid_on')->sum('amount'))])">Rs {{ number_format($younus->sum('amount')) }}</x-kpi>
+        <x-kpi icon="fold" :label="__('Folding & binding')" :foot="trans_choice(':count job|:count jobs', $order->contractorJobs->count())">Rs {{ number_format($order->contractorJobs->sum('amount')) }}</x-kpi>
+        <x-kpi icon="truck" tone="good" :label="__('Dispatched')" :foot="__('of :n copies', ['n' => number_format($order->copies)])">{{ number_format($dispatched) }}</x-kpi>
+    </div>
+
+    {{-- Everything else, folded away: open a line to see it --}}
+    <details class="card">
+        <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Order details') }}</h3><div class="sub">{{ __('Ordered :date', ['date' => $order->ordered_on->format('j M Y')]) }}@if ($order->due_on) · {{ __('due :date', ['date' => $order->due_on->format('j M Y')]) }}@endif · {{ $order->buyer?->name ?? __('no buyer set') }}</div></div></summary>
+        <div class="card-b">
+            <div class="stat-line"><span>{{ __('Printed at') }}</span><b>{{ $order->printedAt() }}@if ($outside && $order->printing_rate !== null) · {{ __('Rs :r per rim', ['r' => $qty($order->printing_rate)]) }}@endif</b></div>
+            <div class="stat-line"><span>{{ __('Wastage allowed') }}</span><b>{{ $qty($order->wastage_percent) }}% · {{ number_format($rims['needed'] - $rims['base']) }} {{ __('rims') }}</b></div>
+            @if ($order->printed_on)<div class="stat-line"><span>{{ __('Printed') }}</span><b>{{ $order->printed_on->format('j M Y') }} · {{ number_format($order->printed_copies) }} {{ __('copies') }}</b></div>@endif
+            <div class="stat-line"><span>{{ __('Paper issued') }}</span><b>{{ $order->paperIssue ? $order->paperIssue->issued_on->format('j M Y').' · '.number_format($order->paperIssue->quantity).' '.__('rims') : __('Not yet') }}</b></div>
+            <div class="stat-line"><span>{{ __('Entered by') }}</span><b>{{ $order->creator?->name ?? '—' }}</b></div>
+            @if ($order->note)<div class="stat-line"><span>{{ __('Note') }}</span><b>{{ $order->note }}</b></div>@endif
         </div>
+    </details>
+
+    <details class="card">
+        <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Younus ka khata for this order') }}</h3><div class="sub">{{ trans_choice(':count line|:count lines', $younus->count()) }} · Rs {{ number_format($younus->sum('amount')) }} · {{ __('Rs :n unpaid', ['n' => number_format($younus->whereNull('paid_on')->sum('amount'))]) }}</div></div><a class="btn sm" href="{{ route('rim-loadings.index', ['show' => 'all']) }}">{{ __('Open khata') }}</a></summary>
+        <div class="card-b">
+            @forelse ($younus as $l)
+                <div class="stat-line"><span>{{ $l->loaded_on->format('j M') }} · {{ $l->kind->label() }}</span><b>{{ $qty($l->rims) }} × {{ $qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }} @if ($l->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>@endif</b></div>
+            @empty
+                <div class="empty">{{ __('No lines yet') }}</div>
+            @endforelse
+        </div>
+    </details>
+
+    @if ($outside)
+        <details class="card">
+            <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Outside printing') }}</h3><div class="sub">{{ __(':n copies received back · :r rims returned', ['n' => number_format($printedBack), 'r' => number_format($order->outsideReceipts->sum('leftover_rims'))]) }}</div></div></summary>
+            <div class="card-b">
+                @forelse ($order->outsideReceipts as $r)
+                    <div class="stat-line"><span>{{ $r->received_on->format('j M Y') }}</span><b>{{ number_format($r->printed_copies) }} {{ __('copies') }}@if ($r->leftover_rims) · {{ $r->leftover_rims }} {{ __('rims back') }}@endif</b></div>
+                @empty
+                    <div class="empty">{{ __('Nothing received back yet') }}</div>
+                @endforelse
+            </div>
+        </details>
+    @else
+        <details class="card">
+            <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Plates') }}</h3><div class="sub">{{ trans_choice(':count plate job|:count plate jobs', $order->plateJobs->count()) }} · Rs {{ number_format($order->plateJobs->sum('amount')) }}</div></div>@can('plates.manage')<a class="btn sm" href="{{ route('plate-jobs.create', ['order' => $order->id]) }}"><x-icon name="plus" />{{ __('Add') }}</a>@endcan</summary>
+            <div class="card-b">
+                @forelse ($order->plateJobs as $p)
+                    <div class="stat-line"><span>{{ $p->job_on->format('j M') }} · {{ $p->processor->name }}</span><b>{{ $p->plates }} {{ __('plates') }} · Rs {{ number_format($p->amount) }} @if ($p->isPaid())<x-badge tone="good">{{ __('Paid') }}</x-badge>@else<x-badge tone="warn">{{ __('Unpaid') }}</x-badge>@endif</b></div>
+                @empty
+                    <div class="empty">{{ __('No plates recorded') }}</div>
+                @endforelse
+            </div>
+        </details>
     @endif
 
-    <div class="card">
-        <div class="card-h"><div><h3>{{ __('Folding & binding') }}</h3></div>
-            @can('contractors.manage')@if ($order->paper_issue_id)<a class="btn sm" href="{{ route('contractor-jobs.create', ['order' => $order->id]) }}"><x-icon name="plus" />{{ __('Give job') }}</a>@endif @endcan</div>
-        <div class="card-b" style="padding-inline:0"><div class="tbl-wrap"><table>
-            <thead><tr><th>{{ __('Contractor') }}</th><th>{{ __('Work') }}</th><th>{{ __('Date') }}</th><th>{{ __('Formula') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
-            <tbody>
+    <details class="card">
+        <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Folding & binding') }}</h3><div class="sub">{{ trans_choice(':count job|:count jobs', $order->contractorJobs->count()) }} · Rs {{ number_format($order->contractorJobs->sum('amount')) }}</div></div></summary>
+        <div class="card-b">
             @forelse ($order->contractorJobs as $job)
-                <tr>
-                    <td><a href="{{ route('contractors.show', $job->contractor) }}">{{ $job->contractor->name }}</a></td>
-                    <td>{{ $job->kind->label() }}</td>
-                    <td>{{ $job->job_on->format('j M Y') }}</td>
-                    <td class="meta" dir="ltr">{{ $job->formula() }}</td>
-                    <td class="r num"><b>Rs {{ number_format($job->amount) }}</b></td>
-                    <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge>@if ($job->done_on)<div class="meta">{{ $job->done_on->format('j M Y') }}</div>@endif</td>
-                    <td class="r">@can('contractors.manage')@unless ($job->isDone())<form method="POST" action="{{ route('contractor-jobs.done', $job) }}" class="filters" style="flex-wrap:nowrap;justify-content:flex-end">@csrf @method('PATCH')<input class="select" type="date" name="done_on" value="{{ today()->toDateString() }}" min="{{ $job->job_on->toDateString() }}" max="{{ today()->toDateString() }}" required aria-label="{{ __('Finished on') }}"><button class="btn sm" type="submit"><x-icon name="check" />{{ __('Done') }}</button></form>@endunless @endcan</td>
-                </tr>
+                <div class="stat-line"><span>{{ $job->kind->label() }} · <a href="{{ route('contractors.show', $job->contractor) }}">{{ $job->contractor->name }}</a> · {{ $job->job_on->format('j M') }}</span><b>Rs {{ number_format($job->amount) }} <x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge></b></div>
             @empty
-                <tr><td colspan="7"><div class="empty">{{ __('No folding or binding given out yet') }}</div></td></tr>
+                <div class="empty">{{ __('No folding or binding given out yet') }}</div>
             @endforelse
-            </tbody>
-        </table></div></div>
-    </div>
+        </div>
+    </details>
 
-    <div class="grid g-half">
-        <div class="card">
-            <div class="card-h"><div><h3>{{ __('Dispatch') }}</h3></div>@can('dispatch.manage')@if ($order->canBeLoaded())<a class="btn sm" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>@endif @endcan</div>
-            <div class="card-b">
-                @forelse ($order->dispatches as $d)
-                    <a class="stat-line" href="{{ route('dispatches.show', $d) }}" style="color:inherit;text-decoration:none"><span>{{ $d->number }} · {{ $d->dispatched_on->format('j M') }} · {{ $d->buyer->name }}</span><b>{{ number_format($d->copies) }} {{ __('copies') }}</b></a>
-                @empty
-                    <div class="empty">{{ __('Nothing loaded yet') }}</div>
-                @endforelse
-            </div>
+    <details class="card">
+        <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Truck loading') }}</h3><div class="sub">{{ __(':done of :all copies loaded', ['done' => number_format($dispatched), 'all' => number_format($order->copies)]) }}</div></div>@can('dispatch.manage')@if ($order->canBeLoaded())<a class="btn sm primary" href="{{ route('dispatches.create', ['order' => $order->id]) }}"><x-icon name="truck" />{{ __('Load') }}</a>@endif @endcan</summary>
+        <div class="card-b">
+            @forelse ($order->dispatches as $d)
+                <a class="stat-line" href="{{ route('dispatches.show', $d) }}" style="color:inherit;text-decoration:none"><span>{{ $d->number }} · {{ $d->dispatched_on->format('j M') }} · {{ $d->buyer->name }}</span><b>{{ number_format($d->copies) }} {{ __('copies') }}</b></a>
+            @empty
+                <div class="empty">{{ __('Nothing loaded yet') }}</div>
+            @endforelse
         </div>
-        <div class="card">
-            <div class="card-h"><div><h3>{{ __('Waste') }}</h3><div class="sub">{{ __('Allowed: :n rims', ['n' => number_format($rims['needed'] - $rims['base'])]) }}</div></div>@can('waste.manage')@if ($order->paper_issue_id)<a class="btn sm" href="{{ route('waste.create', ['order' => $order->id]) }}"><x-icon name="plus" />{{ __('Record') }}</a>@endif @endcan</div>
-            <div class="card-b">
-                @forelse ($order->wasteEntries as $w)
-                    <div class="stat-line"><span>{{ $w->recorded_on->format('j M') }} · {{ $w->stage->label() }}</span><b>{{ $qty($w->quantity) }} {{ $w->unit }} · {{ $w->disposal->label() }}</b></div>
-                @empty
-                    <div class="empty">{{ __('No waste recorded') }}</div>
-                @endforelse
-            </div>
+    </details>
+
+    <details class="card">
+        <summary class="card-h" style="cursor:pointer"><div><h3>{{ __('Waste') }}</h3><div class="sub">{{ __('Allowed: :n rims', ['n' => number_format($rims['needed'] - $rims['base'])]) }} · {{ trans_choice(':count entry|:count entries', $order->wasteEntries->count()) }}</div></div>@can('waste.manage')@if ($order->paper_issue_id)<a class="btn sm" href="{{ route('waste.create', ['order' => $order->id]) }}"><x-icon name="plus" />{{ __('Record') }}</a>@endif @endcan</summary>
+        <div class="card-b">
+            @forelse ($order->wasteEntries as $w)
+                <div class="stat-line"><span>{{ $w->recorded_on->format('j M') }} · {{ $w->stage->label() }}</span><b>{{ $qty($w->quantity) }} {{ $w->unit }} · {{ $w->disposal->label() }}</b></div>
+            @empty
+                <div class="empty">{{ __('No waste recorded') }}</div>
+            @endforelse
         </div>
-    </div>
+    </details>
+    @push('scripts')
+        <script>
+            // Each Younus box shows what will be owed to him as rims and rates are typed.
+            document.querySelectorAll('form[data-younus]').forEach(form => {
+                const val = sel => +(form.querySelector(sel)?.value || 0), fmt = n => 'Rs ' + Math.round(n).toLocaleString('en-PK');
+                const set = (sel, n) => { const el = form.querySelector(sel); if (el) { el.textContent = fmt(n); } };
+                const calc = () => {
+                    const rims = val('[data-rims]'), labour = rims * val('[data-rate]');
+                    const printRate = form.querySelector('[data-print-rate]') ? val('[data-print-rate]') : +(form.dataset.printingRate || 0);
+                    const printing = form.dataset.printingRate !== undefined || form.querySelector('[data-print-rate]') ? rims * printRate : 0;
+                    set('[data-labour]', labour); set('[data-printing]', printing); set('[data-total]', labour + printing);
+                };
+                form.addEventListener('input', calc);
+                calc();
+            });
+        </script>
+    @endpush
 </x-layouts.app>

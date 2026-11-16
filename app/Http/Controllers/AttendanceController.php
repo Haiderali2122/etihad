@@ -103,14 +103,14 @@ class AttendanceController extends Controller
     public function import(Request $request, AttendanceImporter $importer): RedirectResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            'file' => ['required', 'file', 'extensions:xls,csv,txt', 'max:10240'],
             'overwrite' => ['boolean'],
         ]);
 
         $result = $importer->import($request->file('file')->getRealPath(), Setting::payrollRules()['standard_hours'], $request->boolean('overwrite'));
 
         return redirect()->route('attendance.import')->with('import', $result)
-            ->with('status', __(':n days imported.', ['n' => $result['saved']]));
+            ->with('status', __(':n days imported: :p present, :a absent.', ['n' => $result['saved'], 'p' => $result['present'], 'a' => $result['absent']]));
     }
 
     private function month(?string $value): Carbon

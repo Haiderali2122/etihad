@@ -99,7 +99,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
      */
     private function outsourceOrder(array $overrides = []): array
     {
-        return $this->order($overrides + ['mode' => 'outsource', 'press_id' => $this->press->id, 'machine_id' => null]);
+        return $this->order($overrides + ['mode' => 'outsource', 'press_id' => $this->press->id, 'machine_id' => null, 'printing_rate' => 40]);
     }
 
     private function limitedUser(array $permissions): User
@@ -130,8 +130,8 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->get(route('work-orders.index'))->assertOk()->assertSee($inHouse->number)->assertSee($outsource->number)->assertSee($pending->number)->assertSee($rejected->number);
         $this->get(route('work-orders.create'))->assertOk()->assertSee('WO-1005')->assertSee('Urdu Reader Class 5');
         $this->get(route('work-orders.create', ['format' => $this->format->id]))->assertOk();
-        $this->get(route('work-orders.show', $inHouse))->assertOk()->assertSee('371')->assertSee('Printing done')->assertSee('Move to Loading to folding')->assertSee('Kitab Ghar');
-        $this->get(route('work-orders.show', $outsource))->assertOk()->assertSee('Outside printing')->assertSee('Record receipt')->assertSee('Al-Noor Press');
+        $this->get(route('work-orders.show', $inHouse))->assertOk()->assertSee('371')->assertSee('Printing done')->assertSee('Printed copies')->assertSee('Kitab Ghar');
+        $this->get(route('work-orders.show', $outsource))->assertOk()->assertSee('Outside printing')->assertSee('Record printed work received')->assertSee('Al-Noor Press');
         $this->get(route('work-orders.show', $pending))->assertOk()->assertSee('Waiting for the owner')->assertDontSee('Move to');
         $this->get(route('work-orders.show', $rejected))->assertOk()->assertSee('Sent back')->assertSee('Wrong book');
 
@@ -302,7 +302,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->actingAs($this->manager)->get($show)->assertDontSee(route('dispatches.create', ['order' => $order->id]), false);
 
         // Each stage needs its own work recorded before the order moves on.
-        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order), ['printed_copies' => 18000, 'printed_on' => today()->toDateString()])
+        $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order), ['printed_copies' => 18000, 'printed_on' => today()->toDateString(), 'younus_rims' => 371, 'younus_rate' => 4])
             ->assertRedirect($show)->assertSessionHas('status', 'WO-1001 moved to Loading to folding.');
         $this->actingAs($this->manager)->from($show)->patch(route('work-orders.advance', $order))->assertSessionHasErrors('stage');
         $this->actingAs($this->manager)->post(route('rim-loadings.store', $order), ['loaded_on' => today()->toDateString(), 'rims' => 371, 'rate_per_rim' => 4])->assertSessionHasNoErrors();
@@ -455,7 +455,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->assertSame(629, $this->stock());
 
         $show = route('work-orders.show', $order);
-        $receipt = fn (array $data) => $this->actingAs($this->owner)->from($show)->post(route('work-orders.outside-receipts.store', $order), $data + ['received_on' => today()->toDateString()]);
+        $receipt = fn (array $data) => $this->actingAs($this->owner)->from($show)->post(route('work-orders.outside-receipts.store', $order), $data + ['received_on' => today()->toDateString(), 'younus_rims' => 0, 'younus_rate' => 6]);
 
         // More leftover than was sent out is refused.
         $receipt(['printed_copies' => 100, 'leftover_rims' => 372, 'godown_id' => $this->godown->id])->assertSessionHasErrors('leftover_rims');
@@ -506,7 +506,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->assertSame(629, $this->stock());
 
         $this->actingAs($this->manager)->post(route('work-orders.outside-receipts.store', $order), [
-            'received_on' => today()->toDateString(), 'printed_copies' => 18000, 'leftover_rims' => 11, 'godown_id' => $this->godown->id,
+            'received_on' => today()->toDateString(), 'printed_copies' => 18000, 'leftover_rims' => 11, 'godown_id' => $this->godown->id, 'younus_rims' => 360, 'younus_rate' => 6,
         ])->assertSessionHasNoErrors();
 
         $ret = PaperReceipt::query()->where('slip_no', 'RET-WO-1001-1')->sole();

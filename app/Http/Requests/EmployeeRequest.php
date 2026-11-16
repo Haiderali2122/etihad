@@ -35,6 +35,7 @@ class EmployeeRequest extends FormRequest
     {
         return [
             'code' => ['required', 'string', 'max:20', Rule::unique('employees', 'code')->ignore($this->route('employee'))],
+            'device_code' => ['nullable', 'string', 'max:20', Rule::unique('employees', 'device_code')->ignore($this->route('employee'))],
             'name' => ['required', 'string', 'max:120'],
             'name_ur' => ['nullable', 'string', 'max:120'],
             'father_name' => ['nullable', 'string', 'max:120'],

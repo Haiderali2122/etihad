@@ -40,6 +40,8 @@ class StoreWorkOrderRequest extends FormRequest
             'mode' => ['required', Rule::enum(PrintMode::class)],
             'machine_id' => ['nullable', 'required_if:mode,in_house', 'exists:machines,id'],
             'press_id' => ['nullable', 'required_if:mode,outsource', Rule::exists('parties', 'id')->where('kind', PartyKind::Press->value)],
+            // Outside printing is charged per rim; Younus takes the charge to the press, so it goes in his khata.
+            'printing_rate' => ['nullable', 'required_if:mode,outsource', 'numeric', 'min:0', 'max:100000'],
             'buyer_id' => ['nullable', Rule::exists('parties', 'id')->where('kind', PartyKind::Buyer->value)],
             'due_on' => ['nullable', 'date', 'after_or_equal:ordered_on'],
             'note' => ['nullable', 'string', 'max:255'],

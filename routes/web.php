@@ -80,9 +80,13 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor(['create', 'store', 'destroy'], 'can:orders.manage');
     Route::middleware('can:orders.manage')->group(function () {
         Route::patch('work-orders/{workOrder}/stage', [WorkOrderController::class, 'advance'])->name('work-orders.advance');
+        Route::post('work-orders/{workOrder}/younus-paper', [WorkOrderController::class, 'carryPaper'])->name('work-orders.younus-paper');
         Route::post('work-orders/{workOrder}/outside-receipts', [WorkOrderController::class, 'receiveOutside'])->name('work-orders.outside-receipts.store');
         Route::post('work-orders/{workOrder}/rim-loadings', [RimLoadingController::class, 'store'])->name('rim-loadings.store');
+        Route::post('rim-loadings/pay-all', [RimLoadingController::class, 'payAll'])->name('rim-loadings.pay-all');
         Route::patch('rim-loadings/{rimLoading}/pay', [RimLoadingController::class, 'pay'])->name('rim-loadings.pay');
+        Route::get('rim-loadings/{rimLoading}/edit', [RimLoadingController::class, 'edit'])->name('rim-loadings.edit');
+        Route::put('rim-loadings/{rimLoading}', [RimLoadingController::class, 'update'])->name('rim-loadings.update');
         Route::delete('rim-loadings/{rimLoading}', [RimLoadingController::class, 'destroy'])->name('rim-loadings.destroy');
     });
     Route::get('rim-loadings', [RimLoadingController::class, 'index'])->middleware('can:orders.view')->name('rim-loadings.index');
