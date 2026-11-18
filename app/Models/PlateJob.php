@@ -2,22 +2,24 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\HasBillPayments;
 use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\PlateJobFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Plates made by a plate processor, and whether the bill has been cleared.
+ * Plates made by a plate processor and its bill, paid in parts. Each payment (BillPayment) is dated and comes off
+ * the manager's cash; paid_on is set once the bill is fully paid.
  */
-#[Fillable(['party_id', 'work_order_id', 'job_on', 'plates', 'returned_plates', 'returned_on', 'rate', 'amount', 'paid_on', 'payment_note', 'note', 'created_by'])]
+#[Fillable(['party_id', 'work_order_id', 'book_name', 'plate_size', 'job_on', 'plates', 'returned_plates', 'returned_on', 'rate', 'amount', 'paid_amount', 'paid_on', 'payment_note', 'note', 'created_by'])]
 class PlateJob extends Model
 {
     /** @use HasFactory<PlateJobFactory> */
-    use HasFactory, RecordsCashOut, RecordsDeletion;
+    use HasBillPayments, HasFactory, RecordsDeletion;
 
     protected function casts(): array
     {
@@ -29,7 +31,24 @@ class PlateJob extends Model
             'returned_on' => 'date',
             'rate' => 'decimal:2',
             'amount' => 'integer',
+            'paid_amount' => 'integer',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // A changed amount can make the bill fully paid or unpaid again.
+        // A job saved as already paid gets one payment for the whole amount.
+        static::created(function (self $job) {
+            if ($job->paid_on && (int) $job->amount > 0) {
+                $job->pay((int) $job->amount, $job->paid_on, $job->created_by, $job->payment_note);
+            }
+        });
+        static::saving(function (self $job) {
+            if ($job->isDirty('amount') && $job->exists) {
+                $job->paid_on = $job->fullyPaidOn();
+            }
+        });
     }
 
     /**
@@ -53,27 +72,49 @@ class PlateJob extends Model
         return $this->paid_on !== null;
     }
 
-    /**
-     * The processor's bill, once it has been paid. The same payment shows on the Plates and Processors tabs.
-     */
-    public function cashOut(): ?array
+    public function billTotal(): int
     {
-        if (! $this->paid_on) {
+        return (int) $this->amount;
+    }
+
+    /**
+     * The paid total follows the payments; the bill counts as paid on the date of the payment that cleared it.
+     */
+    public function syncPaid(): void
+    {
+        $this->paid_amount = (int) $this->payments()->sum('amount');
+        $this->paid_on = $this->fullyPaidOn();
+        $this->saveQuietly();
+    }
+
+    private function fullyPaidOn(): ?string
+    {
+        if ((int) $this->amount <= 0 || (int) $this->paid_amount < (int) $this->amount) {
             return null;
         }
 
-        return [
-            'amount' => (int) $this->amount,
-            'date' => $this->paid_on,
-            'paid_to' => (string) $this->processor?->name,
-            'reason' => trim($this->plates.' plates'.($this->workOrder ? ' for '.$this->workOrder->number : '').($this->payment_note ? ', '.$this->payment_note : '')),
-            'head' => 'Plates',
-        ];
+        return $this->payments()->max('paid_on');
     }
 
-    public function cashOutUrl(): string
+    /**
+     * Each time plates came back, with its date.
+     *
+     * @return HasMany<PlateReturn, $this>
+     */
+    public function returns(): HasMany
     {
-        return route('plate-jobs.index');
+        return $this->hasMany(PlateReturn::class)->orderBy('returned_on')->orderBy('id');
+    }
+
+    /**
+     * The returned total and last return date follow the individual returns.
+     */
+    public function syncReturned(): void
+    {
+        $this->forceFill([
+            'returned_plates' => (int) $this->returns()->sum('plates'),
+            'returned_on' => $this->returns()->max('returned_on'),
+        ])->saveQuietly();
     }
 
     /**
@@ -86,6 +127,6 @@ class PlateJob extends Model
 
     public function deletionLabel(): string
     {
-        return trim(($this->processor?->name ?? '').', '.$this->plates.' plates'.($this->workOrder ? ' for '.$this->workOrder->number : '').', Rs '.number_format($this->amount), ', ');
+        return trim(($this->processor?->name ?? '').', '.$this->plates.' plates'.($this->book_name ? ' for '.$this->book_name : '').', Rs '.number_format($this->amount), ', ');
     }
 }

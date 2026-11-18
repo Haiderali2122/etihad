@@ -5,21 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\BuyerEntry;
 use App\Models\CashFloat;
 use App\Models\Dispatch;
+use App\Models\ForemanCash;
 use App\Models\ForemanSheet;
 use App\Models\InventoryIssue;
 use App\Models\Loan;
 use App\Models\LoanRepayment;
 use App\Models\Machine;
 use App\Models\MachineRepair;
+use App\Models\MaterialBill;
 use App\Models\OutsidePrintReceipt;
 use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
 use App\Models\PayrollRun;
+use App\Models\PlateReturn;
 use App\Models\Purchase;
 use App\Models\SalaryAdvance;
 use App\Models\Sale;
+use App\Models\SaleReceipt;
 use App\Models\WasteEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
@@ -56,6 +60,10 @@ class RecordDeletionController extends Controller
         'payroll-run' => [PayrollRun::class, 'payroll.prepare'],
         'cash-float' => [CashFloat::class, 'give-cash'],
         'sale' => [Sale::class, 'expenses.create'],
+        'foreman-cash' => [ForemanCash::class, 'advances.create'],
+        'plate-return' => [PlateReturn::class, 'plates.manage'],
+        'material-bill' => [MaterialBill::class, 'expenses.create'],
+        'sale-receipt' => [SaleReceipt::class, 'expenses.create'],
     ];
 
     public function destroy(Request $request, string $type, int $id): RedirectResponse

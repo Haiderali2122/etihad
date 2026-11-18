@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ApprovalStatus;
 use App\Enums\PartyKind;
 use App\Http\Requests\StoreExpenseRequest;
+use App\Models\BillPayment;
 use App\Models\CashFloat;
 use App\Models\ContractorPayment;
 use App\Models\Dispatch;
@@ -28,6 +29,7 @@ use App\Support\OtherOption;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -38,7 +40,7 @@ class ExpenseController extends Controller
     {
         $headId = $request->integer('head') ?: null;
 
-        return view('expenses.index', [
+        return view('expenses.index', $this->spendingSearch($request) + [
             'expenses' => Expense::query()->with(['head', 'user', 'machine', 'source', 'items.head'])
                 // A receipt can hold several heads; it is listed under each of them.
                 ->when($headId, fn ($q) => $q->whereHas('items', fn ($q) => $q->where('expense_head_id', $headId)))
@@ -60,6 +62,71 @@ class ExpenseController extends Controller
     }
 
     /**
+     * The owner's search: how much went on one thing (e.g. nut bolts) in a period, even when it sits on receipts
+     * mixed with other payments. Every receipt line counts on its own. The dropdown lists what was spent on in
+     * the period, biggest first.
+     *
+     * @return array{search: string, period: string, from: ?string, to: ?string, periods: array<string, string>, spentOn: list<array{name: string, total: int, count: int}>, found: Collection<int, array<string, mixed>>, foundTotal: int, searching: bool}
+     */
+    private function spendingSearch(Request $request): array
+    {
+        $periods = [
+            'today' => __('Today'), 'yesterday' => __('Yesterday'), 'week' => __('This week'), 'month' => __('This month'),
+            'last-month' => __('Last month'), 'year' => __('This year'), 'all' => __('All time'), 'custom' => __('Pick dates'),
+        ];
+        $period = array_key_exists((string) $request->query('period'), $periods) ? (string) $request->query('period') : 'month';
+        [$from, $to] = match ($period) {
+            'today' => [today(), today()],
+            'yesterday' => [today()->subDay(), today()->subDay()],
+            'week' => [today()->startOfWeek(), today()],
+            'month' => [today()->startOfMonth(), today()],
+            'last-month' => [today()->subMonthNoOverflow()->startOfMonth(), today()->subMonthNoOverflow()->endOfMonth()],
+            'year' => [today()->startOfYear(), today()],
+            'all' => [null, null],
+            'custom' => [
+                rescue(fn () => $request->filled('from') ? Carbon::parse($request->query('from')) : null, null, false),
+                rescue(fn () => $request->filled('to') ? Carbon::parse($request->query('to')) : null, null, false),
+            ],
+        };
+        $search = trim((string) $request->query('q'));
+
+        // Linked payments (bills, salaries, plates…) are named by their head; other lines by the item typed.
+        $lines = ExpenseItem::query()->with(['head', 'expense.head'])
+            // The head picked above the Roznamcha narrows this too.
+            ->when($request->integer('head'), fn ($q, $headId) => $q->where('expense_head_id', $headId))
+            ->whereHas('expense', fn ($q) => $q->notRejected()
+                ->when($from, fn ($q) => $q->whereDate('spent_on', '>=', $from->toDateString()))
+                ->when($to, fn ($q) => $q->whereDate('spent_on', '<=', $to->toDateString())))
+            ->get()
+            ->map(function (ExpenseItem $line): array {
+                $head = $line->head ?? $line->expense->head;
+                $name = $line->expense->source_type ? (string) $head?->name : (trim((string) $line->description) ?: (string) $head?->name);
+
+                return [
+                    'name' => $name, 'head' => (string) $head?->name, 'description' => (string) $line->description,
+                    'paid_to' => (string) ($line->paid_to ?: $line->expense->paid_to), 'amount' => (int) $line->amount,
+                    'date' => $line->expense->spent_on, 'expense' => $line->expense, 'quantity' => $line->quantity, 'rate' => $line->rate,
+                ];
+            });
+
+        $spentOn = $lines->groupBy(fn (array $l) => mb_strtolower($l['name']))
+            ->map(fn ($group) => ['name' => $group->first()['name'], 'total' => (int) $group->sum('amount'), 'count' => $group->count()])
+            ->sortByDesc('total')->values()->all();
+
+        $needle = mb_strtolower($search);
+        $found = $search === '' ? collect() : $lines
+            ->filter(fn (array $l) => collect([$l['name'], $l['head'], $l['description'], $l['paid_to']])->contains(fn ($v) => str_contains(mb_strtolower($v), $needle)))
+            ->sortByDesc(fn (array $l) => $l['date']->format('Ymd').str_pad((string) $l['expense']->id, 10, '0', STR_PAD_LEFT))->values();
+
+        return [
+            'search' => $search, 'period' => $period, 'periods' => $periods,
+            'from' => $from?->toDateString(), 'to' => $to?->toDateString(),
+            'spentOn' => $spentOn, 'found' => $found, 'foundTotal' => (int) $found->sum('amount'),
+            'searching' => $search !== '',
+        ];
+    }
+
+    /**
      * Opened from a material tab (?category=), the payment is filed under that material.
      */
     public function create(Request $request): View|RedirectResponse
@@ -68,6 +135,10 @@ class ExpenseController extends Controller
         // Raddi is sold, not bought: its tab records sales.
         if ($category?->isSale()) {
             return redirect()->route('sales.create', $category);
+        }
+        // Diesel, Glue and Ink are bought on bills that are paid later.
+        if ($category?->usesQuantity()) {
+            return redirect()->route('material-bills.create', $category);
         }
 
         return view('expenses.create', [
@@ -191,6 +262,7 @@ class ExpenseController extends Controller
         MachineRepair::class => 'machines.repair',
         ContractorPayment::class => 'contractors.manage',
         PlateJob::class => 'plates.manage',
+        BillPayment::class => 'expenses.create',
         OutsidePrintReceipt::class => 'orders.manage',
         Dispatch::class => 'dispatch.manage',
         RimLoading::class => 'orders.manage',
@@ -277,11 +349,7 @@ class ExpenseController extends Controller
             return null;
         }
 
-        $item = $category->items()->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first()
-            ?? $category->items()->create(['name' => $name, 'unit' => $category->defaultUnit(), 'is_active' => true]);
-        if (! $item->is_active) {
-            $item->update(['is_active' => true]);
-        }
+        $item = $category->stockItemNamed($name);
 
         return $item->getKey();
     }

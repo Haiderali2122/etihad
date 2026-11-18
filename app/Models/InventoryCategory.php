@@ -68,6 +68,20 @@ class InventoryCategory extends Model
     }
 
     /**
+     * The stock item with this name in the category, made (or switched back on) the first time it is bought.
+     */
+    public function stockItemNamed(string $name): InventoryItem
+    {
+        $item = $this->items()->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower(trim($name))])->first()
+            ?? $this->items()->create(['name' => trim($name), 'unit' => $this->defaultUnit(), 'is_active' => true]);
+        if (! $item->is_active) {
+            $item->update(['is_active' => true]);
+        }
+
+        return $item;
+    }
+
+    /**
      * Raddi is sold, not bought: its tab records sales (money in) instead of expenses.
      */
     public function isSale(): bool

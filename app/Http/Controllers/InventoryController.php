@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillPayment;
 use App\Models\Expense;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
+use App\Models\MaterialBill;
 use App\Models\Purchase;
 use App\Models\Sale;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class InventoryController extends Controller
@@ -51,11 +54,19 @@ class InventoryController extends Controller
             'materialTabs' => $materialTabs,
             'material' => $material,
             'materialItems' => $material ? InventoryItem::query()->withStock()->where('inventory_category_id', $material->id)->orderBy('name')->get() : collect(),
-            'materialPayments' => $material ? Expense::query()->with(['head', 'user', 'source'])->where('inventory_category_id', $material->id)->latest('spent_on')->latest('id')->limit(50)->get() : collect(),
+            // Entries made before bills (already paid), apart from payments on bills, which show with their bill.
+            'materialPayments' => $material ? Expense::query()->with(['head', 'user', 'source'])->where('inventory_category_id', $material->id)
+                ->where(fn ($q) => $q->whereNull('source_type')->orWhere('source_type', '!=', (new BillPayment)->getMorphClass()))
+                ->latest('spent_on')->latest('id')->limit(50)->get() : collect(),
+            // Diesel, Glue and Ink bills, paid later in parts.
+            'bills' => $material?->usesQuantity() ? MaterialBill::query()->with(['items', 'payments', 'creator'])->where('inventory_category_id', $material->id)->latest('bill_on')->latest('id')->limit(100)->get() : collect(),
+            'billsUnpaid' => $material?->usesQuantity() ? (int) MaterialBill::query()->where('inventory_category_id', $material->id)->sum(DB::raw('total - paid_amount')) : 0,
+            'paidThisMonth' => $material ? (int) Expense::query()->notRejected()->where('inventory_category_id', $material->id)->where('spent_on', '>=', $monthStart->toDateString())->sum('amount') : 0,
             'materialIssues' => $material ? InventoryIssue::query()->with(['item', 'machine'])->whereHas('item', fn ($q) => $q->where('inventory_category_id', $material->id))->latest('issued_on')->latest('id')->limit(20)->get() : collect(),
             'categoryId' => $categoryId,
             // Raddi is sold: its tab lists sales and totals them for last month and this month.
-            'sales' => $material?->isSale() ? Sale::query()->with(['items', 'creator'])->where('inventory_category_id', $material->id)->latest('sold_on')->latest('id')->limit(100)->get() : collect(),
+            'sales' => $material?->isSale() ? Sale::query()->with(['items', 'creator', 'receipts'])->where('inventory_category_id', $material->id)->latest('sold_on')->latest('id')->limit(100)->get() : collect(),
+            'toReceive' => $material?->isSale() ? (int) Sale::query()->where('inventory_category_id', $material->id)->sum(DB::raw('total - received_amount')) : 0,
             'soldLastMonth' => $material?->isSale() ? (int) Sale::query()->where('inventory_category_id', $material->id)->whereBetween('sold_on', [now()->subMonthNoOverflow()->startOfMonth()->toDateString(), now()->subMonthNoOverflow()->endOfMonth()->toDateString()])->sum('total') : 0,
             'soldThisMonth' => $material?->isSale() ? (int) Sale::query()->where('inventory_category_id', $material->id)->where('sold_on', '>=', $monthStart->toDateString())->sum('total') : 0,
         ]);

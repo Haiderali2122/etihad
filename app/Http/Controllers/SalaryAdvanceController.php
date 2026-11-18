@@ -73,7 +73,8 @@ class SalaryAdvanceController extends Controller
         $rules = Setting::payrollRules();
         $month = $this->payMonth($request->query('month'));
         $records = $this->monthAdvances($month);
-        $cash = ForemanCash::query()->where('payday', ForemanCash::Advance)->whereDate('month', $month->toDateString())->get()->keyBy('foreman_id');
+        // What each foreman was given between the 10th and the 21st, from the Foreman cash tab.
+        $cash = ForemanCash::totals($month, ForemanCash::Advance);
 
         $employees = ForemanTeams::ordered(Employee::query()->active()->with('foreman')->get())
             ->each(function (Employee $e) use ($records, $rules): void {
@@ -100,7 +101,6 @@ class SalaryAdvanceController extends Controller
             'given_on' => ['required', 'date'],
             'as' => ['array'], 'as.*' => ['nullable', 'integer', 'min:0'],
             'taken' => ['array'], 'taken.*' => ['nullable', 'integer', 'min:0'],
-            'cash' => ['array'], 'cash.*' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $month = $this->payMonth($data['month']);
@@ -110,7 +110,7 @@ class SalaryAdvanceController extends Controller
         $employees = Employee::query()->active()->get();
         $as = collect($data['as'] ?? [])->map(fn ($v) => (int) $v)->all();
         $taken = collect($data['taken'] ?? [])->map(fn ($v) => (int) $v)->all();
-        $cash = collect($data['cash'] ?? [])->map(fn ($v) => (int) $v)->all();
+        $cash = ForemanCash::totals($month, ForemanCash::Advance);
 
         // A foreman's "already taken" is what he kept of the cash he was given.
         $errors = [];
@@ -133,19 +133,7 @@ class SalaryAdvanceController extends Controller
             return back()->withErrors($errors)->withInput();
         }
 
-        DB::transaction(function () use ($employees, $as, $taken, $cash, $month, $data, $records, $request): void {
-            foreach ($employees->where('is_foreman', true) as $foreman) {
-                $amount = $cash[$foreman->id] ?? 0;
-                $row = ForemanCash::query()->where('foreman_id', $foreman->id)->where('payday', ForemanCash::Advance)->whereDate('month', $month->toDateString())->first();
-                if ($amount <= 0) {
-                    $row?->delete();
-
-                    continue;
-                }
-                ($row ?? new ForemanCash(['foreman_id' => $foreman->id, 'month' => $month->toDateString(), 'payday' => ForemanCash::Advance, 'created_by' => $request->user()->id]))
-                    ->fill(['given_on' => $data['given_on'], 'amount' => $amount])->save();
-            }
-
+        DB::transaction(function () use ($employees, $as, $taken, $data, $records, $request): void {
             foreach ($employees as $e) {
                 $amount = $as[$e->id] ?? 0;
                 $record = $records->get($e->id);

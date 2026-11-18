@@ -46,6 +46,7 @@ class InventoryItem extends Model
     {
         $query->withSum(['purchases as stock_in' => fn ($q) => $q->notRejected()], 'quantity')
             ->withSum(['expenseLines as stock_in_expenses' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected())], 'quantity')
+            ->withSum('billLines as stock_in_bills', 'quantity')
             ->withSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));
     }
 
@@ -84,13 +85,23 @@ class InventoryItem extends Model
     }
 
     /**
+     * Ink and glue lines on bills entered on their tab.
+     *
+     * @return HasMany<MaterialBillItem, $this>
+     */
+    public function billLines(): HasMany
+    {
+        return $this->hasMany(MaterialBillItem::class);
+    }
+
+    /**
      * Everything that came in: purchases plus ink and glue bought through their tab (not sent back).
      */
     public function stockIn(): float
     {
         $this->loadStock();
 
-        return round((float) $this->stock_in + (float) $this->stock_in_expenses, 2);
+        return round((float) $this->stock_in + (float) $this->stock_in_expenses + (float) $this->stock_in_bills, 2);
     }
 
     public function balance(): float
@@ -105,6 +116,9 @@ class InventoryItem extends Model
         }
         if (! array_key_exists('stock_in_expenses', $this->attributes)) {
             $this->loadSum(['expenseLines as stock_in_expenses' => fn ($q) => $q->whereHas('expense', fn ($e) => $e->notRejected())], 'quantity');
+        }
+        if (! array_key_exists('stock_in_bills', $this->attributes)) {
+            $this->loadSum('billLines as stock_in_bills', 'quantity');
         }
         if (! array_key_exists('stock_out', $this->attributes)) {
             $this->loadSum(['issues as stock_out' => fn ($q) => $q->notRejected()], DB::raw('quantity - returned_quantity'));

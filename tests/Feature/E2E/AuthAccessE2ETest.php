@@ -3,6 +3,7 @@
 namespace Tests\Feature\E2E;
 
 use App\Enums\PartyKind;
+use App\Models\BillPayment;
 use App\Models\Book;
 use App\Models\CashFloat;
 use App\Models\Contractor;
@@ -13,6 +14,7 @@ use App\Models\Dispatch;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
+use App\Models\ForemanCash;
 use App\Models\ForemanSheet;
 use App\Models\Godown;
 use App\Models\InventoryCategory;
@@ -20,6 +22,7 @@ use App\Models\InventoryIssue;
 use App\Models\InventoryItem;
 use App\Models\Loan;
 use App\Models\Machine;
+use App\Models\MaterialBill;
 use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
@@ -534,7 +537,10 @@ class AuthAccessE2ETest extends TestCase
                     'plateJob' => PlateJob::factory()->create(),
                     'processor' => Party::factory()->kind(PartyKind::PlateProcessor)->create(),
                     'purchase' => Purchase::factory()->create(),
+                    'foremanCash' => ForemanCash::factory()->create(),
                     'sale' => Sale::factory()->create(),
+                    'materialBill' => MaterialBill::factory()->create(),
+                    'billPayment' => BillPayment::factory()->create(),
                     'rimLoading' => RimLoading::factory()->create(),
                     'role' => Role::factory()->create(),
                     'salary_advance' => SalaryAdvance::factory()->create(),

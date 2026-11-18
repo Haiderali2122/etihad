@@ -54,8 +54,9 @@
             <div class="card-b" style="display:flex;flex-wrap:wrap;gap:16px">
                 @foreach ($foremanLines as $fl)
                     <div class="field" style="min-width:220px">
-                        <label for="cash_{{ $fl->employee_id }}">{{ __('Cash given to :name (23rd–9th)', ['name' => $fl->employee->name]) }}</label>
-                        @if ($editable)<input class="select" type="number" min="0" step="10" id="cash_{{ $fl->employee_id }}" name="cash[{{ $fl->employee_id }}]" value="{{ old("cash.{$fl->employee_id}", $cash->get($fl->employee_id)?->amount) }}" data-cash="{{ $fl->employee_id }}" style="text-align:end">@else<b class="num">Rs {{ number_format($cash->get($fl->employee_id)?->amount ?? 0) }}</b>@endif
+                        <label>{{ __('Cash given to :name (22nd–9th)', ['name' => $fl->employee->name]) }}</label>
+                        <input type="hidden" value="{{ $cash[$fl->employee_id] ?? 0 }}" data-cash="{{ $fl->employee_id }}">
+                        <div class="calc" style="padding:10px 14px"><b class="num">Rs {{ number_format($cash[$fl->employee_id] ?? 0) }}</b> <a class="meta" href="{{ route('foreman-cash.index', ['month' => $run->month->format('Y-m')]) }}">{{ __('Foreman cash') }} →</a></div>
                         @error("cash.{$fl->employee_id}")<span class="err">{{ $message }}</span>@enderror
                     </div>
                 @endforeach

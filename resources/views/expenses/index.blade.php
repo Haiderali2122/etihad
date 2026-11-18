@@ -3,6 +3,68 @@
         <x-slot:actions>@can('expense-heads.manage')<a class="btn" href="{{ route('expense-heads.index') }}"><x-icon name="file" />{{ __('Expense heads') }}</a>@endcan @can('expenses.create')<a class="btn primary" href="{{ route('expenses.create') }}"><x-icon name="plus" />{{ __('Add expense') }}</a>@endcan</x-slot:actions>
     </x-page-head>
 
+    {{-- Where the money went: search one thing (e.g. nut bolts) across all receipts, or pick from the list, biggest first. --}}
+    <div class="card" id="spending">
+        <div class="card-h"><div><h3>{{ __('Where the money went') }}</h3><div class="sub">{{ __('Search any item, head or person paid. Each receipt line counts on its own, even on receipts mixed with other expenses.') }}</div></div></div>
+        <div class="card-b">
+            <form method="GET" action="{{ route('expenses.index') }}#spending" id="spendForm" style="display:flex;flex-direction:column;gap:10px">
+                @if ($headId)<input type="hidden" name="head" value="{{ $headId }}">@endif
+                <div style="display:flex;gap:8px">
+                    <input class="select" type="search" name="q" value="{{ $search }}" list="spentOnList" placeholder="{{ __('Search e.g. nut bolts') }}" aria-label="{{ __('Search spending') }}" style="flex:1;min-width:0;height:46px;font-size:16px;padding:0 14px">
+                    <datalist id="spentOnList">@foreach ($spentOn as $row)<option value="{{ $row['name'] }}">@endforeach</datalist>
+                    <button class="btn primary" type="submit" style="height:46px"><x-icon name="search" />{{ __('Search') }}</button>
+                </div>
+                <div class="filters" style="flex-wrap:wrap;gap:8px">
+                    <select class="select" name="pick" aria-label="{{ __('Spent on, biggest first') }}" onchange="if (this.value) { this.form.q.value = this.value; this.form.submit(); }">
+                        <option value="">{{ __('Spent on (biggest first)') }}</option>
+                        @foreach ($spentOn as $row)<option value="{{ $row['name'] }}">{{ $row['name'] }} — Rs {{ number_format($row['total']) }}</option>@endforeach
+                    </select>
+                    <select class="select" name="period" aria-label="{{ __('Period') }}" onchange="document.getElementById('spendDates').hidden = this.value !== 'custom'; if (this.value !== 'custom') { this.form.submit(); }">
+                        @foreach ($periods as $k => $l)<option value="{{ $k }}" @selected($period === $k)>{{ $l }}</option>@endforeach
+                    </select>
+                    <span id="spendDates" @if ($period !== 'custom') hidden @endif style="display:inline-flex;gap:6px">
+                        <input class="select" type="date" name="from" value="{{ $period === 'custom' ? $from : '' }}" aria-label="{{ __('From') }}">
+                        <input class="select" type="date" name="to" value="{{ $period === 'custom' ? $to : '' }}" aria-label="{{ __('To') }}">
+                    </span>
+                    @if ($searching)<a class="btn" href="{{ route('expenses.index', ['period' => $period, 'from' => $period === 'custom' ? $from : null, 'to' => $period === 'custom' ? $to : null]) }}#spending">{{ __('Clear') }}</a>@endif
+                </div>
+            </form>
+        </div>
+        @if ($searching)
+            <div class="card-b" style="padding-top:0"><b>{{ __(':n entries for ":q": Rs :total', ['n' => $found->count(), 'q' => $search, 'total' => number_format($foundTotal)]) }}</b> <span class="meta">{{ $periods[$period] }}@if ($from) · {{ \Illuminate\Support\Carbon::parse($from)->format('j M Y') }}@if ($to && $to !== $from) – {{ \Illuminate\Support\Carbon::parse($to)->format('j M Y') }}@endif @endif</span></div>
+            <div class="tbl-wrap"><table>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Item') }}</th><th>{{ __('Head') }}</th><th>{{ __('Paid to') }}</th><th class="r">{{ __('Amount') }}</th><th></th></tr></thead>
+                <tbody>
+                @forelse ($found as $l)
+                    <tr>
+                        <td>{{ $l['date']->format('j M Y') }}</td>
+                        <td>{{ $l['description'] ?: $l['name'] }}@if ($l['quantity'] !== null && $l['rate'] !== null)<div class="meta">{{ rtrim(rtrim((string) $l['quantity'], '0'), '.') }} × {{ number_format((float) $l['rate'], 2) }}</div>@endif</td>
+                        <td>{{ $l['head'] }}</td>
+                        <td>{{ $l['paid_to'] }}</td>
+                        <td class="r num"><b>Rs {{ number_format($l['amount']) }}</b></td>
+                        <td class="r"><a class="btn sm" href="{{ route('expenses.show', $l['expense']) }}"><x-icon name="printer" />{{ $l['expense']->receiptNumber() }}</a></td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6"><div class="empty"><b>{{ __('Nothing found') }}</b>{{ __('Try another word or a longer period.') }}</div></td></tr>
+                @endforelse
+                </tbody>
+                @if ($found->isNotEmpty())<tfoot><tr><td colspan="4" style="font-weight:700">{{ __('Total') }}</td><td class="r num"><b>Rs {{ number_format($foundTotal) }}</b></td><td></td></tr></tfoot>@endif
+            </table></div>
+        @else
+            {{-- The biggest spending in the period; click a row to see its entries. --}}
+            <div class="tbl-wrap"><table>
+                <thead><tr><th>{{ __('Spent on') }}</th><th class="r">{{ __('Entries') }}</th><th class="r">{{ __('Total') }}</th></tr></thead>
+                <tbody>
+                @forelse (array_slice($spentOn, 0, 10) as $row)
+                    <tr><td><a class="main" href="{{ route('expenses.index', ['q' => $row['name'], 'period' => $period, 'from' => $period === 'custom' ? $from : null, 'to' => $period === 'custom' ? $to : null]) }}#spending">{{ $row['name'] }}</a></td><td class="r num">{{ $row['count'] }}</td><td class="r num"><b>Rs {{ number_format($row['total']) }}</b></td></tr>
+                @empty
+                    <tr><td colspan="3"><div class="empty"><b>{{ __('Nothing spent in this period') }}</b></div></td></tr>
+                @endforelse
+                </tbody>
+            </table></div>
+        @endif
+    </div>
+
     <div class="grid g4">
         <x-kpi icon="wallet" tone="warn" :label="__('Cash with manager')" :foot="__('Given minus spent from it')">Rs {{ number_format($cashGiven - $cashSpent) }}</x-kpi>
         <x-kpi icon="download" :label="__('Total given')">Rs {{ number_format($cashGiven) }}</x-kpi>

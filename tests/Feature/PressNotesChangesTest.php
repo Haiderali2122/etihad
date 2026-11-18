@@ -161,7 +161,7 @@ class PressNotesChangesTest extends TestCase
         CashFloat::factory()->create(['user_id' => $this->manager->id, 'amount' => 50000]);
 
         $this->actingAs($this->owner)->get(route('inventory.index'))->assertSee('Petrol')->assertSee('Diesel')->assertSee('Glue')->assertSee('Ink');
-        $this->actingAs($this->manager)->get(route('expenses.create', ['category' => $diesel->id]))->assertOk()->assertSee('Diesel expense');
+        $this->actingAs($this->manager)->get(route('material-bills.create', $diesel))->assertOk()->assertSee('Diesel bill');
 
         $this->actingAs($this->manager)->post(route('expenses.store'), [
             'spent_on' => today()->toDateString(), 'expense_head_id' => ExpenseHead::query()->where('name', 'Diesel')->value('id'),
@@ -241,16 +241,18 @@ class PressNotesChangesTest extends TestCase
         $this->actingAs($this->owner)->patch(route('plate-jobs.pay', $job), ['paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
 
         $this->assertSame(3, $job->refresh()->platesHeld());
-        $this->assertSame(1, Expense::query()->where('source_type', $job->getMorphClass())->count());
+        $this->assertSame(1, $job->payments()->sole()->cashOutExpense()->count());
         $this->actingAs($this->owner)->get(route('processors.index'))->assertOk()->assertSee('Ali Processor')->assertSee('Rs 1,500');
         $this->actingAs($this->owner)->get(route('processors.show', $ali))->assertOk()->assertSee('Paid');
 
-        // Editing the payment from either tab changes the one record.
+        // Raising the bill after it was paid leaves the payment as it was and the difference unpaid.
         $this->actingAs($this->owner)->put(route('plate-jobs.update', $job), [
             'party_id' => $ali->id, 'job_on' => today()->toDateString(), 'plates' => 12, 'rate' => 150, 'returned_plates' => 9, 'paid_on' => today()->toDateString(),
         ])->assertSessionHasNoErrors();
         $this->assertSame(1800, $job->refresh()->amount);
-        $this->assertSame(1800, Expense::query()->where('source_type', $job->getMorphClass())->sole()->amount);
+        $this->assertSame(1500, $job->payments()->sole()->cashOutExpense->amount);
+        $this->assertSame(300, $job->unpaid());
+        $this->assertFalse($job->isPaid());
 
         $this->actingAs($this->owner)->delete(route('processors.destroy', $ali), ['delete_note' => 'Test reason'])->assertSessionHasErrors('processor');
         $this->assertModelExists($ali);

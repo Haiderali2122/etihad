@@ -147,4 +147,12 @@ class SalaryAdvance extends Model
     {
         return ($this->employee?->name ?? '').' — Rs '.number_format($this->amount).', '.$this->given_on?->format('j M Y');
     }
+
+    /**
+     * Salary money always comes off the manager's cash, whoever enters it.
+     */
+    protected function cashOutPayer(): ?int
+    {
+        return $this->managerWithCash();
+    }
 }

@@ -50,6 +50,7 @@ class StoreSaleRequest extends FormRequest
             'items.*.quantity' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
             'items.*.rate' => ['required', 'numeric', 'min:0', 'max:99999999'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
+            'received_now' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

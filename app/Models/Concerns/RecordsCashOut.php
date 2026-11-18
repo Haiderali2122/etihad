@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Enums\ApprovalStatus;
+use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
 use App\Models\User;
@@ -55,7 +56,7 @@ trait RecordsCashOut
             return;
         }
 
-        $userId = $this->created_by ?? User::query()->orderBy('id')->value('id');
+        $userId = $this->cashOutPayer();
         if ($userId === null) {
             return;
         }
@@ -88,6 +89,29 @@ trait RecordsCashOut
             'expense_head_id' => $expense->expense_head_id, 'paid_to' => $expense->paid_to,
             'description' => $expense->reason, 'amount' => $expense->amount,
         ]);
+    }
+
+    /**
+     * Whose cash the payment comes off: whoever entered it. Salary payments override this to always use the
+     * manager's cash, since the manager pays the foreman and the staff even when the owner enters it.
+     */
+    protected function cashOutPayer(): ?int
+    {
+        return $this->created_by ?? User::query()->orderBy('id')->value('id');
+    }
+
+    /**
+     * The manager holding the cash: the one who entered the payment if they are given cash, otherwise whoever
+     * was given cash most recently.
+     */
+    protected function managerWithCash(): ?int
+    {
+        $holders = CashFloat::query()->select('user_id');
+        if ($this->created_by && User::query()->whereKey($this->created_by)->whereIn('id', $holders)->exists()) {
+            return (int) $this->created_by;
+        }
+
+        return CashFloat::query()->latest('given_on')->latest('id')->value('user_id') ?? $this->created_by ?? User::query()->orderBy('id')->value('id');
     }
 
     /**

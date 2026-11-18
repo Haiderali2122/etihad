@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Http\Requests\InventoryItemRequest;
 use App\Models\InventoryCategory;
 use App\Models\InventoryIssue;
@@ -43,6 +44,11 @@ class InventoryItemController extends Controller
             'date' => $l->expense->spent_on, 'sort' => $l->expense->spent_on->format('Ymd').'0'.str_pad((string) ($l->expense_id * 1000 + $l->id), 8, '0', STR_PAD_LEFT),
             'kind' => 'in', 'qty' => (float) $l->quantity, 'who' => $l->expense->receiptNumber(), 'ref' => null, 'status' => $l->expense->status, 'model' => $l->expense,
         ]));
+        // Ink and glue on bills from their tab.
+        $in = $in->concat($inventoryItem->billLines()->with('bill')->get()->filter(fn ($l) => $l->bill)->map(fn ($l) => [
+            'date' => $l->bill->bill_on, 'sort' => $l->bill->bill_on->format('Ymd').'0'.str_pad((string) ($l->material_bill_id * 1000 + $l->id), 8, '0', STR_PAD_LEFT),
+            'kind' => 'in', 'qty' => (float) $l->quantity, 'who' => trim($l->bill->receiptNumber().' '.$l->bill->supplier), 'ref' => null, 'status' => ApprovalStatus::Approved, 'model' => $l->bill,
+        ]));
         $out = $inventoryItem->issues()->with(['machine', 'employee'])->get()->map(fn (InventoryIssue $i) => [
             'date' => $i->issued_on, 'sort' => $i->issued_on->format('Ymd').'1'.str_pad((string) $i->id, 8, '0', STR_PAD_LEFT),
             'kind' => 'out', 'qty' => $i->used(), 'who' => $i->issued_to, 'ref' => $i->reference, 'status' => $i->status, 'model' => $i,
@@ -78,7 +84,7 @@ class InventoryItemController extends Controller
      */
     public function destroy(InventoryItem $inventoryItem): RedirectResponse
     {
-        if ($inventoryItem->purchases()->exists() || $inventoryItem->issues()->exists() || $inventoryItem->expenseLines()->exists()) {
+        if ($inventoryItem->purchases()->exists() || $inventoryItem->issues()->exists() || $inventoryItem->expenseLines()->exists() || $inventoryItem->billLines()->exists()) {
             return back()->withErrors(['item' => __(':name has stock history. Deactivate it instead so the history stays.', ['name' => $inventoryItem->name])]);
         }
 

@@ -20,7 +20,7 @@ class ProcessorController extends Controller
         $processors = Party::query()->where('kind', PartyKind::PlateProcessor)->orderByDesc('is_active')->orderBy('name')->get();
         $totals = PlateJob::query()->whereIn('party_id', $processors->pluck('id'))
             ->selectRaw('party_id, SUM(plates) as given, SUM(returned_plates) as returned, SUM(amount) as billed')
-            ->selectRaw('SUM(CASE WHEN paid_on IS NOT NULL THEN amount ELSE 0 END) as paid')
+            ->selectRaw('SUM(paid_amount) as paid')
             ->groupBy('party_id')->get()->keyBy('party_id');
 
         return view('processors.index', ['processors' => $processors, 'totals' => $totals]);
@@ -29,7 +29,7 @@ class ProcessorController extends Controller
     public function show(Party $processor): View
     {
         abort_unless($processor->kind === PartyKind::PlateProcessor, 404);
-        $jobs = PlateJob::query()->with(['processor', 'workOrder'])->where('party_id', $processor->id)->latest('job_on')->latest('id')->get();
+        $jobs = PlateJob::query()->with(['processor', 'workOrder', 'returns', 'payments'])->where('party_id', $processor->id)->latest('job_on')->latest('id')->get();
 
         return view('processors.show', [
             'processor' => $processor,
@@ -37,7 +37,7 @@ class ProcessorController extends Controller
             'given' => (int) $jobs->sum('plates'),
             'returned' => (int) $jobs->sum('returned_plates'),
             'billed' => (int) $jobs->sum('amount'),
-            'paid' => (int) $jobs->whereNotNull('paid_on')->sum('amount'),
+            'paid' => (int) $jobs->sum('paid_amount'),
         ]);
     }
 

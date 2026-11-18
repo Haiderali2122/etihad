@@ -65,7 +65,8 @@ class PayrollRunController extends Controller
         return view('payroll.show', [
             'run' => $payrollRun->load('finalizer'),
             'lines' => $lines,
-            'cash' => ForemanCash::query()->where('payday', ForemanCash::Final)->whereDate('month', $payrollRun->month->toDateString())->get()->keyBy('foreman_id'),
+            // What each foreman was given between the 22nd and the 9th, from the Foreman cash tab.
+            'cash' => ForemanCash::totals($payrollRun->month, ForemanCash::Final),
             'totals' => [
                 'salary' => $lines->sum('monthly_salary'),
                 'overtime' => $lines->sum('overtime_amount'),
@@ -93,12 +94,11 @@ class PayrollRunController extends Controller
             'lines.*.other_deduction' => ['required', 'integer', 'min:0'],
             'lines.*.note' => ['nullable', 'string', 'max:255'],
             'lines.*.taken_from_foreman' => ['nullable', 'integer', 'min:0'],
-            'cash' => ['array'], 'cash.*' => ['nullable', 'integer', 'min:0'],
         ]);
 
         // Kharcha taken from the foreman between the 23rd and the 9th; a foreman's own is what he kept of his cash.
         $allLines = $payrollRun->lines()->with('employee')->get();
-        $cash = collect($data['cash'] ?? [])->map(fn ($v) => (int) $v)->all();
+        $cash = ForemanCash::totals($payrollRun->month, ForemanCash::Final);
         $taken = $allLines->mapWithKeys(fn ($l) => [$l->employee_id => (int) ($data['lines'][$l->id]['taken_from_foreman'] ?? 0)])->all();
         $errors = [];
         foreach (ForemanTeams::kept($allLines->pluck('employee')->filter(), $cash, $taken) as $foremanId => $kept) {
@@ -109,17 +109,6 @@ class PayrollRunController extends Controller
         }
         if ($errors) {
             return redirect()->route('payroll.show', $payrollRun)->withErrors($errors)->withInput();
-        }
-        foreach ($allLines->where('employee.is_foreman', true) as $foremanLine) {
-            $amount = $cash[$foremanLine->employee_id] ?? 0;
-            $row = ForemanCash::query()->where('foreman_id', $foremanLine->employee_id)->where('payday', ForemanCash::Final)->whereDate('month', $payrollRun->month->toDateString())->first();
-            if ($amount <= 0) {
-                $row?->delete();
-
-                continue;
-            }
-            ($row ?? new ForemanCash(['foreman_id' => $foremanLine->employee_id, 'month' => $payrollRun->month->toDateString(), 'payday' => ForemanCash::Final, 'created_by' => $request->user()->id]))
-                ->fill(['given_on' => min(today(), $payrollRun->pay_date ?? today())->toDateString(), 'amount' => $amount])->save();
         }
 
         $errors = [];

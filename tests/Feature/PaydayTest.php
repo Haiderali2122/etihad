@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AdvanceKind;
+use App\Models\CashFloat;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ForemanCash;
@@ -57,13 +58,23 @@ class PaydayTest extends TestCase
     private function save22nd(array $as, array $taken, int $cash = 50000): TestResponse
     {
         $byName = collect($this->team)->put('Ghulam Rasool', $this->foreman)->put('Bilal Khan', $this->bilal);
+        ForemanCash::query()->get()->each->delete();
+        if ($cash > 0) {
+            // Given in two parts between the 11th and the 21st.
+            $this->giveForeman('2026-11-12', intdiv($cash, 2));
+            $this->giveForeman('2026-11-19', $cash - intdiv($cash, 2));
+        }
 
         return $this->actingAs($this->owner)->post(route('salary-advances.mid-month.store'), [
             'month' => '2026-11', 'given_on' => '2026-11-22',
-            'cash' => [$this->foreman->id => $cash],
             'as' => collect($as)->mapWithKeys(fn ($v, $n) => [$byName[$n]->id => $v])->all(),
             'taken' => collect($taken)->mapWithKeys(fn ($v, $n) => [$byName[$n]->id => $v])->all(),
         ]);
+    }
+
+    private function giveForeman(string $on, int $amount): void
+    {
+        $this->actingAs($this->owner)->post(route('foreman-cash.store'), ['foreman_id' => $this->foreman->id, 'given_on' => $on, 'amount' => $amount])->assertSessionHasNoErrors();
     }
 
     public function test_the_22nd_takes_off_what_each_person_already_took_and_what_the_foreman_kept(): void
@@ -83,8 +94,8 @@ class PaydayTest extends TestCase
         // 50,000 given − 45,000 handed out = 5,000 kept, taken off the foreman's 25,000.
         $this->assertSame(5000, $advance($this->foreman)->taken_from_foreman);
 
-        // Cash-out: the foreman's cash, plus only what was handed over on the 22nd.
-        $this->assertSame(50000, ForemanCash::query()->sole()->cashOutExpense->amount);
+        // Cash-out: each handout to the foreman, plus only what was handed over on the 22nd.
+        $this->assertSame(50000, (int) ForemanCash::query()->get()->sum(fn (ForemanCash $c) => $c->cashOutExpense->amount));
         $this->assertSame(10000, $advance($this->team['Ali'])->cashOutExpense->amount);
         $this->assertNull($advance($this->team['Asad'])->cashOutExpense);
         $this->assertSame(50000 + 10000 + 0 + 0 + 10000 + 20000 + 13500, (int) Expense::query()->sum('amount'));
@@ -122,10 +133,13 @@ class PaydayTest extends TestCase
         // 30,000 for the full month − 20,000 advance salary.
         $this->assertSame(10000, $line($this->team['Ali'])->net_pay);
 
-        // Second round: the foreman is given 8,000 and Ali took 4,000 of it between the 23rd and the 9th.
+        // Second round: the foreman is given 5,000 on 25 Nov and 3,000 on 5 Dec; Ali took 4,000 of it.
+        $this->giveForeman('2026-11-25', 5000);
+        $this->giveForeman('2026-12-05', 3000);
+        $this->actingAs($this->owner)->get(route('payroll.show', $run))->assertSee('Rs 8,000');
         $lines = $run->lines()->get()->mapWithKeys(fn ($l) => [$l->id => ['loan_deducted' => 0, 'bonus' => 0, 'other_deduction' => 0, 'note' => '']])->all();
         $lines[$line($this->team['Ali'])->id]['taken_from_foreman'] = 4000;
-        $this->actingAs($this->owner)->put(route('payroll.lines.update', $run), ['lines' => $lines, 'cash' => [$this->foreman->id => 8000]])->assertSessionHasNoErrors();
+        $this->actingAs($this->owner)->put(route('payroll.lines.update', $run), ['lines' => $lines])->assertSessionHasNoErrors();
 
         $this->assertSame(6000, $line($this->team['Ali'])->giveNow());
         // The foreman kept 8,000 − 4,000 = 4,000, taken off what he is paid now.
@@ -134,7 +148,8 @@ class PaydayTest extends TestCase
 
         // Ali took more than is left to pay: refused, the extra is given as a loan instead.
         $lines[$line($this->team['Ali'])->id]['taken_from_foreman'] = 12000;
-        $this->actingAs($this->owner)->put(route('payroll.lines.update', $run), ['lines' => $lines, 'cash' => [$this->foreman->id => 20000]])->assertSessionHasErrors('lines.'.$line($this->team['Ali'])->id.'.taken_from_foreman');
+        $this->giveForeman('2026-12-06', 12000);
+        $this->actingAs($this->owner)->put(route('payroll.lines.update', $run), ['lines' => $lines])->assertSessionHasErrors('lines.'.$line($this->team['Ali'])->id.'.taken_from_foreman');
 
         // Finalizing: Cash-out counts what is handed over on the 10th, and the 22nd's amounts lock.
         $this->actingAs($this->owner)->post(route('payroll.finalize', $run))->assertRedirect();
@@ -155,6 +170,29 @@ class PaydayTest extends TestCase
         // On 5 December it is still November's salary being paid.
         Carbon::setTestNow('2026-12-05 10:00:00');
         $this->actingAs($this->owner)->get(route('payroll.tenth'))->assertRedirect(route('payroll.show', PayrollRun::query()->sole()));
+    }
+
+    public function test_foreman_cash_is_given_in_parts_split_by_period_and_comes_off_the_managers_cash(): void
+    {
+        Carbon::setTestNow('2026-12-10 10:00:00');
+        $manager = User::factory()->create(['name' => 'Faisal']);
+        CashFloat::factory()->create(['user_id' => $manager->id, 'amount' => 200000]);
+
+        $this->giveForeman('2026-11-10', 10000);  // counts for the 22nd
+        $this->giveForeman('2026-11-21', 15000);  // counts for the 22nd
+        $this->giveForeman('2026-11-22', 7000);   // counts for the 10th
+        $this->giveForeman('2026-12-09', 3000);   // counts for the 10th (of November's salaries)
+
+        $this->assertSame([$this->foreman->id => 25000], ForemanCash::totals(Carbon::parse('2026-11-01'), ForemanCash::Advance));
+        $this->assertSame([$this->foreman->id => 10000], ForemanCash::totals(Carbon::parse('2026-11-01'), ForemanCash::Final));
+        $this->actingAs($this->owner)->get(route('foreman-cash.index', ['month' => '2026-11']))->assertOk()
+            ->assertSeeInOrder(['For the 22nd', 'Rs 10,000', 'Rs 15,000', 'Total to Ghulam Rasool', 'Rs 25,000', 'For the 10th', 'Rs 7,000', 'Rs 3,000', 'Rs 10,000']);
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-11']))->assertSee('Rs 25,000');
+
+        // Entered by the owner, the handouts still come off the manager's cash, as do the 22nd's advance salaries.
+        $this->assertSame(200000 - 35000, $manager->cashInHand());
+        $this->save22nd(['Bilal Khan' => 13500], [], 0)->assertSessionHasNoErrors();
+        $this->assertSame(200000 - 13500, $manager->fresh()->cashInHand() + 0);
     }
 
     public function test_give_advance_and_foreman_sheet_buttons_are_gone(): void

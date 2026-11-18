@@ -45,6 +45,21 @@
         </x-kpi>
     </div>
 
+    @can('purchases.view')@if ($raddi['tab'])
+        {{-- Raddi sales are money coming in: shown here on their own, never mixed with the manager's cash. --}}
+        <div class="grid g3">
+            <x-kpi icon="download" tone="good" :label="__('Raddi received, :month', ['month' => now()->translatedFormat('F')])" :foot="__('Rs :n received today', ['n' => number_format($raddi['receivedToday'])])">
+                Rs {{ number_format($raddi['receivedThisMonth']) }}
+            </x-kpi>
+            <x-kpi icon="alert" :tone="$raddi['toReceive'] > 0 ? 'warn' : 'good'" :label="__('Raddi still to be received')" :foot="__('Open the Raddi tab to receive it')">
+                <a href="{{ route('inventory.index', ['tab' => 'material-'.$raddi['tab']]) }}" style="color:inherit;text-decoration:none">Rs {{ number_format($raddi['toReceive']) }}</a>
+            </x-kpi>
+            <x-kpi icon="file" :label="__('Raddi sold, :month', ['month' => now()->translatedFormat('F')])">
+                Rs {{ number_format($raddi['soldThisMonth']) }}
+            </x-kpi>
+        </div>
+    @endif @endcan
+
     <div class="grid g-main">
         <div class="card">
             <div class="card-h"><div><h3>{{ __('Paper received and used') }}</h3><div class="sub">{{ __('Rims per week, last 8 weeks') }}</div></div>

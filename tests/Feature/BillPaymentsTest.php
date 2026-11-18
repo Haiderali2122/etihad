@@ -1,0 +1,209 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\BillPayment;
+use App\Models\CashFloat;
+use App\Models\Expense;
+use App\Models\InventoryCategory;
+use App\Models\MaterialBill;
+use App\Models\PlateJob;
+use App\Models\Sale;
+use App\Models\SaleReceipt;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+/**
+ * Diesel, Glue and Ink bills and plate bills are paid later: any amount on a date, or everything at once. Each
+ * payment is kept with its date, what is not paid stays unpaid, and only payments come off the manager's cash.
+ */
+class BillPaymentsTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function category(string $name): InventoryCategory
+    {
+        return InventoryCategory::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->sole();
+    }
+
+    public function test_a_diesel_bill_is_paid_in_parts_and_only_payments_reach_cash_out(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create();
+        CashFloat::factory()->create(['user_id' => $manager->id]);
+        $diesel = $this->category('Diesel');
+
+        // The tab's Add button opens the bill form.
+        $this->actingAs($owner)->get(route('expenses.create', ['category' => $diesel->id]))->assertRedirect(route('material-bills.create', $diesel));
+        $this->actingAs($owner)->get(route('material-bills.create', $diesel))->assertOk()->assertSee('Paid now');
+
+        $this->actingAs($owner)->post(route('material-bills.store'), [
+            'inventory_category_id' => $diesel->id, 'spent_on' => today()->subDays(5)->toDateString(), 'supplier' => 'Shell Pump',
+            'items' => [['item' => 'Diesel', 'quantity' => '100', 'rate' => '280'], ['item' => 'Mitti ka tel', 'quantity' => '10', 'rate' => '150']],
+        ])->assertSessionHasNoErrors();
+
+        $bill = MaterialBill::query()->sole();
+        $this->assertSame(29500, $bill->total);
+        $this->assertSame(29500, $bill->unpaid());
+        $this->assertSame(0, Expense::query()->count(), 'A bill is not cash out until it is paid.');
+
+        $this->actingAs($owner)->patch(route('material-bills.pay', $bill), ['amount' => 10000, 'paid_on' => today()->subDays(2)->toDateString()])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->patch(route('material-bills.pay', $bill), ['amount' => 20000, 'paid_on' => today()->toDateString()])->assertSessionHasErrors('amount');
+        $this->actingAs($owner)->patch(route('material-bills.pay', $bill), ['amount' => 5000, 'paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
+
+        $bill->refresh();
+        $this->assertSame(15000, $bill->paid_amount);
+        $this->assertSame(14500, $bill->unpaid());
+        $expenses = Expense::query()->orderBy('spent_on')->get();
+        $this->assertSame([10000, 5000], $expenses->pluck('amount')->all());
+        // Off the manager's cash, filed under Diesel.
+        $this->assertTrue($expenses->every(fn (Expense $e) => $e->user_id === $manager->id && $e->inventory_category_id === $diesel->id));
+
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertOk()
+            ->assertSee('Shell Pump')->assertSee('Rs 14,500 unpaid')->assertSee(today()->subDays(2)->format('j M').': Rs 10,000')->assertSee('Pay all (Rs 14,500)');
+
+        // Pay all clears the rest; deleting a payment brings it back as unpaid and takes it out of Cash-out.
+        $this->actingAs($owner)->post(route('material-bills.pay-all', $diesel))->assertSessionHasNoErrors();
+        $this->assertTrue($bill->refresh()->isFullyPaid());
+        $this->assertSame(29500, (int) Expense::query()->sum('amount'));
+
+        $last = BillPayment::query()->latest('id')->first();
+        $this->actingAs($owner)->delete(route('bill-payments.destroy', $last))->assertSessionHasNoErrors();
+        $this->assertSame(14500, $bill->refresh()->unpaid());
+        $this->assertModelMissing($last);
+        $this->assertSame(15000, (int) Expense::query()->sum('amount'));
+
+        // Deleting the bill removes its payments from Cash-out too.
+        $this->actingAs($owner)->delete(route('records.destroy', ['material-bill', $bill->id]))->assertSessionHasNoErrors();
+        $this->assertSame(0, Expense::query()->count());
+        $this->assertSame(0, BillPayment::query()->count());
+    }
+
+    public function test_ink_bills_add_stock_and_can_be_paid_at_once(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $ink = $this->category('Ink');
+
+        $this->actingAs($owner)->post(route('material-bills.store'), [
+            'inventory_category_id' => $ink->id, 'spent_on' => today()->toDateString(),
+            'items' => [['item' => 'Black ink', 'quantity' => '5', 'rate' => '1200']],
+        ])->assertSessionHasErrors('supplier');
+
+        $this->actingAs($owner)->post(route('material-bills.store'), [
+            'inventory_category_id' => $ink->id, 'spent_on' => today()->toDateString(), 'supplier' => 'Ink House', 'paid_now' => 6000,
+            'items' => [['item' => 'Black ink', 'quantity' => '5', 'rate' => '1200']],
+        ])->assertSessionHasNoErrors();
+
+        $bill = MaterialBill::query()->sole();
+        $this->assertTrue($bill->isFullyPaid());
+        $this->assertSame(6000, (int) Expense::query()->sum('amount'));
+        $this->assertEqualsWithDelta(5.0, $ink->items()->where('name', 'Black ink')->sole()->balance(), 0.001);
+
+        // The total cannot go below what is already paid.
+        $this->actingAs($owner)->put(route('material-bills.update', $bill), [
+            'inventory_category_id' => $ink->id, 'spent_on' => today()->toDateString(), 'supplier' => 'Ink House',
+            'items' => [['item' => 'Black ink', 'quantity' => '2', 'rate' => '1200']],
+        ])->assertSessionHasErrors('total');
+    }
+
+    public function test_plate_bills_are_paid_in_parts_and_a_processor_payment_clears_the_oldest_first(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $old = PlateJob::factory()->create(['job_on' => today()->subDays(20), 'amount' => 3000]);
+        $new = PlateJob::factory()->create(['party_id' => $old->party_id, 'job_on' => today()->subDays(3), 'amount' => 2000]);
+
+        $this->actingAs($owner)->patch(route('plate-jobs.pay', $old), ['amount' => 1000, 'paid_on' => today()->subDays(10)->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(2000, $old->refresh()->unpaid());
+        $this->assertFalse($old->isPaid());
+
+        // Rs 3,000 to the processor: the old bill's Rs 2,000 first, then Rs 1,000 on the newer one.
+        $this->actingAs($owner)->post(route('processors.pay', $old->party_id), ['amount' => 3000, 'paid_on' => today()->toDateString()])
+            ->assertSessionHasNoErrors()->assertSessionHas('status', fn ($s) => str_contains($s, 'Rs 1,000 still unpaid'));
+        $this->assertTrue($old->refresh()->isPaid());
+        $this->assertSame(1000, $new->refresh()->unpaid());
+        $this->actingAs($owner)->post(route('processors.pay', $old->party_id), ['amount' => 5000, 'paid_on' => today()->toDateString()])->assertSessionHasErrors('amount');
+
+        $this->actingAs($owner)->get(route('processors.show', $old->party_id))->assertOk()->assertSee('Rs 1,000 unpaid')->assertSee('Pay all (Rs 1,000)');
+        $this->actingAs($owner)->get(route('plate-jobs.index'))->assertOk()->assertSee('Pay all (Rs 1,000)');
+
+        $this->actingAs($owner)->post(route('plate-jobs.pay-all'))->assertSessionHasNoErrors();
+        $this->assertTrue($new->refresh()->isPaid());
+        $this->assertSame(5000, (int) Expense::query()->sum('amount'));
+        $this->assertSame(4, BillPayment::query()->count());
+        $this->assertSame('Plate bill', BillPayment::query()->first()->cashOutSource());
+    }
+
+    public function test_pay_all_takes_a_date_and_bill_forms_fill_the_last_rate(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $glue = $this->category('Glue');
+        $this->actingAs($owner)->post(route('material-bills.store'), [
+            'inventory_category_id' => $glue->id, 'spent_on' => today()->subDays(6)->toDateString(), 'supplier' => 'Glue Co',
+            'items' => [['item' => 'Binding glue', 'quantity' => '3', 'rate' => '455.5']],
+        ])->assertSessionHasNoErrors();
+
+        // The next bill offers the last price per quantity for the item.
+        $this->actingAs($owner)->get(route('material-bills.create', $glue))->assertOk()->assertSee('\u0022binding glue\u0022:455.5', false);
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$glue->id]))->assertSee('name="paid_on"', false);
+
+        $this->actingAs($owner)->post(route('material-bills.pay-all', $glue), ['paid_on' => today()->subDays(2)->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(today()->subDays(2)->toDateString(), BillPayment::query()->sole()->paid_on->toDateString());
+
+        // A new plate job starts with the processor's last rate.
+        PlateJob::factory()->create(['rate' => 340, 'plate_size' => '20x30']);
+        $this->actingAs($owner)->get(route('plate-jobs.create'))->assertOk()->assertSee('\u002220x30\u0022:340', false);
+    }
+
+    public function test_the_owner_searches_spending_across_mixed_receipts(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(),
+            'items' => [['item' => 'Nut bolts', 'amount' => 700], ['item' => 'Tea', 'amount' => 300]],
+        ])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('expenses.store'), [
+            'spent_on' => today()->toDateString(),
+            'items' => [['item' => 'Nut bolts', 'amount' => 500], ['item' => 'Rickshaw', 'amount' => 5000]],
+        ])->assertSessionHasNoErrors();
+
+        // The dropdown lists the biggest spending first.
+        $page = $this->actingAs($owner)->get(route('expenses.index', ['period' => 'today']))->assertOk();
+        $page->assertSeeInOrder(['Rickshaw — Rs 5,000', 'Nut bolts — Rs 1,200', 'Tea — Rs 300']);
+
+        $this->actingAs($owner)->get(route('expenses.index', ['q' => 'nut', 'period' => 'today']))->assertOk()
+            ->assertSee('2 entries for &quot;nut&quot;: Rs 1,200', false);
+        $this->actingAs($owner)->get(route('expenses.index', ['q' => 'nut', 'period' => 'yesterday']))->assertOk()
+            ->assertSee('0 entries for &quot;nut&quot;: Rs 0', false);
+    }
+
+    public function test_raddi_money_is_received_in_parts_and_shown_on_the_dashboard_apart_from_cash_out(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $raddi = $this->category('Raddi');
+
+        $this->actingAs($owner)->post(route('sales.store', $raddi), [
+            'sold_on' => today()->subDays(4)->toDateString(), 'received_now' => 2000,
+            'items' => [['item' => 'Raddi', 'quantity' => '100', 'rate' => '50']],
+        ])->assertSessionHasNoErrors();
+        $sale = Sale::query()->sole();
+        $this->assertSame(3000, $sale->toReceive());
+
+        $this->actingAs($owner)->patch(route('sales.receive', $sale), ['amount' => 1000, 'received_on' => today()->subDays(1)->toDateString()])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->patch(route('sales.receive', $sale), ['amount' => 5000, 'received_on' => today()->toDateString()])->assertSessionHasErrors('amount');
+        $this->assertSame(2000, $sale->refresh()->toReceive());
+
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()
+            ->assertSee('Rs 2,000 to receive')->assertSee(today()->subDays(1)->format('j M').': Rs 1,000')->assertSee('Receive all (Rs 2,000)');
+        $this->actingAs($owner)->get(route('dashboard'))->assertOk()->assertSee('Raddi still to be received')->assertSee('Rs 2,000');
+
+        $this->actingAs($owner)->post(route('sales.receive-all', $raddi), ['received_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(0, $sale->refresh()->toReceive());
+        $this->assertSame(3, SaleReceipt::query()->count());
+        // Money in never reaches Cash-out.
+        $this->assertSame(0, Expense::query()->count());
+
+        $this->actingAs($owner)->delete(route('records.destroy', ['sale-receipt', SaleReceipt::query()->latest('id')->first()->id]))->assertSessionHasNoErrors();
+        $this->assertSame(2000, $sale->refresh()->toReceive());
+    }
+}

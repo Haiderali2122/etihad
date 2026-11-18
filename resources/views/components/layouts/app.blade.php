@@ -29,6 +29,7 @@
         ['group' => __('People')],
         ['route' => 'employees.index', 'match' => ['employees.*', 'designations.*'], 'icon' => 'users', 'label' => __('Staff'), 'can' => 'staff.view'],
         ['route' => 'attendance.index', 'match' => 'attendance.*', 'icon' => 'fingerprint', 'label' => __('Attendance'), 'can' => 'staff.view'],
+        ['route' => 'foreman-cash.index', 'match' => 'foreman-cash.*', 'icon' => 'wallet', 'label' => __('Foreman cash'), 'can' => 'staff.view'],
         ['route' => 'salary-advances.index', 'match' => ['salary-advances.*', 'foreman-sheets.*', 'loans.*'], 'icon' => 'wallet', 'label' => __('Advances & loans'), 'can' => 'staff.view'],
         ['route' => 'payroll.index', 'match' => 'payroll.*', 'icon' => 'cal', 'label' => __('Payroll'), 'can' => 'staff.view'],
         ['group' => __('Records')],

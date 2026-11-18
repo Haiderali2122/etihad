@@ -26,8 +26,9 @@
             <div class="card-b" style="display:flex;flex-wrap:wrap;gap:16px">
                 @foreach ($foremen as $f)
                     <div class="field" style="min-width:220px">
-                        <label for="cash_{{ $f->id }}">{{ __('Cash given to :name (11th–21st)', ['name' => $f->name]) }}</label>
-                        <input class="select" type="number" min="0" step="10" id="cash_{{ $f->id }}" name="cash[{{ $f->id }}]" value="{{ old("cash.{$f->id}", $cash->get($f->id)?->amount) }}" data-cash="{{ $f->id }}" style="text-align:end" @disabled($locked)>
+                        <label>{{ __('Cash given to :name (10th–21st)', ['name' => $f->name]) }}</label>
+                        <input type="hidden" value="{{ $cash[$f->id] ?? 0 }}" data-cash="{{ $f->id }}">
+                        <div class="calc" style="padding:10px 14px"><b class="num">Rs {{ number_format($cash[$f->id] ?? 0) }}</b> <a class="meta" href="{{ route('foreman-cash.index', ['month' => $month->format('Y-m')]) }}">{{ __('Foreman cash') }} →</a></div>
                         @error("cash.{$f->id}")<span class="err">{{ $message }}</span>@enderror
                     </div>
                 @endforeach

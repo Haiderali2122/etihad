@@ -16,7 +16,7 @@
                     @foreach ($rows as $i => $row)
                         <tr>
                             <td class="num" data-no>{{ $loop->iteration }}</td>
-                            <td><input type="text" name="items[{{ $i }}][item]" value="{{ $row['item'] ?? '' }}" list="itemList" maxlength="120" autocomplete="off" aria-label="{{ __('Item') }}"></td>
+                            <td><input type="text" name="items[{{ $i }}][item]" value="{{ $row['item'] ?? '' }}" list="itemList" maxlength="120" autocomplete="off" aria-label="{{ __('Item') }}" data-item></td>
                             <td><input type="number" step="0.01" min="0" name="items[{{ $i }}][quantity]" value="{{ $row['quantity'] ?? '' }}" aria-label="{{ __('Quantity') }}" style="text-align:end" data-qty></td>
                             <td><input type="number" step="0.01" min="0" name="items[{{ $i }}][rate]" value="{{ $row['rate'] ?? '' }}" aria-label="{{ __('Price per quantity') }}" style="text-align:end" data-rate></td>
                             <td class="r num" data-line>Rs 0</td>
@@ -31,6 +31,7 @@
                 @foreach ($errors->get('items.*') as $messages)<span class="err">{{ $messages[0] }}</span>@endforeach
             </div>
 
+            <x-field name="received_now" type="number" min="0" step="1" :label="__('Received now (Rs)')" :hint="__('Leave empty if nothing is received yet; the rest stays to be received on the sale.')" />
             <x-field name="attachment" type="file" :label="__('Receipt photo')" />
         </div></div>
         <div class="form-actions"><a class="btn" href="{{ $back }}">{{ __('Cancel') }}</a><button class="btn primary" type="submit"><x-icon name="check" />{{ __('Save sale') }}</button></div>
@@ -58,11 +59,21 @@
                     const last = rows.lastElementChild;
                     if (!last || lineTotal(last) <= 0) { return; }
                     const tr = last.cloneNode(true);
-                    tr.querySelectorAll('input').forEach(el => { el.name = el.name.replace(/items\[\d+]/, `items[${next}]`); el.value = ''; });
+                    tr.querySelectorAll('input').forEach(el => { el.name = el.name.replace(/items\[\d+]/, `items[${next}]`); el.value = ''; delete el.dataset.auto; });
                     next++;
                     rows.appendChild(tr);
                 };
-                rows.addEventListener('input', () => { ensureBlankRow(); refresh(); });
+                // Picking an item sold before fills in the price it was last sold at; it can still be changed.
+                const lastRates = @js((object) $lastRates);
+                rows.addEventListener('input', e => {
+                    if (e.target.matches('[data-item]')) {
+                        const rate = lastRates[e.target.value.trim().toLowerCase()];
+                        const box = e.target.closest('tr').querySelector('[data-rate]');
+                        if (rate !== undefined && (box.value === '' || box.dataset.auto === '1')) { box.value = rate; box.dataset.auto = '1'; }
+                    }
+                    if (e.target.matches('[data-rate]')) { e.target.dataset.auto = '0'; }
+                    ensureBlankRow(); refresh();
+                });
                 rows.addEventListener('click', e => {
                     const btn = e.target.closest('[data-remove]');
                     if (!btn) { return; }

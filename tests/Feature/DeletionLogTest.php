@@ -89,7 +89,7 @@ class DeletionLogTest extends TestCase
     {
         $owner = User::factory()->owner()->create();
         $job = PlateJob::factory()->create(['paid_on' => today(), 'amount' => 4000, 'created_by' => $owner->id]);
-        $mirror = $job->cashOutExpense()->sole();
+        $mirror = $job->payments()->sole()->cashOutExpense()->sole();
 
         // The mirrored row has a delete button in Cash-out too; it would delete the plate job itself.
         $this->actingAs($owner)->get(route('expenses.index'))->assertSee('value="DELETE"', false);

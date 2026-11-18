@@ -103,4 +103,12 @@ class PayrollRun extends Model
     {
         return __('Payroll').' '.$this->label();
     }
+
+    /**
+     * Salary money always comes off the manager's cash, whoever enters it.
+     */
+    protected function cashOutPayer(): ?int
+    {
+        return $this->managerWithCash();
+    }
 }

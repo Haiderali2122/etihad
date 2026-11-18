@@ -284,6 +284,9 @@ class RecordDeletionTest extends TestCase
         $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$raddi->id]))->assertOk()
             ->assertViewHas('soldThisMonth', 6420)->assertViewHas('soldLastMonth', 7000)->assertSee('Cut pieces');
 
+        // An item sold before is offered with the price it was last sold at, ready to fill in.
+        $this->actingAs($owner)->get(route('sales.create', $raddi))->assertSee('<option value="Cut pieces">', false)->assertSee('cut pieces\u0022:40', false);
+
         $this->deleteRecord($owner, 'sale', $sale->id)->assertSessionHasNoErrors();
         $this->assertModelMissing($sale);
         $this->assertSame('Sale', Deletion::query()->sole()->kind);
@@ -294,8 +297,8 @@ class RecordDeletionTest extends TestCase
         $owner = User::factory()->owner()->create();
         $diesel = InventoryCategory::query()->where('name', 'Diesel')->sole();
 
-        $this->actingAs($owner)->get(route('expenses.create', ['category' => $diesel->id]))->assertOk()
-            ->assertSee('Diesel expense')->assertSee('Price per quantity')->assertDontSee('Paid to');
+        $this->actingAs($owner)->get(route('material-bills.create', $diesel))->assertOk()
+            ->assertSee('Diesel bill')->assertSee('Price per quantity')->assertDontSee('Paid to');
         $this->actingAs($owner)->post(route('expenses.store'), [
             'spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id,
             'items' => [['item' => 'Diesel', 'quantity' => 20, 'rate' => 280], ['item' => 'Mitti ka tel', 'quantity' => 5, 'rate' => 200], ['item' => '', 'quantity' => '', 'rate' => '']],
@@ -306,7 +309,7 @@ class RecordDeletionTest extends TestCase
         $this->assertSame('Diesel', $expense->head->name);
         $this->assertSame([5600, 1000], $expense->items->pluck('amount')->all());
         $this->actingAs($owner)->get(route('expenses.show', $expense))->assertSeeInOrder(['Diesel', '20', '280', '5,600', 'Mitti ka tel', '5', '200', '1,000', 'Rs 6,600']);
-        $this->actingAs($owner)->get(route('expenses.create', ['category' => $diesel->id]))->assertSee('<option value="Mitti ka tel">', false);
+        $this->actingAs($owner)->get(route('material-bills.create', $diesel))->assertSee('<option value="Mitti ka tel">', false);
 
         // A row without its quantity is refused on these tabs.
         $this->actingAs($owner)->post(route('expenses.store'), ['spent_on' => today()->toDateString(), 'inventory_category_id' => $diesel->id, 'items' => [['item' => 'Diesel', 'rate' => 280]]])

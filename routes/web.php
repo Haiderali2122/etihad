@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\BillPaymentController;
 use App\Http\Controllers\BookController;
 use App\Http\Controllers\BuyerController;
 use App\Http\Controllers\CashFloatController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ExpenseHeadController;
+use App\Http\Controllers\ForemanCashController;
 use App\Http\Controllers\ForemanSheetController;
 use App\Http\Controllers\GodownController;
 use App\Http\Controllers\InventoryCategoryController;
@@ -25,6 +27,7 @@ use App\Http\Controllers\LoanController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MachineController;
 use App\Http\Controllers\MachineRepairController;
+use App\Http\Controllers\MaterialBillController;
 use App\Http\Controllers\PaperIssueController;
 use App\Http\Controllers\PaperReceiptController;
 use App\Http\Controllers\PaperStockController;
@@ -111,7 +114,9 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:plates.manage')->group(function () {
         Route::get('plate-jobs/create', [PlateJobController::class, 'create'])->name('plate-jobs.create');
         Route::post('plate-jobs', [PlateJobController::class, 'store'])->name('plate-jobs.store');
-        Route::patch('plate-jobs/{plateJob}/pay', [PlateJobController::class, 'pay'])->name('plate-jobs.pay');
+        Route::patch('plate-jobs/{plateJob}/pay', [BillPaymentController::class, 'payPlate'])->name('plate-jobs.pay');
+        Route::post('plate-jobs/pay-all', [BillPaymentController::class, 'payAllPlates'])->name('plate-jobs.pay-all');
+        Route::post('processors/{processor}/pay', [BillPaymentController::class, 'payProcessor'])->name('processors.pay');
         Route::patch('plate-jobs/{plateJob}/return', [PlateJobController::class, 'returnPlates'])->name('plate-jobs.return');
         Route::get('plate-jobs/{plateJob}/edit', [PlateJobController::class, 'edit'])->name('plate-jobs.edit');
         Route::put('plate-jobs/{plateJob}', [PlateJobController::class, 'update'])->name('plate-jobs.update');
@@ -150,6 +155,17 @@ Route::middleware('auth')->group(function () {
     Route::get('inventory/purchases/{purchase}/receipt', [PurchaseController::class, 'materialReceipt'])->middleware('can:purchases.view')->name('materials.receipt');
     Route::get('inventory/materials/{inventory_category}/sales/create', [SaleController::class, 'create'])->middleware('can:expenses.create')->name('sales.create');
     Route::post('inventory/materials/{inventory_category}/sales', [SaleController::class, 'store'])->middleware('can:expenses.create')->name('sales.store');
+    Route::middleware('can:expenses.create')->group(function () {
+        Route::get('inventory/materials/{inventory_category}/bills/create', [MaterialBillController::class, 'create'])->name('material-bills.create');
+        Route::post('material-bills', [MaterialBillController::class, 'store'])->name('material-bills.store');
+        Route::get('material-bills/{materialBill}/edit', [MaterialBillController::class, 'edit'])->name('material-bills.edit');
+        Route::put('material-bills/{materialBill}', [MaterialBillController::class, 'update'])->name('material-bills.update');
+        Route::patch('material-bills/{materialBill}/pay', [BillPaymentController::class, 'payBill'])->name('material-bills.pay');
+        Route::post('inventory/materials/{inventory_category}/pay-all', [BillPaymentController::class, 'payAllBills'])->name('material-bills.pay-all');
+    });
+    Route::delete('bill-payments/{billPayment}', [BillPaymentController::class, 'destroy'])->name('bill-payments.destroy');
+    Route::patch('sales/{sale}/receive', [SaleController::class, 'receive'])->middleware('can:expenses.create')->name('sales.receive');
+    Route::post('inventory/materials/{inventory_category}/receive-all', [SaleController::class, 'receiveAll'])->middleware('can:expenses.create')->name('sales.receive-all');
     Route::get('sales/{sale}', [SaleController::class, 'show'])->middleware('can:purchases.view')->name('sales.show');
 
     Route::resource('expenses', ExpenseController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
@@ -190,6 +206,12 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:advances.create');
     Route::post('loans/{loan}/repayments', [LoanController::class, 'repay'])->middleware('can:advances.create')->name('loans.repay');
 
+    Route::get('foreman-cash', [ForemanCashController::class, 'index'])->middleware('can:staff.view')->name('foreman-cash.index');
+    Route::middleware('can:advances.create')->group(function () {
+        Route::post('foreman-cash', [ForemanCashController::class, 'store'])->name('foreman-cash.store');
+        Route::get('foreman-cash/{foremanCash}/edit', [ForemanCashController::class, 'edit'])->name('foreman-cash.edit');
+        Route::put('foreman-cash/{foremanCash}', [ForemanCashController::class, 'update'])->name('foreman-cash.update');
+    });
     Route::get('payroll', [PayrollRunController::class, 'index'])->middleware('can:staff.view')->name('payroll.index');
     Route::get('payroll/tenth', [PayrollRunController::class, 'tenth'])->middleware('can:staff.view')->name('payroll.tenth');
     Route::get('payroll/{payrollRun}', [PayrollRunController::class, 'show'])->middleware('can:staff.view')->name('payroll.show');

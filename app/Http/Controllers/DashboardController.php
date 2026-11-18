@@ -6,12 +6,16 @@ use App\Enums\MachineStatus;
 use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\ExpenseItem;
+use App\Models\InventoryCategory;
 use App\Models\Machine;
 use App\Models\MachineRepair;
 use App\Models\PaperIssue;
 use App\Models\PaperReceipt;
+use App\Models\Sale;
+use App\Models\SaleReceipt;
 use App\Support\PaperStock;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -44,6 +48,14 @@ class DashboardController extends Controller
             'weekly' => $this->weeklyPaper(),
             'heads' => $this->spendByHead($monthStart, $monthEnd),
             'feed' => $this->activity(),
+            // Raddi money coming in; kept apart from the manager's cash and Cash-out.
+            'raddi' => [
+                'receivedToday' => (int) SaleReceipt::query()->whereDate('received_on', today())->sum('amount'),
+                'receivedThisMonth' => (int) SaleReceipt::query()->whereDate('received_on', '>=', $monthStart->toDateString())->sum('amount'),
+                'toReceive' => (int) Sale::query()->sum(DB::raw('total - received_amount')),
+                'soldThisMonth' => (int) Sale::query()->whereDate('sold_on', '>=', $monthStart->toDateString())->sum('total'),
+                'tab' => InventoryCategory::query()->whereRaw('LOWER(name) = ?', ['raddi'])->value('id'),
+            ],
         ]);
     }
 

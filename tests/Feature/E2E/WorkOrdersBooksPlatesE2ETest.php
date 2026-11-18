@@ -744,21 +744,20 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
 
         $this->from(route('plate-jobs.index'))->patch(route('plate-jobs.pay', $job), [])->assertSessionHasErrors('paid_on');
         $this->from(route('plate-jobs.index'))->patch(route('plate-jobs.pay', $job), ['paid_on' => today()->toDateString(), 'payment_note' => 'Cash'])
-            ->assertRedirect(route('plate-jobs.index'))->assertSessionHas('status', 'Plate bill of Rs 38 marked as paid.');
+            ->assertRedirect(route('plate-jobs.index'))->assertSessionHas('status', 'Rs 38 paid; the bill is cleared.');
         $this->assertTrue($job->refresh()->isPaid());
         $this->get(route('plate-jobs.index', ['show' => 'paid']))->assertOk()->assertSee('Lahore Plates')->assertSee('Cash');
         $this->get(route('plate-jobs.index'))->assertOk()->assertDontSee('Lahore Plates');
         $this->get(route('work-orders.show', $order))->assertOk()->assertSee('Paid');
     }
 
-    public function test_plate_job_form_lists_only_open_orders(): void
+    public function test_plate_job_opened_from_an_order_is_for_that_orders_book(): void
     {
         Party::factory()->kind(PartyKind::PlateProcessor)->create();
         $this->actingAs($this->owner)->post(route('work-orders.store'), $this->order(['copies' => 100]))->assertSessionHasNoErrors();
-        $this->actingAs($this->owner)->post(route('work-orders.store'), $this->order(['copies' => 200]))->assertSessionHasNoErrors();
-        [$open, $done] = WorkOrder::query()->orderBy('id')->get()->all();
-        $done->forceFill(['stage' => WorkOrderStage::Dispatched])->save();
+        $order = WorkOrder::query()->sole();
 
-        $this->flushSession()->get(route('plate-jobs.create'))->assertOk()->assertSee($open->number)->assertDontSee($done->number);
+        $this->flushSession()->get(route('plate-jobs.create', ['order' => $order->id]))->assertOk()
+            ->assertSee('value="'.$order->bookName().'"', false)->assertSee('For work order '.$order->number);
     }
 }
