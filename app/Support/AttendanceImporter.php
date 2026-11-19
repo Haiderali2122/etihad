@@ -111,15 +111,14 @@ class AttendanceImporter
             usort($punches, fn (Carbon $a, Carbon $b) => $a <=> $b);
             $in = $punches[0] ?? null;
             $out = count($punches) > 1 ? end($punches) : null;
-            $worked = $in && $out ? $in->diffInMinutes($out) : 0;
             $present = $punches !== [];
 
             ($existing ?? new Attendance(['employee_id' => $employeeId, 'date' => $date]))->fill([
                 'status' => $present ? AttendanceStatus::Present : AttendanceStatus::Absent,
                 'check_in' => $in?->format('H:i'),
                 'check_out' => $out?->format('H:i'),
-                // The report's own OT Time when it has one; otherwise time beyond the normal day.
-                'overtime_minutes' => $present ? (int) ($day['overtime'] ?? max(0, $worked - $standardHours * 60)) : 0,
+                // The report's own OT Time when it has one; otherwise time after the shift ends.
+                'overtime_minutes' => $present ? (int) ($day['overtime'] ?? Attendance::overtimeAfterShift($out?->format('H:i'))) : 0,
                 'source' => 'device',
             ])->save();
 

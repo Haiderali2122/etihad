@@ -18,7 +18,7 @@
     <div class="card">
         <div class="toolbar">
             <div class="tabs" role="tablist">
-                @foreach (['stock' => [__('Stock by size'), $balances->count()], 'receipts' => [__('Truck receipts'), $receipts->total()], 'issues' => [__('Issued'), $issues->total()]] as $key => [$label, $count])
+                @foreach (['stock' => [__('Stock by size'), $balances->count()], 'receipts' => [__('Truck receipts'), $receipts->total()], 'issues' => [__('Issued'), $issues->total()], 'owed' => [__('Paper owed'), $loans->filter->isOpen()->count()]] as $key => [$label, $count])
                     <a role="tab" aria-selected="{{ $tab === $key ? 'true' : 'false' }}" @class(['tab', 'on' => $tab === $key]) style="text-decoration:none" href="{{ route('paper.index', ['tab' => $key] + array_filter($filters)) }}">{{ $label }}<span class="c">{{ $count }}</span></a>
                 @endforeach
             </div>
@@ -81,7 +81,7 @@
                 </tbody>
             </table></div>
             {{ $receipts->links() }}
-        @else
+        @elseif ($tab === 'issues')
             <div class="tbl-wrap"><table>
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th><th></th></tr></thead>
                 <tbody>
@@ -120,6 +120,49 @@
                 </tbody>
             </table></div>
             {{ $issues->links() }}
+        @elseif ($tab === 'owed')
+            {{-- Rims an order party owes because its paper fell short and another stock covered it. --}}
+            <div class="tbl-wrap"><table>
+                <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Owed by') }}</th><th>{{ __('Taken from') }}</th><th class="r">{{ __('Rims') }}</th><th>{{ __('Settled') }}</th></tr></thead>
+                <tbody>
+                @forelse ($loans as $loan)
+                    <tr>
+                        <td>{{ $loan->borrowed_on->format('j M Y') }}</td>
+                        <td>{{ $loan->paperType->label() }}</td>
+                        <td><b>{{ $loan->borrower->name }}</b></td>
+                        <td>{{ $loan->lender->name }}<div class="meta">{{ $loan->paperType->label() }}</div></td>
+                        <td class="r num"><b>{{ number_format($loan->rims) }}</b></td>
+                        <td>
+                            @if (! $loan->isOpen())
+                                <x-badge tone="good">{{ $loan->settled_how === 'rims' ? __('Rims returned to :stock', ['stock' => $loan->returnedTo?->name ?? $loan->lender->name]) : __("Paid Rs :n to Sheikh sahib's account", ['n' => number_format($loan->amount)]) }}</x-badge><div class="meta">{{ $loan->settled_on->format('j M Y') }}@if ($loan->note) · {{ $loan->note }}@endif</div>
+                            @else
+                                <x-badge tone="warn">{{ __('Owed') }}</x-badge>
+                                @can('paper.issue')
+                                    <form method="POST" action="{{ route('paper-loans.settle', $loan) }}" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;margin-top:6px">@csrf @method('PATCH')
+                                        <select class="select" name="settled_how" aria-label="{{ __('How') }}" onchange="this.form.querySelector('[name=amount]').hidden = this.value !== 'money'; this.form.querySelector('[data-return]').hidden = this.value !== 'rims'">
+                                            <option value="rims">{{ __('Rims returned (move back)') }}</option>
+                                            <option value="money">{{ __("Paid in money (to Sheikh sahib's account)") }}</option>
+                                        </select>
+                                        <input class="select" style="width:110px" type="number" name="amount" min="1" placeholder="{{ __('Rs') }}" hidden aria-label="{{ __('Amount') }}">
+                                        {{-- The rims were taken from the lender's stock: put them back there, or into another stock. --}}
+                                        <label data-return style="display:flex;flex-direction:column;font-size:12px">{{ __('Add the :n rims to', ['n' => $loan->rims]) }}
+                                            <select class="select" name="return_party_id">
+                                                <option value="{{ $loan->lender_party_id }}">{{ __(':name (taken from here)', ['name' => $loan->lender->name]) }}</option>
+                                                @foreach ($returnParties as $rp)@if ($rp->id !== $loan->lender_party_id && $rp->id !== $loan->borrower_party_id)<option value="{{ $rp->id }}">{{ $rp->name }}</option>@endif @endforeach
+                                            </select>
+                                        </label>
+                                        <input class="select" style="width:140px" type="date" name="settled_on" value="{{ today()->toDateString() }}" max="{{ today()->toDateString() }}" required aria-label="{{ __('Date') }}">
+                                        <button class="btn sm good" type="submit"><x-icon name="check" />{{ __('Settle') }}</button>
+                                    </form>
+                                @endcan
+                            @endif
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6"><div class="empty"><b>{{ __('No paper owed') }}</b>{{ __('When an order needs more rims than its party has, the rest can be taken from another stock on the Issue paper form; it shows here until it is paid back.') }}</div></td></tr>
+                @endforelse
+                </tbody>
+            </table></div>
         @endif
     </div>
 </x-layouts.app>

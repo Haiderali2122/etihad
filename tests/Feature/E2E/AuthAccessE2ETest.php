@@ -3,6 +3,7 @@
 namespace Tests\Feature\E2E;
 
 use App\Enums\PartyKind;
+use App\Models\AttendanceDevice;
 use App\Models\BillPayment;
 use App\Models\Book;
 use App\Models\CashFloat;
@@ -10,6 +11,7 @@ use App\Models\Contractor;
 use App\Models\ContractorJob;
 use App\Models\ContractorPayment;
 use App\Models\Designation;
+use App\Models\DeviceUser;
 use App\Models\Dispatch;
 use App\Models\Employee;
 use App\Models\Expense;
@@ -24,11 +26,13 @@ use App\Models\Loan;
 use App\Models\Machine;
 use App\Models\MaterialBill;
 use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\PlateJob;
+use App\Models\PlatePurchase;
 use App\Models\Purchase;
 use App\Models\RimLoading;
 use App\Models\Role;
@@ -52,7 +56,8 @@ class AuthAccessE2ETest extends TestCase
      *
      * @var list<string>
      */
-    private const OpenRoutes = ['login', 'locale', 'logout', 'dashboard', 'purchases.index', 'approvals.resend'];
+    // The iclock addresses and attendance-sync are the attendance machine's and its reader program's; they cannot log in and are checked by serial number and key instead.
+    private const OpenRoutes = ['login', 'locale', 'logout', 'dashboard', 'purchases.index', 'approvals.resend', 'iclock.cdata', 'iclock.getrequest', 'iclock.devicecmd', 'attendance-sync.store'];
 
     /** @var list<string> */
     private array $skipped = [];
@@ -539,7 +544,11 @@ class AuthAccessE2ETest extends TestCase
                     'purchase' => Purchase::factory()->create(),
                     'foremanCash' => ForemanCash::factory()->create(),
                     'sale' => Sale::factory()->create(),
+                    'device' => AttendanceDevice::query()->create(['serial_number' => 'TEST'.fake()->unique()->numerify('#####')]),
+                    'deviceUser' => DeviceUser::query()->create(['attendance_device_id' => AttendanceDevice::query()->create(['serial_number' => 'TEST'.fake()->unique()->numerify('#####')])->id, 'pin' => '1']),
                     'materialBill' => MaterialBill::factory()->create(),
+                    'platePurchase' => PlatePurchase::factory()->create(),
+                    'paperLoan' => PaperLoan::factory()->create(),
                     'billPayment' => BillPayment::factory()->create(),
                     'rimLoading' => RimLoading::factory()->create(),
                     'role' => Role::factory()->create(),

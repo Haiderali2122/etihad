@@ -40,7 +40,8 @@ class InventoryController extends Controller
             'tab' => $tab,
             'items' => $items,
             'lowItems' => $items->where('is_active', true)->filter(fn (InventoryItem $i) => in_array($i->level(), ['low', 'out'], true))->values(),
-            'purchases' => Purchase::query()->with(['party', 'item.category'])->tap($inCategory)
+            'purchasesUnpaid' => (int) Purchase::query()->notRejected()->tap($inCategory)->sum(DB::raw('amount - paid_amount')),
+            'purchases' => Purchase::query()->with(['party', 'item.category', 'payments'])->tap($inCategory)
                 ->latest('purchased_on')->latest('id')->paginate(25, ['*'], 'page')->withQueryString(),
             'issues' => InventoryIssue::query()->with(['item.category', 'machine'])->tap($inCategory)
                 ->latest('issued_on')->latest('id')->paginate(25, ['*'], 'page')->withQueryString(),
@@ -54,9 +55,10 @@ class InventoryController extends Controller
             'materialTabs' => $materialTabs,
             'material' => $material,
             'materialItems' => $material ? InventoryItem::query()->withStock()->where('inventory_category_id', $material->id)->orderBy('name')->get() : collect(),
-            // Entries made before bills (already paid), apart from payments on bills, which show with their bill.
+            // Entries made before bills (already paid) and payments on purchases; payments on this tab's bills show with their bill.
             'materialPayments' => $material ? Expense::query()->with(['head', 'user', 'source'])->where('inventory_category_id', $material->id)
-                ->where(fn ($q) => $q->whereNull('source_type')->orWhere('source_type', '!=', (new BillPayment)->getMorphClass()))
+                ->where(fn ($q) => $q->whereNull('source_type')->orWhere('source_type', '!=', (new BillPayment)->getMorphClass())
+                    ->orWhereIn('source_id', BillPayment::query()->select('id')->where('payable_type', '!=', (new MaterialBill)->getMorphClass())))
                 ->latest('spent_on')->latest('id')->limit(50)->get() : collect(),
             // Diesel, Glue and Ink bills, paid later in parts.
             'bills' => $material?->usesQuantity() ? MaterialBill::query()->with(['items', 'payments', 'creator'])->where('inventory_category_id', $material->id)->latest('bill_on')->latest('id')->limit(100)->get() : collect(),

@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
-use App\Models\Concerns\RecordsCashOut;
+use App\Models\Concerns\HasBillPayments;
 use App\Models\Concerns\RecordsDeletion;
 use App\Models\Concerns\RequiresApproval;
 use Database\Factories\PurchaseFactory;
@@ -15,11 +15,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * A supplier bill for an inventory item. Bills that aren't sent back add to the item's stock.
  */
-#[Fillable(['purchased_on', 'party_id', 'inventory_item_id', 'quantity', 'rate', 'amount', 'bill_no', 'receipt_no', 'attachment', 'note', 'created_by'])]
+#[Fillable(['purchased_on', 'party_id', 'inventory_item_id', 'quantity', 'rate', 'amount', 'paid_amount', 'bill_no', 'receipt_no', 'attachment', 'note', 'created_by'])]
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */
-    use HasFactory, RecordsCashOut, RecordsDeletion, RequiresApproval;
+    use HasBillPayments, HasFactory, RecordsDeletion, RequiresApproval;
 
     protected function casts(): array
     {
@@ -28,6 +28,7 @@ class Purchase extends Model
             'quantity' => 'decimal:2',
             'rate' => 'decimal:2',
             'amount' => 'integer',
+            'paid_amount' => 'integer',
         ];
     }
 
@@ -97,27 +98,39 @@ class Purchase extends Model
         return route('inventory.index', ['tab' => 'purchases']);
     }
 
+    protected static function booted(): void
+    {
+        // A payment's Cash-out line waits for the owner while the purchase does, and follows the decision.
+        static::saved(function (self $purchase): void {
+            if ($purchase->wasChanged('status')) {
+                $purchase->payments()->get()->each->syncCashOut();
+            }
+        });
+    }
+
+    public function billTotal(): int
+    {
+        return (int) $this->amount;
+    }
+
     /**
-     * The bill paid for this purchase. Petrol, diesel, glue and ink go under their own head and tab.
+     * What a payment on this bill puts in Cash-out. Material tab items go under their own head and tab.
+     *
+     * @return array{amount: int, date: mixed, paid_to: string, reason: string, head: string, category_id: int|null}
      */
-    public function cashOut(): ?array
+    public function paymentCashOut(BillPayment $payment): array
     {
         $category = $this->item?->category;
         $ownTab = $category?->show_as_tab;
 
         return [
-            'amount' => (int) $this->amount,
-            'date' => $this->purchased_on,
+            'amount' => (int) $payment->amount,
+            'date' => $payment->paid_on,
             'paid_to' => (string) $this->party?->name,
-            'reason' => trim('Purchase: '.InventoryItem::qty($this->quantity).' '.$this->item?->unit.' '.$this->item?->name.($this->bill_no ? ', bill '.$this->bill_no : '')),
+            'reason' => trim('Purchase: '.InventoryItem::qty($this->quantity).' '.$this->item?->unit.' '.$this->item?->name.($this->bill_no ? ', bill '.$this->bill_no : '').($payment->note ? ', '.$payment->note : '')),
             'head' => $ownTab ? $category->name : 'Purchases',
             'category_id' => $ownTab ? $category->id : null,
         ];
-    }
-
-    public function cashOutUrl(): string
-    {
-        return route('inventory-items.show', $this->inventory_item_id);
     }
 
     /**

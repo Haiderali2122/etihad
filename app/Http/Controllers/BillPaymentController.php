@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\PartyKind;
 use App\Models\BillPayment;
 use App\Models\InventoryCategory;
 use App\Models\MaterialBill;
 use App\Models\Party;
 use App\Models\PlateJob;
+use App\Models\PlatePurchase;
+use App\Models\Purchase;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +28,39 @@ class BillPaymentController extends Controller
     public function payBill(Request $request, MaterialBill $materialBill): RedirectResponse
     {
         return $this->payOne($request, $materialBill, $materialBill->bill_on);
+    }
+
+    public function payPurchase(Request $request, Purchase $purchase): RedirectResponse
+    {
+        if ($purchase->status === ApprovalStatus::Rejected) {
+            return back()->withErrors(['amount' => __('This purchase was sent back, so it cannot be paid.')]);
+        }
+
+        return $this->payOne($request, $purchase, $purchase->purchased_on);
+    }
+
+    /**
+     * Every unpaid inventory purchase (not sent back), paid on one date.
+     */
+    public function payAllPurchases(Request $request): RedirectResponse
+    {
+        $purchases = Purchase::query()->with(['party', 'item.category'])->notRejected()->whereColumn('paid_amount', '<', 'amount')
+            ->orderBy('purchased_on')->orderBy('id')->get();
+
+        return $this->payAll($request, $purchases);
+    }
+
+    public function payPlatePurchase(Request $request, PlatePurchase $platePurchase): RedirectResponse
+    {
+        return $this->payOne($request, $platePurchase, $platePurchase->purchased_on);
+    }
+
+    /**
+     * Every unpaid plate purchase, paid on one date.
+     */
+    public function payAllPlatePurchases(Request $request): RedirectResponse
+    {
+        return $this->payAll($request, PlatePurchase::query()->whereColumn('paid_amount', '<', 'amount')->orderBy('purchased_on')->orderBy('id')->get());
     }
 
     public function payPlate(Request $request, PlateJob $plateJob): RedirectResponse
@@ -88,14 +124,18 @@ class BillPaymentController extends Controller
      */
     public function destroy(BillPayment $billPayment): RedirectResponse
     {
-        abort_unless(Gate::allows($billPayment->payable instanceof PlateJob ? 'plates.manage' : 'expenses.create'), 403);
+        abort_unless(Gate::allows(match (true) {
+            $billPayment->payable instanceof PlateJob => 'plates.manage',
+            $billPayment->payable instanceof Purchase, $billPayment->payable instanceof PlatePurchase => 'purchases.create',
+            default => 'expenses.create',
+        }), 403);
         $billPayment->delete();
 
         return back()->with('status', __('Payment of Rs :n deleted.', ['n' => number_format($billPayment->amount)]));
     }
 
     /**
-     * @param  MaterialBill|PlateJob  $payable
+     * @param  MaterialBill|PlateJob|PlatePurchase|Purchase  $payable
      */
     private function payOne(Request $request, Model $payable, Carbon $from): RedirectResponse
     {
@@ -119,7 +159,7 @@ class BillPaymentController extends Controller
     }
 
     /**
-     * @param  Collection<int, MaterialBill|PlateJob>  $payables
+     * @param  Collection<int, MaterialBill|PlateJob|PlatePurchase|Purchase>  $payables
      */
     private function payAll(Request $request, Collection $payables): RedirectResponse
     {

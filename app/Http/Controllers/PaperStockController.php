@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
@@ -15,7 +16,7 @@ class PaperStockController extends Controller
 {
     public function index(Request $request, PaperStock $stock): View
     {
-        $tab = in_array($request->query('tab'), ['stock', 'receipts', 'issues'], true) ? $request->query('tab') : 'stock';
+        $tab = in_array($request->query('tab'), ['stock', 'receipts', 'issues', 'owed'], true) ? $request->query('tab') : 'stock';
         $paperTypeId = $request->integer('paper_type_id') ?: null;
         $partyId = $request->integer('party_id') ?: null;
 
@@ -36,6 +37,9 @@ class PaperStockController extends Controller
             'receivedThisWeek' => (int) PaperReceipt::query()->notRejected()->where('received_at', '>=', $weekStart)->sum('quantity'),
             'trucksThisWeek' => PaperReceipt::query()->notRejected()->where('received_at', '>=', $weekStart)->count(),
             'issuedThisWeek' => (int) PaperIssue::query()->notRejected()->where('issued_on', '>=', $weekStart)->sum(DB::raw('quantity - returned_quantity')),
+            // Stocks returned rims can go into: every party (the one they came from is the default).
+            'returnParties' => Party::query()->orderBy('name')->get(['id', 'name']),
+            'loans' => PaperLoan::query()->with(['paperType', 'borrower', 'lender', 'returnedTo'])->orderByRaw('settled_on IS NOT NULL')->latest('borrowed_on')->latest('id')->limit(100)->get(),
             'paperTypes' => PaperType::query()->orderBy('code')->get(),
             'parties' => Party::query()->whereHas('paperReceipts')->orderBy('name')->get(),
             'filters' => ['paper_type_id' => $paperTypeId, 'party_id' => $partyId],

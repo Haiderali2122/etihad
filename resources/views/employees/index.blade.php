@@ -36,7 +36,7 @@
                     <td><span class="tag">{{ $e->code }}</span></td>
                     <td>{{ $e->designation }}</td>
                     <td>{{ $e->foreman?->name ?? '—' }}</td>
-                    <td class="r num">Rs {{ number_format($e->monthly_salary) }}</td>
+                    <td class="r num">@if ($e->monthly_salary > 0)Rs {{ number_format($e->monthly_salary) }}@else<x-badge tone="warn">{{ __('Salary not set') }}</x-badge>@endif</td>
                     <td class="r num">{{ $e->open_advances ? 'Rs '.number_format($e->open_advances) : '—' }}</td>
                     <td><x-badge :tone="$e->is_active ? 'good' : 'mute'">{{ $e->is_active ? __('Active') : ($e->left_on ? __('Left :date', ['date' => $e->left_on->format('j M Y')]) : __('Inactive')) }}</x-badge></td>
                     <td class="r" style="white-space:nowrap">

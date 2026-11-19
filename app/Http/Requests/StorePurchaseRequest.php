@@ -71,6 +71,7 @@ class StorePurchaseRequest extends FormRequest
             'bill_no' => ['nullable', 'string', 'max:40'],
             'note' => ['nullable', 'string', 'max:255'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
+            'paid_now' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

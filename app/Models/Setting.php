@@ -32,6 +32,20 @@ class Setting extends Model
 
     public const PayDay = 'payroll_pay_day';
 
+    /** Shift start and end (H:i): before the start is on time, after it late; after the end is overtime. */
+    public const ShiftStart = 'attendance_shift_start';
+
+    public const ShiftEnd = 'attendance_shift_end';
+
+    /** Minutes after the shift start that still count as on time. */
+    public const LateGraceMinutes = 'attendance_late_grace';
+
+    /** Leaving within this many minutes before the shift end is not early. */
+    public const EarlyGraceMinutes = 'attendance_early_grace';
+
+    /** Staying up to this many minutes after the shift end is not overtime. */
+    public const OvertimeGraceMinutes = 'attendance_overtime_grace';
+
     /**
      * Payroll rules with the defaults from Haider's notes; all of them are still to be confirmed with the owner.
      *
@@ -47,6 +61,11 @@ class Setting extends Model
             'mid_month_day' => (int) static::get(self::MidMonthAdvanceDay, 22),
             'mid_month_percent' => (float) static::get(self::MidMonthAdvancePercent, 50),
             'pay_day' => (int) static::get(self::PayDay, 10),
+            'shift_start' => (string) static::get(self::ShiftStart, '09:00'),
+            'shift_end' => (string) static::get(self::ShiftEnd, '17:00'),
+            'late_grace' => (int) static::get(self::LateGraceMinutes, 20),
+            'early_grace' => (int) static::get(self::EarlyGraceMinutes, 15),
+            'overtime_grace' => (int) static::get(self::OvertimeGraceMinutes, 15),
         ];
     }
 

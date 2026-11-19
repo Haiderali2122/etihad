@@ -62,7 +62,7 @@ trait RecordsCashOut
         }
 
         // Entries that wait for the owner pass their status on; the rest are paid when recorded.
-        $status = in_array(RequiresApproval::class, class_uses_recursive($this), true) ? $this->status : ApprovalStatus::Approved;
+        $status = $this->cashOutStatus();
 
         $expense ??= new Expense;
         $expense->forceFill([
@@ -89,6 +89,14 @@ trait RecordsCashOut
             'expense_head_id' => $expense->expense_head_id, 'paid_to' => $expense->paid_to,
             'description' => $expense->reason, 'amount' => $expense->amount,
         ]);
+    }
+
+    /**
+     * Entries that wait for the owner pass their status on; the rest are paid when recorded.
+     */
+    protected function cashOutStatus(): ApprovalStatus
+    {
+        return in_array(RequiresApproval::class, class_uses_recursive($this), true) ? $this->status : ApprovalStatus::Approved;
     }
 
     /**

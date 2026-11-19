@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
 use App\Models\Concerns\RecordsCashOut;
 use App\Models\Concerns\RecordsDeletion;
 use Database\Factories\BillPaymentFactory;
@@ -55,6 +56,20 @@ class BillPayment extends Model
             return null;
         }
 
+        if ($payable instanceof Purchase) {
+            return $payable->paymentCashOut($this);
+        }
+
+        if ($payable instanceof PlatePurchase) {
+            return [
+                'amount' => (int) $this->amount,
+                'date' => $this->paid_on,
+                'paid_to' => (string) ($payable->supplier ?: '—'),
+                'reason' => trim('Plates bought: '.$payable->plates.' × '.$payable->plate_size.($payable->bill_no ? ', bill '.$payable->bill_no : '').($this->note ? ', '.$this->note : '')),
+                'head' => 'Plates',
+            ];
+        }
+
         if ($payable instanceof PlateJob) {
             return [
                 'amount' => (int) $this->amount,
@@ -77,9 +92,20 @@ class BillPayment extends Model
 
     public function cashOutUrl(): string
     {
-        return $this->payable instanceof PlateJob
-            ? route('plate-jobs.index', ['show' => 'all'])
-            : route('inventory.index', ['tab' => 'material-'.($this->payable?->inventory_category_id ?? 0)]);
+        return match (true) {
+            $this->payable instanceof PlateJob => route('plate-jobs.index', ['show' => 'all']),
+            $this->payable instanceof Purchase => route('inventory.index', ['tab' => 'purchases']),
+            $this->payable instanceof PlatePurchase => route('plate-stock.index'),
+            default => route('inventory.index', ['tab' => 'material-'.($this->payable?->inventory_category_id ?? 0)]),
+        };
+    }
+
+    /**
+     * A payment on a purchase still waiting for the owner waits with it.
+     */
+    protected function cashOutStatus(): ApprovalStatus
+    {
+        return $this->payable instanceof Purchase ? $this->payable->status : ApprovalStatus::Approved;
     }
 
     /**
@@ -92,7 +118,12 @@ class BillPayment extends Model
 
     public function cashOutSource(): string
     {
-        return $this->payable instanceof PlateJob ? __('Plate bill') : __(':name bill', ['name' => $this->payable?->category?->name]);
+        return match (true) {
+            $this->payable instanceof PlateJob => __('Plate bill'),
+            $this->payable instanceof Purchase => __('Purchase bill'),
+            $this->payable instanceof PlatePurchase => __('Plate purchase'),
+            default => __(':name bill', ['name' => $this->payable?->category?->name]),
+        };
     }
 
     public function logsDeletion(): bool

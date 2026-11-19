@@ -29,7 +29,9 @@
             <div class="field">
                 <label for="f_plate_size">{{ __('Plate size') }}</label>
                 <input type="text" id="f_plate_size" name="plate_size" value="{{ old('plate_size', $v('plate_size')) }}" list="sizeList" autocomplete="off" maxlength="40">
-                <datalist id="sizeList">@foreach ($sizes as $s)<option value="{{ $s }}">@endforeach</datalist>
+                {{-- Each size with the plates in stock for it. --}}
+                <datalist id="sizeList">@foreach ($sizes as $s)@php $inStock = $stock->get(mb_strtolower($s))['stock'] ?? null; @endphp<option value="{{ $s }}">{{ $inStock !== null ? __(':n in stock', ['n' => number_format($inStock)]) : '' }}</option>@endforeach</datalist>
+                <span class="hint" id="stockHint"></span>
             </div>
             <x-field name="plates" type="number" min="1" :label="__('Plates given')" :value="$v('plates')" required />
             <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate per plate (Rs)')" :value="$editing ? (float) $job->rate : null" required />
@@ -82,6 +84,14 @@
                     if (rate !== undefined) { r.value = rate; calc(); }
                 };
                 [proc, size].forEach(el => el.addEventListener('input', fill)); fill();
+                // How many plates of the chosen size are in stock.
+                const stock = @js($stock->mapWithKeys(fn ($r, $k) => [$k => $r['stock']])), hint = document.getElementById('stockHint');
+                const showStock = () => {
+                    const n = stock[size.value.trim().toLowerCase()];
+                    hint.textContent = n === undefined ? '' : @js(__('In stock: ')) + n + (+p.value > n ? ' — ' + @js(__('not enough in stock')) : '');
+                    hint.style.color = n !== undefined && +p.value > n ? 'var(--bad)' : '';
+                };
+                [size, p].forEach(el => el.addEventListener('input', showStock)); showStock();
             })();
         </script>
     @endpush

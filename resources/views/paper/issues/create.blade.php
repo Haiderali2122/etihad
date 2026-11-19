@@ -66,6 +66,18 @@
 
             <x-field name="quantity" type="number" min="1" :label="__('Rims out')" required />
             <div class="field"><label>&nbsp;</label><div id="stockcheck"></div></div>
+            {{-- Short: the rest comes from another stock of the same paper, and the order party owes it. --}}
+            <div @class(['field', 'full', 'has-err' => $errors->has('shortage_stock')]) id="shortageBox" hidden>
+                <div class="alert"><x-icon name="alert" /><div>
+                    <b id="shortageText"></b>
+                    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                        <label for="f_shortage_stock" style="margin:0">{{ __('Take the rest from') }}</label>
+                        <select class="select" name="shortage_stock" id="f_shortage_stock" style="min-width:320px;max-width:100%"></select>
+                    </div>
+                    <div class="meta" style="margin-top:6px">{{ __('Both issues are saved together, and the shortage is kept under Paper owed until it is paid back.') }}</div>
+                </div></div>
+                @error('shortage_stock')<span class="err">{{ $message }}</span>@enderror
+            </div>
             <div class="field full" id="returnHint" hidden><div class="alert" style="background:var(--info-bg);color:var(--indigo)"><x-icon name="back" /><div>{{ __('Returns go back to the supplier as they are: enter only the quantity going out. No book or wastage is needed.') }}</div></div></div>
             <x-field name="note" :label="__('Note')" full />
         </div></div>
@@ -83,15 +95,35 @@
                 const $ = id => document.getElementById(id);
                 const stock = $('f_stock'), qty = $('f_quantity'), check = $('stockcheck');
                 const fmt = n => Math.round(n).toLocaleString('en-PK');
+                // Other stocks of the same paper that can cover a shortage.
+                // Any other stock can cover it: the same paper first, then every other paper with rims left.
+                const covers = @js($covers), box = $('shortageBox'), coverSelect = $('f_shortage_stock'), oldCover = @js(old('shortage_stock'));
+                const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+                const shortage = (short, opt) => {
+                    const [type, party] = (stock.value || '-').split('-');
+                    const others = covers.filter(c => !(String(c.type) === type && String(c.party) === party));
+                    const same = others.filter(c => String(c.type) === type), other = others.filter(c => String(c.type) !== type);
+                    box.hidden = short <= 0;
+                    coverSelect.disabled = short <= 0;
+                    if (short <= 0) { return; }
+                    $('shortageText').textContent = @js(__('Short by')) + ' ' + fmt(short) + ' ' + @js(__('rims')) + '.' + (others.length ? '' : ' ' + @js(__('No other stock has rims.')));
+                    const option = c => `<option value="${c.type}-${c.party}" ${c.balance < short ? 'disabled' : ''}>${esc(c.name)} · ${esc(c.paper)} — ${fmt(c.balance)} ${@js(__('rims'))}</option>`;
+                    const keep = coverSelect.value || oldCover;
+                    coverSelect.innerHTML = `<option value="">${@js(__('Pick the stock'))}</option>`
+                        + (same.length ? `<optgroup label="${esc(@js(__('Same paper')))}">${same.map(option).join('')}</optgroup>` : '')
+                        + (other.length ? `<optgroup label="${esc(@js(__('Other paper')))}">${other.map(option).join('')}</optgroup>` : '');
+                    if (keep && others.some(c => `${c.type}-${c.party}` === String(keep))) { coverSelect.value = keep; }
+                };
                 const sync = () => {
                     const [type, party] = (stock.value || '-').split('-');
                     $('f_paper_type_id').value = type || '';
                     $('f_party_id').value = party || '';
                     const opt = stock.selectedOptions[0], have = +(opt?.dataset.balance || 0), need = +qty.value || 0;
-                    if (!stock.value || !need) { check.innerHTML = ''; return; }
+                    if (!stock.value || !need) { check.innerHTML = ''; shortage(0, null); return; }
                     check.innerHTML = need <= have
                         ? `<div class="stockcheck ok">${fmt(have - need)} {{ __('left after this issue') }}</div>`
                         : `<div class="stockcheck no">{{ __('Only') }} ${fmt(have)} {{ __('in stock') }}</div>`;
+                    shortage(need > have && $('f_kind').value !== 'return' ? need - have : 0, opt);
                 };
                 const book = $('f_book_format_id');
                 const calc = () => {

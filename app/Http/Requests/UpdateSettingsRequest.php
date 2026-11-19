@@ -32,6 +32,11 @@ class UpdateSettingsRequest extends FormRequest
             'mid_month_day' => ['required', 'integer', 'min:1', 'max:28'],
             'mid_month_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'pay_day' => ['required', 'integer', 'min:1', 'max:28'],
+            'shift_start' => ['nullable', 'date_format:H:i'],
+            'shift_end' => ['nullable', 'date_format:H:i', 'after:shift_start'],
+            'late_grace' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'early_grace' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'overtime_grace' => ['nullable', 'integer', 'min:0', 'max:120'],
         ];
     }
 }

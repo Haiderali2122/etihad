@@ -7,6 +7,7 @@ use App\Enums\WorkOrderStage;
 use App\Models\Book;
 use App\Models\Party;
 use App\Models\PlateJob;
+use App\Models\PlatePurchase;
 use App\Models\WorkOrder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ class PlateJobController extends Controller
     {
         return view('plate-jobs.create', [
             'lastRates' => $this->lastRates(),
+            'stock' => PlatePurchase::stockBySize(),
             'sizes' => $this->sizes(),
             'books' => $this->books(),
             'processors' => Party::query()->active()->where('kind', PartyKind::PlateProcessor)->orderBy('name')->get(),
@@ -63,6 +65,7 @@ class PlateJobController extends Controller
     {
         return view('plate-jobs.create', [
             'job' => $plateJob->load(['returns', 'payments']),
+            'stock' => PlatePurchase::stockBySize(),
             'sizes' => $this->sizes(),
             'books' => $this->books(),
             'processors' => Party::query()->where('kind', PartyKind::PlateProcessor)->where(fn ($q) => $q->where('is_active', true)->orWhereKey($plateJob->party_id))->orderBy('name')->get(),
@@ -180,7 +183,9 @@ class PlateJobController extends Controller
      */
     private function sizes(): array
     {
-        return PlateJob::query()->whereNotNull('plate_size')->distinct()->orderBy('plate_size')->pluck('plate_size')->all();
+        return PlateJob::query()->whereNotNull('plate_size')->distinct()->orderBy('plate_size')->pluck('plate_size')
+            ->merge(PlatePurchase::query()->distinct()->pluck('plate_size'))
+            ->map(fn ($s) => trim((string) $s))->filter()->unique(fn ($s) => mb_strtolower($s))->sort()->values()->all();
     }
 
     /**

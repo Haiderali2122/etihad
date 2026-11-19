@@ -29,4 +29,12 @@ class PurchaseFactory extends Factory
             'amount' => 18500,
         ];
     }
+
+    /**
+     * A purchase whose bill has been paid in full on its date.
+     */
+    public function paid(): static
+    {
+        return $this->afterCreating(fn (Purchase $purchase) => $purchase->pay((int) $purchase->amount, $purchase->purchased_on, $purchase->created_by));
+    }
 }

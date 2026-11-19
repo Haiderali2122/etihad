@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
+use App\Models\DevicePunch;
 use App\Models\Employee;
 use App\Models\Setting;
 use App\Support\AttendanceImporter;
@@ -21,6 +22,11 @@ class AttendanceController extends Controller
      */
     public function index(Request $request): View
     {
+        // Attendance opens on today's sheet; the month grid is the Month button.
+        if (! $request->filled('month') && $request->user()->can('attendance.manage')) {
+            return $this->day($request);
+        }
+
         $month = $this->month($request->query('month'));
         $end = $month->copy()->endOfMonth();
 
@@ -37,6 +43,20 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Whether the form changed the day: the times compared as H:i, overtime to the minute.
+     */
+    private function changedByHand(Attendance $day): bool
+    {
+        $time = fn ($v) => $v ? substr((string) $v, 0, 5) : null;
+
+        return $day->getOriginal('status') !== $day->status
+            || $time($day->getOriginal('check_in')) !== $time($day->check_in)
+            || $time($day->getOriginal('check_out')) !== $time($day->check_out)
+            || abs((int) $day->getOriginal('overtime_minutes') - (int) $day->overtime_minutes) > 1
+            || (string) $day->getOriginal('note') !== (string) $day->note;
+    }
+
+    /**
      * Mark everyone for one day.
      */
     public function day(Request $request): View
@@ -47,12 +67,17 @@ class AttendanceController extends Controller
             $date = today();
         }
 
+        $employees = Employee::query()->active()->orderBy('name')->get();
+
         return view('attendance.day', [
             'date' => $date,
-            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'employees' => $employees,
+            // Every punch the machine recorded that day, per machine number, in time order.
+            'punches' => DevicePunch::query()->whereDate('punched_at', $date)->orderBy('punched_at')->get()->groupBy('pin'),
             'records' => Attendance::query()->whereDate('date', $date)->get()->keyBy('employee_id'),
             'statuses' => AttendanceStatus::cases(),
             'standardHours' => Setting::payrollRules()['standard_hours'],
+            'shift' => Attendance::shift(),
         ]);
     }
 
@@ -80,14 +105,21 @@ class AttendanceController extends Controller
                 continue;
             }
             $present = $row['status'] === AttendanceStatus::Present->value;
-            Attendance::forDay($id, $date)->fill([
+            $day = Attendance::forDay($id, $date);
+            $day->fill([
                 'status' => $row['status'],
                 'check_in' => $present ? ($row['check_in'] ?? null) : null,
                 'check_out' => $present ? ($row['check_out'] ?? null) : null,
                 'overtime_minutes' => $present ? (int) round(((float) ($row['overtime_hours'] ?? 0)) * 60) : 0,
                 'note' => $row['note'] ?? null,
-                'source' => 'manual',
-            ])->save();
+            ]);
+            // Only a row someone actually changed counts as entered by hand; untouched rows keep filling in from
+            // the attendance machine.
+            if ($day->exists && ! $this->changedByHand($day)) {
+                continue;
+            }
+            $day->source = 'manual';
+            $day->save();
             $saved++;
         }
 

@@ -288,7 +288,7 @@ class PayrollTest extends TestCase
         $day = $aslam->attendances()->sole();
         $this->assertSame('08:58', substr($day->check_in, 0, 5));
         $this->assertSame('21:04', substr($day->check_out, 0, 5));
-        $this->assertSame(246, $day->overtime_minutes);
+        $this->assertSame(244, $day->overtime_minutes); // time after the 5 PM shift end
         $this->assertSame(AttendanceStatus::Leave, $tariq->attendances()->sole()->status);
     }
 

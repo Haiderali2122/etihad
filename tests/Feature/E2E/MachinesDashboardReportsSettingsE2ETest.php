@@ -417,10 +417,10 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
 
         $supplier = Party::factory()->kind(PartyKind::Supplier)->create(['name' => 'Ink House']);
         $item = InventoryItem::factory()->for(InventoryCategory::factory()->state(['name' => 'Inks']), 'category')->create();
-        Purchase::factory()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-10-01', 'amount' => 1000]);
-        Purchase::factory()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-10-31', 'amount' => 2000]);
-        Purchase::factory()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-09-30', 'amount' => 40000]);
-        Purchase::factory()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-11-01', 'amount' => 80000]);
+        Purchase::factory()->paid()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-10-01', 'amount' => 1000]);
+        Purchase::factory()->paid()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-10-31', 'amount' => 2000]);
+        Purchase::factory()->paid()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-09-30', 'amount' => 40000]);
+        Purchase::factory()->paid()->create($approved + ['party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-11-01', 'amount' => 80000]);
         Purchase::factory()->create(['status' => ApprovalStatus::Pending, 'party_id' => $supplier->id, 'inventory_item_id' => $item->id, 'purchased_on' => '2026-10-15', 'amount' => 160000]);
 
         $head = ExpenseHead::factory()->create(['name' => 'Tea']);
@@ -569,7 +569,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $this->assertSame('5000', (string) Setting::get(Setting::ManagerDailyLimit));
         $this->assertSame([
             'ot_divisor' => 8.0, 'ot_multiplier' => 1.5, 'standard_hours' => 9.0, 'unmarked_as' => 'absent',
-            'mid_month_day' => 15, 'mid_month_percent' => 40.0, 'pay_day' => 7,
+            'mid_month_day' => 15, 'mid_month_percent' => 40.0, 'pay_day' => 7, 'shift_start' => '09:00', 'shift_end' => '17:00', 'late_grace' => 20, 'early_grace' => 15, 'overtime_grace' => 15,
         ], Setting::payrollRules());
 
         $this->actingAs($owner)->get(route('settings.edit'))->assertOk()
@@ -714,7 +714,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
             }
 
             $url = route($route->getName(), $params);
-            $status = $this->actingAs($user)->get($url)->status();
+            $status = $this->actingAs($user)->get($url)->baseResponse->getStatusCode(); // also works for file downloads
             if ($status >= 500) {
                 $failures[] = "{$route->getName()} {$url} -> {$status}";
             }

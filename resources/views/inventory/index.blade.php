@@ -142,7 +142,7 @@
                             <td>{{ $p->reason }}@if (! $p->isLinked() && $p->paid_to && $p->paid_to !== '—')<div class="meta">{{ $p->paid_to }}</div>@endif @if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                             <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                             <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
-                            <td class="r"><a class="btn sm" href="{{ $p->source?->receipt_no ? route('materials.receipt', $p->source) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
+                            <td class="r">@php $bought = $p->source instanceof \App\Models\BillPayment ? $p->source->payable : $p->source; @endphp<a class="btn sm" href="{{ $bought instanceof \App\Models\Purchase && $bought->receipt_no ? route('materials.receipt', $bought) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                         </tr>
                     @empty
                         <tr><td colspan="5"><div class="empty"><b>{{ __('No expenses yet') }}</b>{{ __('Add them with the Add expense button above.') }}</div></td></tr>
@@ -160,7 +160,7 @@
                         <td>{{ $p->reason }}@if (! $p->isLinked() && $p->paid_to && $p->paid_to !== '—')<div class="meta">{{ $p->paid_to }}</div>@endif @if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge></td>
-                        <td class="r"><a class="btn sm" href="{{ $p->source?->receipt_no ? route('materials.receipt', $p->source) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
+                        <td class="r">@php $bought = $p->source instanceof \App\Models\BillPayment ? $p->source->payable : $p->source; @endphp<a class="btn sm" href="{{ $bought instanceof \App\Models\Purchase && $bought->receipt_no ? route('materials.receipt', $bought) : route('expenses.show', $p) }}"><x-icon name="printer" />{{ __('Receipt') }}</a>@can('expenses.create')<x-delete-button :action="route('expenses.destroy', $p)" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
                     <tr><td colspan="5"><div class="empty"><b>{{ __('No expenses yet') }}</b>{{ __('Add them with the Add expense button above.') }}</div></td></tr>
@@ -218,8 +218,17 @@
                 </tbody>
             </table></div>
         @elseif ($tab === 'purchases')
+            @can('purchases.create')@if ($purchasesUnpaid > 0)
+                <div class="card-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+                    <b style="color:var(--bad)">{{ __('Unpaid: Rs :n', ['n' => number_format($purchasesUnpaid)]) }}</b>
+                    <form method="POST" action="{{ route('purchases.pay-all') }}" class="inline-form" style="display:inline-flex;gap:6px;align-items:center" onsubmit="return confirm(@js(__('Pay all unpaid purchase bills (Rs :n)?', ['n' => number_format($purchasesUnpaid)])))">@csrf
+                        <input class="select" style="width:140px" type="date" name="paid_on" value="{{ today()->toDateString() }}" max="{{ today()->toDateString() }}" required aria-label="{{ __('Paid on') }}">
+                        <button class="btn good" type="submit"><x-icon name="check" />{{ __('Pay all (Rs :n)', ['n' => number_format($purchasesUnpaid)]) }}</button>
+                    </form>
+                </div>
+            @endif @endcan
             <div class="tbl-wrap"><table>
-                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th>{{ __('Supplier') }}</th><th class="r">{{ __('Qty') }}</th><th class="r">{{ __('Rate') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
+                <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th>{{ __('Supplier') }}</th><th class="r">{{ __('Qty') }}</th><th class="r">{{ __('Rate') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th>{{ __('Payments') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($purchases as $p)
                     <tr>
@@ -230,10 +239,11 @@
                         <td class="r num">{{ number_format((float) $p->rate, 2) }}</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                         <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge>@if ($p->review_note)<div class="meta">{{ $p->review_note }}</div>@endif</td>
+                        <td>@if ($p->status->value === 'rejected')<span class="muted">—</span>@else @include('partials.bill-payments', ['payable' => $p, 'payUrl' => route('purchases.pay', $p), 'canPay' => auth()->user()->can('purchases.create')])@endif</td>
                         <td class="r" style="white-space:nowrap">@include('partials.attachment', ['path' => $p->attachment])@can('purchases.create')<x-delete-button :action="route('records.destroy', ['purchase', $p->id])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan</td>
                     </tr>
                 @empty
-                    <tr><td colspan="8"><div class="empty"><b>{{ __('No purchases yet') }}</b></div></td></tr>
+                    <tr><td colspan="9"><div class="empty"><b>{{ __('No purchases yet') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table></div>

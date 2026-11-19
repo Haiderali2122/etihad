@@ -15,10 +15,12 @@ use App\Models\MachineRepair;
 use App\Models\MaterialBill;
 use App\Models\OutsidePrintReceipt;
 use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
 use App\Models\PayrollRun;
+use App\Models\PlatePurchase;
 use App\Models\PlateReturn;
 use App\Models\Purchase;
 use App\Models\SalaryAdvance;
@@ -63,6 +65,8 @@ class RecordDeletionController extends Controller
         'foreman-cash' => [ForemanCash::class, 'advances.create'],
         'plate-return' => [PlateReturn::class, 'plates.manage'],
         'material-bill' => [MaterialBill::class, 'expenses.create'],
+        'plate-purchase' => [PlatePurchase::class, 'purchases.create'],
+        'paper-loan' => [PaperLoan::class, 'paper.issue'],
         'sale-receipt' => [SaleReceipt::class, 'expenses.create'],
     ];
 

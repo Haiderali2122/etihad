@@ -6,8 +6,11 @@ use App\Models\BillPayment;
 use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\InventoryCategory;
+use App\Models\InventoryItem;
 use App\Models\MaterialBill;
 use App\Models\PlateJob;
+use App\Models\PlatePurchase;
+use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleReceipt;
 use App\Models\User;
@@ -205,5 +208,59 @@ class BillPaymentsTest extends TestCase
 
         $this->actingAs($owner)->delete(route('records.destroy', ['sale-receipt', SaleReceipt::query()->latest('id')->first()->id]))->assertSessionHasNoErrors();
         $this->assertSame(2000, $sale->refresh()->toReceive());
+    }
+
+    public function test_inventory_purchases_are_paid_in_parts_and_only_payments_reach_cash_out(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $item = InventoryItem::factory()->create();
+
+        $this->actingAs($owner)->post(route('purchases.store'), [
+            'purchased_on' => today()->subDays(3)->toDateString(), 'supplier_name' => 'Ali Traders',
+            'inventory_item_id' => $item->id, 'quantity' => 10, 'rate' => 500, 'paid_now' => 1000,
+        ])->assertSessionHasNoErrors();
+        $purchase = Purchase::query()->sole();
+        $this->assertSame(4000, $purchase->unpaid());
+        $this->assertSame(1000, (int) Expense::query()->sum('amount'));
+
+        $this->actingAs($owner)->patch(route('purchases.pay', $purchase), ['amount' => 1500, 'paid_on' => today()->subDay()->toDateString()])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'purchases']))->assertOk()
+            ->assertSee('Rs 2,500 unpaid')->assertSee('Pay all (Rs 2,500)')->assertSee(today()->subDay()->format('j M').': Rs 1,500');
+
+        $this->actingAs($owner)->post(route('purchases.pay-all'), ['paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertTrue($purchase->refresh()->isFullyPaid());
+        $this->assertSame(5000, (int) Expense::query()->sum('amount'));
+        $this->assertSame('Purchase bill', BillPayment::query()->first()->cashOutSource());
+        // Stock counts the whole purchase whatever has been paid.
+        $this->assertEqualsWithDelta(10.0, $item->refresh()->balance(), 0.001);
+    }
+
+    public function test_plates_are_bought_by_size_paid_in_parts_and_plate_jobs_take_from_stock(): void
+    {
+        $owner = User::factory()->owner()->create();
+
+        $this->actingAs($owner)->get(route('plate-stock.create'))->assertOk();
+        $this->actingAs($owner)->post(route('plate-stock.store'), [
+            'purchased_on' => today()->subDays(2)->toDateString(), 'supplier' => 'Kodak House', 'plate_size' => '20x30',
+            'plates' => 100, 'rate' => 150, 'paid_now' => 5000,
+        ])->assertSessionHasNoErrors();
+        $purchase = PlatePurchase::query()->sole();
+        $this->assertSame(15000, $purchase->amount);
+        $this->assertSame(10000, $purchase->unpaid());
+        $this->assertSame(5000, (int) Expense::query()->sum('amount'));
+
+        // A plate job of that size takes from stock; the size list shows what is in stock.
+        PlateJob::factory()->create(['plate_size' => '20X30 ', 'plates' => 12]);
+        $this->assertSame(88, PlatePurchase::stockBySize()->get('20x30')['stock']);
+        $this->actingAs($owner)->get(route('plate-jobs.create'))->assertOk()->assertSee('88 in stock');
+        $this->actingAs($owner)->get(route('plate-stock.index'))->assertOk()->assertSee('Plate stock')->assertSee('Kodak House')
+            ->assertSee('Rs 10,000 unpaid')->assertSee('Pay all (Rs 10,000)');
+
+        // The next purchase of that size offers the last price.
+        $this->actingAs($owner)->get(route('plate-stock.create'))->assertSee('\u0022kodak house\u0022:150', false);
+
+        $this->actingAs($owner)->post(route('plate-stock.pay-all'), ['paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertTrue($purchase->refresh()->isFullyPaid());
+        $this->assertSame('Plate purchase', BillPayment::query()->latest('id')->first()->cashOutSource());
     }
 }

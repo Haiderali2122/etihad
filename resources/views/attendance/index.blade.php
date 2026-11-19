@@ -6,8 +6,12 @@
     <x-page-head :title="__('Attendance')" :subtitle="__('The month at a glance. Click a day number to mark or correct that day for everyone.')">
         <x-slot:actions>
             @can('attendance.manage')
+                <a class="btn" href="{{ route('attendance.machine') }}"><x-icon name="fingerprint" />{{ __('Attendance machine') }}</a>
                 <a class="btn" href="{{ route('attendance.import') }}"><x-icon name="download" />{{ __('Import from device') }}</a>
-                <a class="btn primary" href="{{ route('attendance.day') }}"><x-icon name="fingerprint" />{{ __('Mark today') }}</a>
+                <form method="GET" action="{{ route('attendance.day') }}" class="filters" style="align-items:center">
+                    <input class="select" type="date" name="date" value="{{ today()->toDateString() }}" max="{{ today()->toDateString() }}" aria-label="{{ __('Pick a day') }}" onchange="this.form.submit()">
+                </form>
+                <a class="btn primary" href="{{ route('attendance.index') }}"><x-icon name="fingerprint" />{{ __('Today') }}</a>
             @endcan
         </x-slot:actions>
     </x-page-head>
@@ -20,8 +24,8 @@
                 @if ($next->lte(now()))<a class="btn sm" href="{{ route('attendance.index', ['month' => $next->format('Y-m')]) }}" aria-label="{{ __('Next month') }}">›</a>@endif
             </div>
             <div class="legend">
-                <span><i style="background:#7FA0DE"></i>{{ __('Present') }}</span><span><i style="background:var(--indigo)"></i>{{ __('Overtime') }}</span>
-                <span><i style="background:#E79A8C"></i>{{ __('Absent') }}</span><span><i style="background:var(--royal-soft)"></i>{{ __('Leave') }}</span>
+                <span><i class="att-key present"></i>{{ __('Present') }}</span><span><i class="att-key overtime"></i>{{ __('Overtime') }}</span>
+                <span><i class="att-key late"></i>{{ __('Late') }}</span><span><i class="att-key absent"></i>{{ __('Absent') }}</span><span><i style="background:var(--royal-soft)"></i>{{ __('Leave') }}</span>
                 <span><i style="background:var(--line)"></i>{{ __('Off') }}</span><span><i style="border:1px dashed var(--faint)"></i>{{ __('Not marked') }}</span>
             </div>
         </div>
@@ -37,7 +41,7 @@
                             @else{{ $d }}@endcan
                         </th>
                     @endforeach
-                    <th class="r">{{ __('P') }}</th><th class="r">{{ __('A') }}</th><th class="r">{{ __('OT h') }}</th>
+                    <th class="r">{{ __('P') }}</th><th class="r">{{ __('A') }}</th><th class="r">{{ __('Late') }}</th><th class="r">{{ __('Early') }}</th><th class="r">{{ __('Overtime') }}</th>
                 </tr></thead>
                 <tbody>
                 @forelse ($employees as $e)
@@ -46,18 +50,21 @@
                         <td class="att-name"><a href="{{ route('employees.show', $e) }}" style="color:inherit;text-decoration:none"><b>{{ $e->localName() }}</b></a><div class="meta">{{ $e->designation }}</div></td>
                         @foreach ($days as $d)
                             @php $a = $byDay->get($d); @endphp
-                            <td><i title="{{ $d }}: {{ $a?->status->label() ?? __('Not marked') }}{{ $a && $a->overtime_minutes ? ' · '.__('OT :h h', ['h' => round($a->overtime_minutes / 60, 1)]) : '' }}" @class([
-                                'c', 'p' => $a?->status->value === 'present' && ! $a->overtime_minutes, 'ot' => $a?->status->value === 'present' && $a->overtime_minutes,
-                                'a' => $a?->status->value === 'absent', 'l' => $a?->status->value === 'leave', 'o' => $a?->status->value === 'off',
+                            @php $tone = $a?->tone(); @endphp
+                            <td><i title="{{ $d }}: {{ $a?->status->label() ?? __('Not marked') }}@if ($a?->check_in) · {{ substr($a->check_in, 0, 5) }}–{{ $a->check_out ? substr($a->check_out, 0, 5) : '?' }}@endif{{ $a && $a->lateMinutes() ? ' · '.__('late :t', ['t' => \App\Models\Attendance::hm($a->lateMinutes())]) : '' }}{{ $a && $a->overtime_minutes ? ' · '.__('OT :t', ['t' => \App\Models\Attendance::hm($a->overtime_minutes)]) : '' }}" @class([
+                                'c', 'p' => $tone === 'present', 'ot' => $tone === 'overtime', 'lt' => $tone === 'late',
+                                'a' => $tone === 'absent', 'l' => $a?->status->value === 'leave', 'o' => $a?->status->value === 'off',
                                 'n' => ! $a && $d <= $lastDay, 'f' => ! $a && $d > $lastDay,
                             ])></i></td>
                         @endforeach
                         <td class="r num">{{ $e->attendances->where('status.value', 'present')->count() }}</td>
                         <td class="r num">{{ $e->attendances->where('status.value', 'absent')->count() }}</td>
-                        <td class="r num">{{ \App\Models\InventoryItem::qty($e->attendances->sum('overtime_minutes') / 60) }}</td>
+                        <td class="r num att-late">{{ \App\Models\Attendance::hm((int) $e->attendances->sum(fn ($a) => $a->lateMinutes())) }}</td>
+                        <td class="r num att-early">{{ \App\Models\Attendance::hm((int) $e->attendances->sum(fn ($a) => $a->earlyMinutes())) }}</td>
+                        <td class="r num att-ot-total">{{ \App\Models\Attendance::hm((int) $e->attendances->sum('overtime_minutes')) }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ count($days) + 4 }}"><div class="empty"><b>{{ __('No active staff') }}</b></div></td></tr>
+                    <tr><td colspan="{{ count($days) + 6 }}"><div class="empty"><b>{{ __('No active staff') }}</b></div></td></tr>
                 @endforelse
                 </tbody>
             </table>

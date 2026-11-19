@@ -273,16 +273,16 @@ class PressNotesChangesTest extends TestCase
     public function test_payments_on_other_tabs_mirror_into_cash_out_and_follow_approval(): void
     {
         CashFloat::factory()->create(['user_id' => $this->manager->id, 'amount' => 100000]);
-        $purchase = Purchase::factory()->create(['amount' => 18500, 'created_by' => $this->manager->id]);
+        $purchase = Purchase::factory()->paid()->create(['amount' => 18500, 'created_by' => $this->manager->id]);
         $repair = MachineRepair::factory()->create(['amount_paid' => 4000, 'created_by' => $this->manager->id]);
         $advance = SalaryAdvance::factory()->create(['amount' => 3000, 'created_by' => $this->manager->id]);
 
         $this->assertSame(18500 + 4000 + 3000, 100000 - $this->manager->cashInHand());
-        $this->assertSame(ApprovalStatus::Pending, $purchase->cashOutExpense->status);
+        $this->assertSame(ApprovalStatus::Pending, $purchase->payments()->sole()->cashOutExpense->status);
         $this->assertSame(0, app(ApprovalController::class)->pendingItems()->where('type', 'expense')->count(), 'Mirrored expenses are decided with their payment.');
 
         $purchase->reject($this->owner, 'Wrong bill');
-        $this->assertSame(ApprovalStatus::Rejected, $purchase->cashOutExpense()->sole()->status);
+        $this->assertSame(ApprovalStatus::Rejected, $purchase->payments()->sole()->cashOutExpense()->sole()->status);
         $this->assertSame(4000 + 3000, 100000 - $this->manager->cashInHand());
 
         $repair->delete();
@@ -354,8 +354,8 @@ class PressNotesChangesTest extends TestCase
 
     public function test_a_payment_made_on_another_tab_shows_where_it_came_from(): void
     {
-        $purchase = Purchase::factory()->create(['amount' => 18500, 'bill_no' => 'B-77', 'created_by' => $this->owner->id]);
-        $expense = $purchase->cashOutExpense;
+        $purchase = Purchase::factory()->paid()->create(['amount' => 18500, 'bill_no' => 'B-77', 'created_by' => $this->owner->id]);
+        $expense = $purchase->payments()->sole()->cashOutExpense;
 
         $this->actingAs($this->owner)->get(route('expenses.index'))->assertSee('Purchase bill')->assertSee('Rs 18,500');
         $this->actingAs($this->owner)->get(route('expenses.show', $expense))->assertOk()

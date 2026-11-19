@@ -18,6 +18,7 @@
                 <x-field name="rate" type="number" step="0.01" min="0" :label="__('Rate (Rs)')" required />
                 <div class="field"><label>{{ __('Amount') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" id="amountOut" style="font-size:22px">Rs 0</div></div></div>
                 <x-field name="bill_no" :label="__('Bill no.')" />
+                <x-field name="paid_now" type="number" min="0" step="1" :label="__('Paid now (Rs)')" :hint="__('Leave empty if nothing is paid yet; the rest stays unpaid on the bill.')" />
                 <x-field name="attachment" type="file" :label="__('Bill photo / PDF')" />
                 <x-field name="note" :label="__('Note')" />
             </div></div>

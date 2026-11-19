@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\ApprovalStatus;
 use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
@@ -42,14 +43,27 @@ class PaperStock
             ->get()
             ->keyBy(fn ($row) => "{$row->paper_type_id}-{$row->party_id}");
 
-        $keys = $received->keys()->merge($issued->keys())->unique();
+        // Shortages paid back in rims: out of the order party's stock, back into the lender's.
+        $moved = PaperLoan::query()->where('settled_how', PaperLoan::SettledWithRims)
+            ->when($paperTypeId, fn ($q) => $q->where('paper_type_id', $paperTypeId))
+            ->get(['paper_type_id', 'borrower_party_id', 'lender_party_id', 'return_party_id', 'rims']);
+        $movedIn = [];
+        $movedOut = [];
+        foreach ($moved as $loan) {
+            $movedOut["{$loan->paper_type_id}-{$loan->borrower_party_id}"] = ($movedOut["{$loan->paper_type_id}-{$loan->borrower_party_id}"] ?? 0) + $loan->rims;
+            $to = $loan->returnPartyId();
+            $movedIn["{$loan->paper_type_id}-{$to}"] = ($movedIn["{$loan->paper_type_id}-{$to}"] ?? 0) + $loan->rims;
+        }
+        $movedKeys = collect(array_keys($movedIn + $movedOut))->filter(fn ($k) => ! $partyId || (int) explode('-', $k)[1] === $partyId);
+
+        $keys = $received->keys()->merge($issued->keys())->merge($movedKeys)->unique();
         $paperTypes = PaperType::query()->findMany($keys->map(fn ($k) => (int) explode('-', $k)[0]))->keyBy('id');
         $parties = Party::query()->findMany($keys->map(fn ($k) => (int) explode('-', $k)[1]))->keyBy('id');
 
-        return $keys->map(function (string $key) use ($received, $issued, $paperTypes, $parties): array {
+        return $keys->map(function (string $key) use ($received, $issued, $paperTypes, $parties, $movedIn, $movedOut): array {
             [$typeId, $partyId] = array_map('intval', explode('-', $key));
-            $in = (int) ($received[$key]->received ?? 0);
-            $out = (int) ($issued[$key]->issued ?? 0);
+            $in = (int) ($received[$key]->received ?? 0) + ($movedIn[$key] ?? 0);
+            $out = (int) ($issued[$key]->issued ?? 0) + ($movedOut[$key] ?? 0);
 
             return [
                 'paper_type' => $paperTypes[$typeId],

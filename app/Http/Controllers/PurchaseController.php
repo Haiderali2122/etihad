@@ -97,13 +97,17 @@ class PurchaseController extends Controller
 
     public function store(StorePurchaseRequest $request): RedirectResponse
     {
-        $data = $request->safe()->except('attachment');
+        $data = $request->safe()->except(['attachment', 'paid_now']);
 
         $purchase = Purchase::create($data + [
             'amount' => (int) round((float) $data['quantity'] * (float) $data['rate']),
             'attachment' => $this->storeAttachment($request, 'purchases'),
             'created_by' => $request->user()->id,
         ]);
+
+        if ((int) $request->validated('paid_now') > 0) {
+            $purchase->pay((int) $request->validated('paid_now'), $purchase->purchased_on, $request->user()->id);
+        }
 
         $category = $purchase->item?->category;
         $tab = $category?->show_as_tab ? 'material-'.$category->id : 'purchases';

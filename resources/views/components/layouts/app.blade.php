@@ -11,6 +11,7 @@
         ['group' => __('Control')],
         ['route' => 'paper.index', 'match' => ['paper*', 'godowns.*'], 'icon' => 'paper', 'label' => __('Paper stock'), 'can' => 'paper.view'],
         ['route' => 'inventory.index', 'match' => ['inventory*', 'purchases.*'], 'on' => request()->routeIs('inventory*', 'purchases.*') && ! $materialTab, 'icon' => 'box', 'label' => __('Inventory'), 'can' => 'purchases.view'],
+        ['route' => 'plate-stock.index', 'match' => 'plate-stock.*', 'icon' => 'file', 'label' => __('Plate stock'), 'can' => 'purchases.view'],
         ...$materials->map(fn ($m) => ['route' => 'inventory.index', 'params' => ['tab' => 'material-'.$m->id], 'match' => 'inventory.index', 'on' => $materialTab === 'material-'.$m->id, 'icon' => 'drop', 'label' => $m->localName(), 'can' => 'purchases.view'])->all(),
         ['route' => 'expenses.index', 'match' => ['expenses.*', 'expense-heads.*'], 'icon' => 'wallet', 'label' => __('Cash-out'), 'can' => 'expenses.view'],
         ['route' => 'machines.index', 'match' => 'machine*', 'icon' => 'wrench', 'label' => __('Machines'), 'can' => 'machines.view'],

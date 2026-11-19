@@ -196,7 +196,7 @@ class RecordDeletionTest extends TestCase
         $this->actingAs($owner)->get(route('materials.purchase', $diesel))->assertOk()->assertSee('Other… (type a new one)');
         $buy = fn (string $item) => $this->actingAs($owner)->post(route('purchases.store'), [
             'purchased_on' => today()->toDateString(), 'party_id' => $supplier->id, 'material_category_id' => $diesel->id,
-            'inventory_item_id' => OtherOption::Value, 'inventory_item_id_other' => $item, 'quantity' => 10, 'rate' => 300,
+            'inventory_item_id' => OtherOption::Value, 'inventory_item_id_other' => $item, 'quantity' => 10, 'rate' => 300, 'paid_now' => 3000,
         ])->assertRedirect(route('inventory.index', ['tab' => 'material-'.$diesel->id]));
 
         $buy('Mitti ka tel');
@@ -234,7 +234,8 @@ class RecordDeletionTest extends TestCase
 
         $this->actingAs($owner)->get(route('materials.receipt', $purchases->first()))->assertOk()
             ->assertSeeInOrder(['Shell Ravi Road', 'Diesel', 'Mitti ka tel', 'Rs 6,600']);
-        // Both lines come off the manager's cash, and the tab's Receipt opens the combined receipt.
+        // Once paid, both lines come off the manager's cash, and the tab's Receipt opens the combined receipt.
+        $purchases->each(fn (Purchase $p) => $p->pay((int) $p->amount, $p->purchased_on, $owner->id));
         $this->assertSame(6600, (int) Expense::query()->where('inventory_category_id', $diesel->id)->sum('amount'));
         $this->actingAs($owner)->get(route('inventory.index', ['tab' => 'material-'.$diesel->id]))->assertSee(route('materials.receipt', $purchases->first()), false);
 

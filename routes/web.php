@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceMachineController;
+use App\Http\Controllers\AttendanceSyncController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BillPaymentController;
 use App\Http\Controllers\BookController;
@@ -35,6 +37,7 @@ use App\Http\Controllers\PaperTypeController;
 use App\Http\Controllers\PartyController;
 use App\Http\Controllers\PayrollRunController;
 use App\Http\Controllers\PlateJobController;
+use App\Http\Controllers\PlatePurchaseController;
 use App\Http\Controllers\ProcessorController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\RecordDeletionController;
@@ -70,6 +73,7 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor('show', 'can:paper.view');
     Route::resource('paper-issues', PaperIssueController::class)->only(['create', 'store'])->middleware('can:paper.issue');
     Route::patch('paper-issues/{paperIssue}/settle', [PaperIssueController::class, 'settle'])->middleware('can:paper.issue')->name('paper-issues.settle');
+    Route::patch('paper-loans/{paperLoan}/settle', [PaperIssueController::class, 'settleLoan'])->middleware('can:paper.issue')->name('paper-loans.settle');
     Route::resource('godowns', GodownController::class)->except('show')->middleware('can:godowns.manage');
     Route::resource('paper-types', PaperTypeController::class)->except(['show', 'destroy'])->middleware('can:paper.types');
 
@@ -150,6 +154,17 @@ Route::middleware('auth')->group(function () {
     Route::patch('inventory-issues/{inventoryIssue}/settle', [InventoryIssueController::class, 'settle'])->middleware('can:inventory.issue')->name('inventory-issues.settle');
     Route::redirect('purchases', 'inventory?tab=purchases')->name('purchases.index');
     Route::resource('purchases', PurchaseController::class)->only(['create', 'store'])->middleware('can:purchases.create');
+    Route::get('plate-stock', [PlatePurchaseController::class, 'index'])->middleware('can:purchases.view')->name('plate-stock.index');
+    Route::middleware('can:purchases.create')->group(function () {
+        Route::get('plate-stock/create', [PlatePurchaseController::class, 'create'])->name('plate-stock.create');
+        Route::post('plate-stock', [PlatePurchaseController::class, 'store'])->name('plate-stock.store');
+        Route::get('plate-stock/{platePurchase}/edit', [PlatePurchaseController::class, 'edit'])->name('plate-stock.edit');
+        Route::put('plate-stock/{platePurchase}', [PlatePurchaseController::class, 'update'])->name('plate-stock.update');
+        Route::patch('plate-stock/{platePurchase}/pay', [BillPaymentController::class, 'payPlatePurchase'])->name('plate-stock.pay');
+        Route::post('plate-stock/pay-all', [BillPaymentController::class, 'payAllPlatePurchases'])->name('plate-stock.pay-all');
+    });
+    Route::patch('purchases/{purchase}/pay', [BillPaymentController::class, 'payPurchase'])->middleware('can:purchases.create')->name('purchases.pay');
+    Route::post('purchases/pay-all', [BillPaymentController::class, 'payAllPurchases'])->middleware('can:purchases.create')->name('purchases.pay-all');
     Route::get('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'createMaterial'])->middleware('can:purchases.create')->name('materials.purchase');
     Route::post('inventory/materials/{inventory_category}/purchase', [PurchaseController::class, 'storeMaterial'])->middleware('can:purchases.create')->name('materials.purchase.store');
     Route::get('inventory/purchases/{purchase}/receipt', [PurchaseController::class, 'materialReceipt'])->middleware('can:purchases.view')->name('materials.receipt');
@@ -190,6 +205,13 @@ Route::middleware('auth')->group(function () {
         Route::get('attendance/day', [AttendanceController::class, 'day'])->name('attendance.day');
         Route::put('attendance/day', [AttendanceController::class, 'saveDay'])->name('attendance.save-day');
         Route::get('attendance/import', [AttendanceController::class, 'importForm'])->name('attendance.import');
+        Route::get('attendance/machine', [AttendanceMachineController::class, 'index'])->name('attendance.machine');
+        Route::patch('attendance/machine/{device}', [AttendanceMachineController::class, 'approve'])->name('attendance.machine.approve');
+        Route::post('attendance/machine/add-all', [AttendanceMachineController::class, 'addAll'])->middleware('can:staff.manage')->name('attendance.machine.add-all');
+        Route::get('attendance/machine/{device}/reader-program', [AttendanceSyncController::class, 'program'])->name('attendance.machine.reader-program');
+        Route::get('attendance/machine/{device}/reader-settings', [AttendanceSyncController::class, 'settingsFile'])->name('attendance.machine.reader-settings');
+        Route::post('attendance/machine/{device}/fetch', [AttendanceMachineController::class, 'fetch'])->name('attendance.machine.fetch');
+        Route::patch('attendance/machine/people/{deviceUser}', [AttendanceMachineController::class, 'link'])->name('attendance.machine.link');
         Route::post('attendance/import', [AttendanceController::class, 'import'])->name('attendance.import.store');
     });
 

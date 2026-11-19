@@ -21,8 +21,10 @@ class EmployeeController extends Controller
             ->when($status !== 'all', fn ($q) => $q->where('is_active', $status === 'active'))
             ->when($search, fn ($q) => $q->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%")->orWhere('designation', 'like', "%{$search}%")))
             ->withSum(['advances as open_advances' => fn ($q) => $q->approved()->whereNull('payroll_run_id')], 'amount')
-            ->orderBy('name')
-            ->get();
+            ->get()
+            // By employee no. as numbers (1, 2, … 10, not 1, 10, 2); the same as the attendance machine number.
+            ->sortBy(fn (Employee $e) => $e->code, SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
 
         return view('employees.index', [
             'employees' => $employees,
@@ -34,9 +36,16 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function create(): View
+    /**
+     * Opened from the Attendance machine page, the name and machine number come filled in.
+     */
+    public function create(Request $request): View
     {
-        return $this->form(new Employee(['is_active' => true, 'joined_on' => today()]));
+        return $this->form(new Employee([
+            'is_active' => true, 'joined_on' => today(),
+            'name' => mb_substr(trim((string) $request->query('name')), 0, 120) ?: null,
+            'device_code' => mb_substr(trim((string) $request->query('device_code')), 0, 30) ?: null,
+        ]));
     }
 
     public function store(EmployeeRequest $request): RedirectResponse
