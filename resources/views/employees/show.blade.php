@@ -8,6 +8,13 @@
                 @endif
             @endcan
             @can('staff.manage')
+                @if ($employee->is_active)
+                    <button type="button" class="btn" style="color:var(--bad)" data-leave="{{ route('employees.leave', $employee) }}" data-name="{{ $employee->name }}"><x-icon name="x" />{{ __('Left or inactive') }}</button>
+                @else
+                    <form method="POST" action="{{ route('employees.rejoin', $employee) }}" style="display:inline">@csrf @method('PATCH')
+                        <button type="submit" class="btn"><x-icon name="check" />{{ __('Active again') }}</button>
+                    </form>
+                @endif
                 <a class="btn primary" href="{{ route('employees.edit', $employee) }}"><x-icon name="edit" />{{ __('Edit') }}</a>
             @endcan
         </x-slot:actions>
@@ -102,5 +109,6 @@
         @if ($canDelete)
             <x-delete-button :action="route('employees.destroy', $employee)" :confirm="__('Delete :name?', ['name' => $employee->name])" :label="__('Delete employee')" />
         @endif
+        @include('employees._leave-dialog')
     @endcan
 </x-layouts.app>

@@ -506,13 +506,15 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
      */
     public function test_dispatch_against_an_unprinted_order_is_refused(): void
     {
+        // Saved orders go straight to printing (no approval); still not at binding.
         $order = $this->order(WorkOrderStage::Waiting, 1000);
+        $stage = $order->refresh()->stage;
         $buyer = $this->buyer();
 
         $this->actingAs($this->owner)->post(route('dispatches.store'), $this->load($buyer, ['work_order_id' => $order->id, 'bundles' => 40, 'copies_per_bundle' => 25]))
             ->assertSessionHasErrors('work_order_id');
 
-        $this->assertSame(WorkOrderStage::Waiting, $order->refresh()->stage);
+        $this->assertSame($stage, $order->refresh()->stage);
     }
 
     /**

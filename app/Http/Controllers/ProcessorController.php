@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\PartyKind;
 use App\Models\Party;
 use App\Models\PlateJob;
+use App\Models\ProcessorPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -38,6 +39,7 @@ class ProcessorController extends Controller
             'returned' => (int) $jobs->sum('returned_plates'),
             'billed' => (int) $jobs->sum('amount'),
             'paid' => (int) $jobs->sum('paid_amount'),
+            'advance' => (int) ProcessorPayment::query()->where('party_id', $processor->id)->get()->sum(fn (ProcessorPayment $p) => $p->left()),
         ]);
     }
 

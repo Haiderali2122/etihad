@@ -26,7 +26,7 @@
             <thead><tr><th>{{ __('Employee') }}</th><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($advances as $a)
-                <tr>
+                <tr data-href="{{ route('records.show', ['salary-advance', $a->id]) }}">
                     <td><a class="main" href="{{ route('employees.show', $a->employee) }}" style="color:inherit;text-decoration:none">{{ $a->employee->localName() }}</a><div class="meta">{{ $a->note }}</div></td>
                     <td>{{ $a->given_on->format('j M Y') }}</td>
                     <td>{{ $a->kind->label() }}@if ($a->foremanSheet)<div class="meta"><a href="{{ route('foreman-sheets.show', $a->foremanSheet) }}">{{ __('via :name', ['name' => $a->foremanSheet->foreman->name]) }}</a></div>@endif</td>

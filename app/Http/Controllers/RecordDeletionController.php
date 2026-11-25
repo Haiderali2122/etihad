@@ -22,11 +22,13 @@ use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\PlatePurchase;
 use App\Models\PlateReturn;
+use App\Models\ProcessorPayment;
 use App\Models\Purchase;
 use App\Models\SalaryAdvance;
 use App\Models\Sale;
 use App\Models\SaleReceipt;
 use App\Models\WasteEntry;
+use App\Models\YounusPayment;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -67,6 +69,8 @@ class RecordDeletionController extends Controller
         'material-bill' => [MaterialBill::class, 'expenses.create'],
         'plate-purchase' => [PlatePurchase::class, 'purchases.create'],
         'paper-loan' => [PaperLoan::class, 'paper.issue'],
+        'processor-payment' => [ProcessorPayment::class, 'plates.manage'],
+        'younus-payment' => [YounusPayment::class, 'orders.manage'],
         'sale-receipt' => [SaleReceipt::class, 'expenses.create'],
     ];
 

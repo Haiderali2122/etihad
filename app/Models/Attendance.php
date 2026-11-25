@@ -8,11 +8,12 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One employee's attendance for one day, entered by hand or imported from the biometric device.
  */
-#[Fillable(['employee_id', 'date', 'status', 'check_in', 'check_out', 'overtime_minutes', 'source', 'note'])]
+#[Fillable(['employee_id', 'date', 'status', 'shift', 'check_in', 'check_out', 'overtime_minutes', 'source', 'note'])]
 class Attendance extends Model
 {
     /** @use HasFactory<AttendanceFactory> */
@@ -35,20 +36,31 @@ class Attendance extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public const DayShift = 'day';
+
+    public const NightShift = 'night';
+
+    /** Overtime allowance for staying until the next shift starts (sleep hours). */
+    public const StayOverAllowance = 240;
+
     /**
-     * The shift and its graces, in minutes: [start, end, late grace, early grace, overtime grace].
+     * A shift and its graces, in minutes from the shift day's midnight: [start, end, late grace, early grace,
+     * overtime grace]. The night shift's end is the next morning (e.g. 21:00 to 29:00 = 5 AM).
      *
      * @return array{0: int, 1: int, 2: int, 3: int, 4: int}
      */
-    public static function shift(): array
+    public static function shift(string $kind = self::DayShift): array
     {
-        return once(function (): array {
+        return once(function () use ($kind): array {
             $rules = Setting::payrollRules();
+            $night = $kind === self::NightShift;
+            $start = static::minutesOf($night ? $rules['night_start'] : $rules['shift_start']) ?? ($night ? 1260 : 540);
+            $end = static::minutesOf($night ? $rules['night_end'] : $rules['shift_end']) ?? ($night ? 300 : 1020);
+            if ($end <= $start) {
+                $end += 1440;
+            }
 
-            return [
-                static::minutesOf($rules['shift_start']) ?? 540, static::minutesOf($rules['shift_end']) ?? 1020,
-                max(0, (int) $rules['late_grace']), max(0, (int) $rules['early_grace']), max(0, (int) $rules['overtime_grace']),
-            ];
+            return [$start, $end, max(0, (int) $rules['late_grace']), max(0, (int) $rules['early_grace']), max(0, (int) $rules['overtime_grace'])];
         });
     }
 
@@ -62,6 +74,30 @@ class Attendance extends Model
     }
 
     /**
+     * In and out on the shift's clock: a night-shift time after midnight is the next day (+24h), and an Out not
+     * after the In is the next day too (in at 9 AM, out at 9 AM = out the next morning).
+     *
+     * @return array{0: ?int, 1: ?int}
+     */
+    public static function window(?string $in, ?string $out, string $kind = self::DayShift): array
+    {
+        [$start] = static::shift($kind);
+        $i = static::minutesOf($in);
+        if ($i !== null && $i < $start - 720) {
+            $i += 1440;
+        }
+        $o = static::minutesOf($out);
+        if ($o !== null) {
+            $ref = $i ?? $start;
+            while ($o <= $ref) {
+                $o += 1440;
+            }
+        }
+
+        return [$i, $o];
+    }
+
+    /**
      * Within the grace it does not count; past it, the whole time counts (late 9:25 = 25 minutes, not 5).
      */
     public static function beyondGrace(int $minutes, int $grace): int
@@ -70,14 +106,32 @@ class Attendance extends Model
     }
 
     /**
-     * Overtime: time after the shift ends, once past the overtime grace (with 15: up to 5:15 is none, 5:40 = 40m).
+     * Overtime for a day. Sunday is the paid holiday, so all of Sunday's work is overtime. Other days: time after
+     * the shift ends (past the grace). Staying until the next shift starts adds 4 hours for sleep: in at 9 AM and
+     * out at 9 AM the next day = 16 hours + 4 = 20 hours.
+     */
+    public static function overtimeFor(string $date, ?string $in, ?string $out, string $kind = self::DayShift): int
+    {
+        [$i, $o] = static::window($in, $out, $kind);
+        if ($o === null) {
+            return 0;
+        }
+        [$start, $end, , , $grace] = static::shift($kind);
+        $stayedOver = $o >= $start + 1440 ? static::StayOverAllowance : 0;
+
+        if (Carbon::parse($date)->isSunday()) {
+            return ($i !== null ? max(0, $o - $i) : 0) + $stayedOver;
+        }
+
+        return static::beyondGrace(max(0, $o - $end), $grace) + $stayedOver;
+    }
+
+    /**
+     * Overtime on a working day shift for a given Out (used where only the Out is known).
      */
     public static function overtimeAfterShift(?string $checkOut): int
     {
-        $out = static::minutesOf($checkOut);
-        [, $end, , , $grace] = static::shift();
-
-        return $out === null ? 0 : static::beyondGrace(max(0, $out - $end), $grace);
+        return static::overtimeFor('2001-01-01', null, $checkOut);
     }
 
     public function isPresent(): bool
@@ -85,29 +139,48 @@ class Attendance extends Model
         return $this->status === AttendanceStatus::Present;
     }
 
-    /**
-     * Late minutes: with the usual 20 minutes' grace, up to 9:20 is on time and after that the whole time from 9:00
-     * counts (9:25 = 25).
-     */
-    public function lateMinutes(): int
+    public function shiftKind(): string
     {
-        $in = static::minutesOf($this->check_in);
-        [$start, , $grace] = static::shift();
-
-        return $this->isPresent() && $in !== null ? static::beyondGrace(max(0, $in - $start), $grace) : 0;
+        return $this->shift === self::NightShift ? self::NightShift : self::DayShift;
     }
 
     /**
-     * Early minutes: with the usual 15 minutes' grace, leaving from 4:45 is not early; before that the whole time
-     * before 5:00 counts (4:30 = 30).
+     * Late minutes: up to 20 minutes past the shift start is on time; after that the whole time counts. Not on
+     * Sunday, the holiday.
+     */
+    public function lateMinutes(): int
+    {
+        if (! $this->isPresent() || $this->date?->isSunday()) {
+            return 0;
+        }
+        [$i] = static::window($this->check_in, null, $this->shiftKind());
+        [$start, , $grace] = static::shift($this->shiftKind());
+
+        return $i !== null ? static::beyondGrace(max(0, $i - $start), $grace) : 0;
+    }
+
+    /**
+     * Early minutes: leaving within 15 minutes of the shift end is not early; before that the whole time counts.
      */
     public function earlyMinutes(): int
     {
-        $out = static::minutesOf($this->check_out);
-        $in = static::minutesOf($this->check_in);
-        [, $end, , $grace] = static::shift();
+        if (! $this->isPresent() || $this->date?->isSunday()) {
+            return 0;
+        }
+        [, $o] = static::window($this->check_in, $this->check_out, $this->shiftKind());
+        [, $end, , $grace] = static::shift($this->shiftKind());
 
-        return $this->isPresent() && $out !== null && ($in === null || $out > $in) ? static::beyondGrace(max(0, $end - $out), $grace) : 0;
+        return $o !== null ? static::beyondGrace(max(0, $end - $o), $grace) : 0;
+    }
+
+    /**
+     * Minutes between In and Out on the shift's clock.
+     */
+    public function workedMinutes(): int
+    {
+        [$i, $o] = static::window($this->check_in, $this->check_out, $this->shiftKind());
+
+        return $i !== null && $o !== null ? max(0, $o - $i) : 0;
     }
 
     /**

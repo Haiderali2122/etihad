@@ -3,11 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ApprovalStatus;
-use App\Enums\PartyKind;
 use App\Models\BillPayment;
 use App\Models\InventoryCategory;
 use App\Models\MaterialBill;
-use App\Models\Party;
 use App\Models\PlateJob;
 use App\Models\PlatePurchase;
 use App\Models\Purchase;
@@ -88,35 +86,6 @@ class BillPaymentController extends Controller
             ->orderBy('job_on')->orderBy('id')->get();
 
         return $this->payAll($request, $jobs);
-    }
-
-    /**
-     * Any amount given to a processor: it clears their oldest unpaid plate bills first; what is left stays unpaid.
-     */
-    public function payProcessor(Request $request, Party $processor): RedirectResponse
-    {
-        abort_unless($processor->kind === PartyKind::PlateProcessor, 404);
-        $jobs = PlateJob::query()->where('party_id', $processor->id)->whereColumn('paid_amount', '<', 'amount')->orderBy('job_on')->orderBy('id')->get();
-        $owed = (int) $jobs->sum(fn (PlateJob $j) => $j->unpaid());
-
-        $data = $request->validate([
-            'amount' => ['required', 'integer', 'min:1', 'max:'.max(1, $owed)],
-            'paid_on' => ['required', 'date', 'before_or_equal:today'],
-            'note' => ['nullable', 'string', 'max:255'],
-        ], ['amount.max' => __('Only Rs :n is unpaid.', ['n' => number_format($owed)])]);
-
-        $left = (int) $data['amount'];
-        DB::transaction(function () use ($jobs, &$left, $data, $request): void {
-            foreach ($jobs as $job) {
-                if ($left <= 0) {
-                    break;
-                }
-                $left -= (int) $job->pay($left, $data['paid_on'], $request->user()->id, $data['note'] ?? null)?->amount;
-            }
-        });
-        $remaining = $owed - ((int) $data['amount'] - $left);
-
-        return back()->with('status', __('Rs :paid paid to :name; Rs :left still unpaid.', ['paid' => number_format((int) $data['amount'] - $left), 'name' => $processor->name, 'left' => number_format($remaining)]));
     }
 
     /**

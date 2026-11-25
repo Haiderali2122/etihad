@@ -47,6 +47,7 @@ class AttendanceImporter
         }
 
         $employees = Employee::query()->get();
+        $shiftOf = $employees->pluck('shift', 'id')->all();
         $days = [];
 
         foreach ($rows as $number => $row) {
@@ -118,7 +119,8 @@ class AttendanceImporter
                 'check_in' => $in?->format('H:i'),
                 'check_out' => $out?->format('H:i'),
                 // The report's own OT Time when it has one; otherwise time after the shift ends.
-                'overtime_minutes' => $present ? (int) ($day['overtime'] ?? Attendance::overtimeAfterShift($out?->format('H:i'))) : 0,
+                'shift' => $shiftOf[$employeeId] ?? Attendance::DayShift,
+                'overtime_minutes' => $present ? (int) ($day['overtime'] ?? Attendance::overtimeFor($date, $in?->format('H:i'), $out?->format('H:i'), $shiftOf[$employeeId] ?? Attendance::DayShift)) : 0,
                 'source' => 'device',
             ])->save();
 

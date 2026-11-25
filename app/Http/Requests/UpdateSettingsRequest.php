@@ -23,6 +23,7 @@ class UpdateSettingsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'approvals_required' => ['nullable', 'boolean'],
             'manager_daily_limit' => ['required', 'integer', 'min:0'],
             'default_wastage_percent' => ['required', 'numeric', 'min:0', 'max:50'],
             'ot_divisor' => ['required', 'numeric', 'min:1', 'max:24'],
@@ -34,6 +35,8 @@ class UpdateSettingsRequest extends FormRequest
             'pay_day' => ['required', 'integer', 'min:1', 'max:28'],
             'shift_start' => ['nullable', 'date_format:H:i'],
             'shift_end' => ['nullable', 'date_format:H:i', 'after:shift_start'],
+            'night_start' => ['nullable', 'date_format:H:i'],
+            'night_end' => ['nullable', 'date_format:H:i'],
             'late_grace' => ['nullable', 'integer', 'min:0', 'max:120'],
             'early_grace' => ['nullable', 'integer', 'min:0', 'max:120'],
             'overtime_grace' => ['nullable', 'integer', 'min:0', 'max:120'],

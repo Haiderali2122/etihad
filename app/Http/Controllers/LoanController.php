@@ -36,7 +36,7 @@ class LoanController extends Controller
     public function create(Request $request): View
     {
         return view('loans.create', [
-            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'employees' => Employee::query()->active()->byNumber()->get(),
             'employeeId' => $request->integer('employee') ?: null,
         ]);
     }
@@ -95,7 +95,7 @@ class LoanController extends Controller
 
         return view('loans.create', [
             'loan' => $loan,
-            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($loan->employee_id))->orderBy('name')->get(),
+            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($loan->employee_id))->byNumber()->get(),
             'employeeId' => $loan->employee_id,
         ]);
     }

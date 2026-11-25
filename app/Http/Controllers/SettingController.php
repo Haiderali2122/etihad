@@ -12,6 +12,7 @@ class SettingController extends Controller
     public function edit(): View
     {
         return view('settings.edit', [
+            'approvalsRequired' => (bool) Setting::get(Setting::ApprovalsRequired, true),
             'dailyLimit' => (int) Setting::get(Setting::ManagerDailyLimit, 0),
             'defaultWastage' => (float) Setting::get(Setting::DefaultWastagePercent, 3),
             'payroll' => Setting::payrollRules(),
@@ -20,6 +21,9 @@ class SettingController extends Controller
 
     public function update(UpdateSettingsRequest $request): RedirectResponse
     {
+        if ($request->has('approvals_required')) {
+            Setting::put(Setting::ApprovalsRequired, $request->boolean('approvals_required') ? '1' : '0');
+        }
         Setting::put(Setting::ManagerDailyLimit, $request->integer('manager_daily_limit'));
         Setting::put(Setting::DefaultWastagePercent, $request->input('default_wastage_percent'));
 
@@ -34,6 +38,8 @@ class SettingController extends Controller
         // The shift: 9 to 5 unless set.
         Setting::put(Setting::ShiftStart, $request->input('shift_start') ?: '09:00');
         Setting::put(Setting::ShiftEnd, $request->input('shift_end') ?: '17:00');
+        Setting::put(Setting::NightShiftStart, $request->input('night_start') ?: '21:00');
+        Setting::put(Setting::NightShiftEnd, $request->input('night_end') ?: '05:00');
         Setting::put(Setting::LateGraceMinutes, $request->filled('late_grace') ? $request->integer('late_grace') : 20);
         Setting::put(Setting::EarlyGraceMinutes, $request->filled('early_grace') ? $request->integer('early_grace') : 15);
         Setting::put(Setting::OvertimeGraceMinutes, $request->filled('overtime_grace') ? $request->integer('overtime_grace') : 15);

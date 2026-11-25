@@ -12,7 +12,7 @@
             <thead><tr><th>{{ __('Load') }}</th><th>{{ __('Date') }}</th><th>{{ __('Buyer') }}</th><th>{{ __('Book') }}</th><th class="r">{{ __('Bundles') }}</th><th class="r">{{ __('Copies') }}</th><th class="r">{{ __('Labour') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($dispatches as $d)
-                <tr>
+                <tr data-href="{{ route('records.show', ['dispatch', $d->id]) }}">
                     <td><a class="main" href="{{ route('dispatches.show', $d) }}" style="color:inherit;text-decoration:none">{{ $d->number }}</a>@if ($d->workOrder)<div class="meta">{{ $d->workOrder->number }}</div>@endif</td>
                     <td>{{ $d->dispatched_on->format('j M Y') }}@if ($d->truck_no)<div class="meta">{{ $d->truck_no }}</div>@endif</td>
                     <td>{{ $d->buyer->name }}<div class="meta">{{ $d->destination }}</div></td>

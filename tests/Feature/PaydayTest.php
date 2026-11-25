@@ -39,8 +39,8 @@ class PaydayTest extends TestCase
         Carbon::setTestNow('2026-11-22 10:00:00');
         $this->owner = User::factory()->owner()->create();
         $this->foreman = Employee::factory()->create(['name' => 'Ghulam Rasool', 'is_foreman' => true, 'monthly_salary' => 50000, 'joined_on' => '2025-01-01']);
-        foreach (['Ali', 'Ahmed', 'Asad', 'Haseeb'] as $name) {
-            $this->team[$name] = Employee::factory()->create(['name' => $name, 'foreman_id' => $this->foreman->id, 'monthly_salary' => 30000, 'joined_on' => '2025-01-01']);
+        foreach (['Ali', 'Ahmed', 'Asad', 'Haseeb'] as $i => $name) {
+            $this->team[$name] = Employee::factory()->create(['name' => $name, 'code' => (string) ($i + 1), 'foreman_id' => $this->foreman->id, 'monthly_salary' => 30000, 'joined_on' => '2025-01-01']);
         }
         $this->bilal = Employee::factory()->create(['name' => 'Bilal Khan', 'monthly_salary' => 27000, 'joined_on' => '2025-01-01']);
     }
@@ -81,7 +81,7 @@ class PaydayTest extends TestCase
     {
         $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-11']))->assertOk()
             ->assertSee('Advance salary')->assertSee('Already taken')->assertSee('Give now')
-            ->assertSeeInOrder(['Ghulam Rasool', 'Ahmed', 'Ali', 'Asad', 'Haseeb', 'Bilal Khan'])
+            ->assertSeeInOrder(['Ghulam Rasool', 'Ali', 'Ahmed', 'Asad', 'Haseeb', 'Bilal Khan']) // foreman, then his team by number
             ->assertSee('value="15000"', false); // half of a 30,000 salary to start with
 
         $this->save22nd(
@@ -200,5 +200,97 @@ class PaydayTest extends TestCase
         $this->actingAs($this->owner)->get(route('salary-advances.index'))->assertOk()
             ->assertDontSee('Give advance')->assertDontSee('Foreman sheet')->assertSee('Advance salary (22nd)')->assertSee('Give loan');
         $this->actingAs($this->owner)->get(route('employees.show', $this->team['Ali']))->assertOk()->assertDontSee('Give advance');
+    }
+
+    public function test_one_person_is_saved_early_with_save_and_slip_and_gets_a_slip(): void
+    {
+        // The 18th: Ali asks for his advance salary early; he already took 3,000 from the foreman.
+        Carbon::setTestNow('2026-11-18 11:00:00');
+        $ali = $this->team['Ali'];
+        $this->giveForeman('2026-11-12', 20000);
+
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-11']))->assertOk()->assertSee('Save & slip');
+        $this->actingAs($this->owner)->post(route('salary-advances.mid-month.store'), [
+            'month' => '2026-11', 'given_on' => '2026-11-22', 'only' => $ali->id,
+            // The rest of the sheet still shows its pre-filled amounts; only Ali is saved.
+            'as' => [$ali->id => 15000, $this->team['Ahmed']->id => 15000, $this->bilal->id => 13500],
+            'taken' => [$ali->id => 3000],
+        ])->assertRedirect(route('salary-advances.mid-month.slip', ['month' => '2026-11', 'employee' => $ali->id]))
+            ->assertSessionHas('status', fn ($s) => str_contains($s, 'Rs 12,000 handed over comes off the cash of'));
+
+        $this->assertSame(1, SalaryAdvance::query()->count());
+        $advance = SalaryAdvance::query()->sole();
+        $this->assertSame([$ali->id, 15000, 3000, '2026-11-18'], [$advance->employee_id, $advance->amount, $advance->taken_from_foreman, $advance->given_on->toDateString()]);
+
+        // His slip: advance salary, already taken, given now (12,000).
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month.slip', ['month' => '2026-11', 'employee' => $ali->id]))->assertOk()
+            ->assertSee('ADVANCE SALARY')->assertSee('Ali')->assertSeeInOrder(['Rs 15,000', '− Rs 3,000', 'Rs 12,000'])->assertSee('18 Nov 2026');
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month.slip', ['month' => '2026-11', 'employee' => $this->bilal->id]))->assertNotFound();
+        // His 3,000 comes off the foreman's 20,000; the sheet shows it, his slip does not.
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month.slip', ['month' => '2026-11', 'employee' => $ali->id]))->assertDontSee('Cash left with')->assertDontSee('Rs 17,000');
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-11']))->assertSee('data-left="'.$this->foreman->id.'">Rs 17,000', false);
+
+        // The foreman is saved next (keeps 17,000); then Ahmed takes 2,000 more: the foreman's saved record drops to 15,000.
+        $post = fn (array $as, array $taken, int $only) => $this->actingAs($this->owner)->post(route('salary-advances.mid-month.store'), ['month' => '2026-11', 'given_on' => '2026-11-22', 'only' => $only, 'as' => $as, 'taken' => $taken]);
+        $post([$this->foreman->id => 25000], [], $this->foreman->id)->assertSessionHasNoErrors();
+        $foremanAdvance = fn () => SalaryAdvance::query()->where('employee_id', $this->foreman->id)->sole()->taken_from_foreman;
+        $this->assertSame(17000, $foremanAdvance());
+        $post([$this->team['Ahmed']->id => 15000], [$this->team['Ahmed']->id => 2000], $this->team['Ahmed']->id)->assertSessionHasNoErrors();
+        $this->assertSame(15000, $foremanAdvance());
+        $this->assertSame(3000, $advance->refresh()->taken_from_foreman); // Ali untouched
+
+        // More than the foreman has left is refused.
+        $post([$this->team['Asad']->id => 30000], [$this->team['Asad']->id => 16000], $this->team['Asad']->id)->assertSessionHasErrors('cash.'.$this->foreman->id);
+    }
+
+    public function test_the_10th_save_and_slip_saves_what_was_typed_and_opens_that_persons_slip(): void
+    {
+        $this->save22nd(['Ali' => 15000], ['Ali' => 0], 0)->assertSessionHasNoErrors();
+        Carbon::setTestNow('2026-12-09 10:00:00');
+        $this->actingAs($this->owner)->post(route('payroll.store'), ['month' => '2026-11'])->assertSessionHasNoErrors();
+        $run = PayrollRun::query()->sole();
+        $line = $run->lines()->where('employee_id', $this->bilal->id)->sole();
+
+        $this->actingAs($this->owner)->get(route('payroll.show', $run))->assertOk()->assertSee('Save & slip');
+        $rows = $run->lines()->get()->mapWithKeys(fn ($l) => [$l->id => [
+            'bonus' => $l->bonus, 'loan_deducted' => $l->loan_deducted, 'other_deduction' => $l->other_deduction, 'note' => $l->note,
+            'taken_from_foreman' => $l->id === $line->id ? 2000 : 0,
+        ]])->all();
+        $this->actingAs($this->owner)->put(route('payroll.lines.update', $run), ['lines' => $rows, 'slip' => $line->id])
+            ->assertRedirect(route('payroll.slips', [$run, 'line' => $line->id]));
+        $this->assertSame(2000, $line->refresh()->taken_from_foreman);
+    }
+
+    public function test_a_row_saves_itself_as_it_is_typed_and_says_why_when_it_cannot(): void
+    {
+        $ali = $this->team['Ali'];
+        $this->giveForeman('2026-11-12', 20000);
+        $this->actingAs($this->owner)->get(route('salary-advances.mid-month', ['month' => '2026-11']))->assertOk()->assertSee('data-saved', false);
+
+        $post = fn (array $as, array $taken) => $this->actingAs($this->owner)->postJson(route('salary-advances.mid-month.store'), ['month' => '2026-11', 'given_on' => '2026-11-22', 'only' => $ali->id, 'as' => $as, 'taken' => $taken]);
+        $post([$ali->id => 15000], [$ali->id => 4000])->assertOk()->assertJsonPath('message', fn ($m) => str_contains($m, 'Rs 11,000'));
+        $this->assertSame([15000, 4000], [SalaryAdvance::query()->sole()->amount, SalaryAdvance::query()->sole()->taken_from_foreman]);
+
+        // Typed again: the same record changes; a mistake is explained, not saved.
+        $post([$ali->id => 16000], [$ali->id => 4000])->assertOk();
+        $this->assertSame(16000, SalaryAdvance::query()->sole()->amount);
+        $post([$ali->id => 3000], [$ali->id => 4000])->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'already took Rs 4,000'));
+        $this->assertSame(16000, SalaryAdvance::query()->sole()->amount);
+    }
+
+    public function test_the_payroll_sheet_saves_itself_as_it_is_typed(): void
+    {
+        $this->save22nd(['Ali' => 15000], ['Ali' => 0], 0)->assertSessionHasNoErrors();
+        Carbon::setTestNow('2026-12-09 10:00:00');
+        $this->actingAs($this->owner)->post(route('payroll.store'), ['month' => '2026-11'])->assertSessionHasNoErrors();
+        $run = PayrollRun::query()->sole();
+        $line = $run->lines()->where('employee_id', $this->bilal->id)->sole();
+        $rows = $run->lines()->get()->mapWithKeys(fn ($l) => [$l->id => [
+            'bonus' => $l->bonus, 'loan_deducted' => $l->loan_deducted, 'other_deduction' => $l->other_deduction, 'note' => $l->note,
+            'taken_from_foreman' => $l->id === $line->id ? 1500 : 0,
+        ]])->all();
+
+        $this->actingAs($this->owner)->putJson(route('payroll.lines.update', $run), ['lines' => $rows])->assertOk()->assertJsonPath('message', 'Saved');
+        $this->assertSame(1500, $line->refresh()->taken_from_foreman);
     }
 }

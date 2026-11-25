@@ -10,6 +10,7 @@ use App\Models\SalaryAdvance;
 use App\Models\Setting;
 use App\Support\ForemanTeams;
 use App\Support\PressMath;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -32,7 +33,7 @@ class SalaryAdvanceController extends Controller
                 ->latest('given_on')->latest('id')->paginate(30)->withQueryString(),
             'openTotal' => (int) SalaryAdvance::query()->approved()->whereNull('payroll_run_id')->sum('amount'),
             'monthTotal' => (int) SalaryAdvance::query()->approved()->where('given_on', '>=', now()->startOfMonth())->sum('amount'),
-            'employees' => Employee::query()->orderBy('name')->get(),
+            'employees' => Employee::query()->byNumber()->get(),
             'show' => $show,
             'employeeId' => $employeeId,
         ]);
@@ -41,7 +42,7 @@ class SalaryAdvanceController extends Controller
     public function create(Request $request): View
     {
         return view('advances.create', [
-            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'employees' => Employee::query()->active()->byNumber()->get(),
             'employeeId' => $request->integer('employee') ?: null,
         ]);
     }
@@ -94,7 +95,20 @@ class SalaryAdvanceController extends Controller
         ]);
     }
 
-    public function storeMidMonth(Request $request): RedirectResponse
+    /**
+     * One person's advance salary slip for the month: advance salary, what he already took from the foreman, and
+     * what was handed over. Printed for him or the person collecting it.
+     */
+    public function midMonthSlip(Request $request, Employee $employee): View
+    {
+        $month = $this->payMonth($request->query('month'));
+        $record = $this->monthAdvances($month)->get($employee->id);
+        abort_unless($record, 404);
+
+        return view('advances.mid-month-slip', ['employee' => $employee->load('foreman'), 'record' => $record, 'month' => $month]);
+    }
+
+    public function storeMidMonth(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
             'month' => ['required', 'date_format:Y-m'],
@@ -108,8 +122,15 @@ class SalaryAdvanceController extends Controller
         abort_if($records->contains(fn (SalaryAdvance $a) => $a->payroll_run_id !== null), 409, __('This month\'s salaries are finalized. Reopen the payroll to change the advance salaries.'));
 
         $employees = Employee::query()->active()->get();
+        // From a person's "Save & slip": only that person is saved; the rest of the sheet is left as it was.
+        $only = $request->integer('only') ?: null;
         $as = collect($data['as'] ?? [])->map(fn ($v) => (int) $v)->all();
         $taken = collect($data['taken'] ?? [])->map(fn ($v) => (int) $v)->all();
+        if ($only) {
+            // One person: everyone else counts with what is already saved, so his kharcha comes off his foreman's cash.
+            $taken = $records->map(fn (SalaryAdvance $a) => (int) $a->taken_from_foreman)->all();
+            $taken[$only] = (int) ($data['taken'][$only] ?? 0);
+        }
         $cash = ForemanCash::totals($month, ForemanCash::Advance);
 
         // A foreman's "already taken" is what he kept of the cash he was given.
@@ -120,7 +141,15 @@ class SalaryAdvanceController extends Controller
             }
             $taken[$foremanId] = max(0, $kept);
         }
+        // Saved with one person: his foreman's record (if already saved) gets the new "kept" too.
+        $onlyForeman = $only ? ($employees->firstWhere('id', $only)?->is_foreman ? $only : $employees->firstWhere('id', $only)?->foreman_id) : null;
+        if ($only) {
+            $errors = array_filter($errors, fn ($k) => $k === "cash.{$onlyForeman}", ARRAY_FILTER_USE_KEY);
+        }
         foreach ($employees as $e) {
+            if ($only && $e->id !== $only) {
+                continue;
+            }
             $amount = $as[$e->id] ?? 0;
             $took = $taken[$e->id] ?? 0;
             if ($amount > $e->monthly_salary) {
@@ -130,11 +159,22 @@ class SalaryAdvanceController extends Controller
             }
         }
         if ($errors) {
+            // A row saving itself as it is typed: the reason is shown on that row.
+            if ($request->expectsJson()) {
+                return response()->json(['message' => reset($errors), 'errors' => $errors], 422);
+            }
+
             return back()->withErrors($errors)->withInput();
         }
 
-        DB::transaction(function () use ($employees, $as, $taken, $data, $records, $request): void {
+        DB::transaction(function () use ($employees, $as, $taken, $data, $records, $request, $only, $onlyForeman): void {
+            if ($only && $onlyForeman && $onlyForeman !== $only) {
+                $records->get($onlyForeman)?->update(['taken_from_foreman' => $taken[$onlyForeman] ?? 0]);
+            }
             foreach ($employees as $e) {
+                if ($only && $e->id !== $only) {
+                    continue;
+                }
                 $amount = $as[$e->id] ?? 0;
                 $record = $records->get($e->id);
                 if ($amount <= 0) {
@@ -142,12 +182,28 @@ class SalaryAdvanceController extends Controller
 
                     continue;
                 }
-                $values = ['given_on' => $data['given_on'], 'amount' => $amount, 'taken_from_foreman' => $taken[$e->id] ?? 0];
+                // One person paid early (before the 22nd) is dated the day it was given.
+                $on = $only && Carbon::parse($data['given_on'])->isFuture() ? today()->toDateString() : $data['given_on'];
+                $values = ['given_on' => $on, 'amount' => $amount, 'taken_from_foreman' => $taken[$e->id] ?? 0];
                 $record
                     ? $record->update($values)
                     : SalaryAdvance::create($values + ['employee_id' => $e->id, 'kind' => AdvanceKind::MidMonth, 'created_by' => $request->user()->id]);
             }
         });
+
+        if ($only) {
+            // Say whose cash it came off, so the manager sees it was taken.
+            $expense = $this->monthAdvances($month)->get($only)?->cashOutExpense()->with('user')->first();
+            $status = $expense
+                ? __('Saved. Rs :n handed over comes off the cash of :name (Rs :left left).', ['n' => number_format($expense->amount), 'name' => $expense->user?->name, 'left' => number_format((int) $expense->user?->cashInHand())])
+                : __('Saved. Nothing to hand over now, so no cash was taken.');
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $status]);
+            }
+
+            return redirect()->route('salary-advances.mid-month.slip', ['month' => $month->format('Y-m'), 'employee' => $only])->with('status', $status);
+        }
 
         $ids = $employees->pluck('id')->all();
         $total = collect($as)->only($ids)->sum() - collect($taken)->only($ids)->sum();
@@ -188,7 +244,7 @@ class SalaryAdvanceController extends Controller
 
         return view('advances.create', [
             'advance' => $salaryAdvance,
-            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($salaryAdvance->employee_id))->orderBy('name')->get(),
+            'employees' => Employee::query()->where(fn ($q) => $q->where('is_active', true)->orWhereKey($salaryAdvance->employee_id))->byNumber()->get(),
             'employeeId' => $salaryAdvance->employee_id,
         ]);
     }

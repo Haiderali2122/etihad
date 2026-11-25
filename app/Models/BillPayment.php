@@ -9,13 +9,14 @@ use Database\Factories\BillPaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * One payment, on one date, toward a Diesel / Glue / Ink bill or a plate job. A bill can be paid in parts; what
  * is not paid yet stays on it as unpaid. Each payment comes off the manager's cash in Cash-out.
  */
-#[Fillable(['payable_type', 'payable_id', 'paid_on', 'amount', 'note', 'created_by'])]
+#[Fillable(['payable_type', 'payable_id', 'processor_payment_id', 'paid_on', 'amount', 'note', 'created_by'])]
 class BillPayment extends Model
 {
     /** @use HasFactory<BillPaymentFactory> */
@@ -49,10 +50,21 @@ class BillPayment extends Model
         return $this->morphTo();
     }
 
+    /**
+     * The money given to a plate processor that this part came from, when it did.
+     *
+     * @return BelongsTo<ProcessorPayment, $this>
+     */
+    public function processorPayment(): BelongsTo
+    {
+        return $this->belongsTo(ProcessorPayment::class);
+    }
+
     public function cashOut(): ?array
     {
         $payable = $this->payable;
-        if (! $payable) {
+        // Part of money given to a processor: that payment is in Cash-out once, for the whole amount.
+        if (! $payable || $this->processor_payment_id) {
             return null;
         }
 
@@ -128,7 +140,7 @@ class BillPayment extends Model
 
     public function logsDeletion(): bool
     {
-        return ! $this->removedWithBill;
+        return ! $this->removedWithBill && ! $this->processor_payment_id;
     }
 
     public function deletionLabel(): string

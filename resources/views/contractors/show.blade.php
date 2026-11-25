@@ -63,7 +63,7 @@
             <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Order') }}</th><th>{{ __('Work') }}</th><th>{{ __('Formula') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($jobs as $job)
-                <tr>
+                <tr data-href="{{ route('records.show', ['contractor-job', $job->id]) }}">
                     <td>{{ $job->job_on->format('j M Y') }}</td>
                     <td>{{ $job->workOrder?->number ?? '—' }}</td>
                     <td>{{ $job->kind->label() }}</td>
@@ -86,7 +86,7 @@
             <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Order') }}</th><th>{{ __('Note') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($payments as $p)
-                <tr>
+                <tr data-href="{{ route('records.show', ['contractor-payment', $p->id]) }}">
                     <td>{{ $p->paid_on->format('j M Y') }}</td><td>{{ $p->kind->label() }}</td><td>{{ $p->workOrder?->number ?? '—' }}</td><td>{{ $p->note ?: '—' }}</td>
                     <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
                     <td><x-badge :tone="$p->status->tone()">{{ $p->status->label() }}</x-badge>@if ($p->review_note)<div class="meta">{{ $p->review_note }}</div>@endif</td>

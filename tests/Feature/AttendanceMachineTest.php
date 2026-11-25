@@ -238,4 +238,72 @@ class AttendanceMachineTest extends TestCase
             ->assertSee('0 marked absent · 1 no punch')->assertSee('data-filter="absent"', false)->assertSee('data-filter="late"', false)
             ->assertSee('data-status="none"', false)->assertSee('data-late="1"', false);
     }
+
+    public function test_a_name_changed_on_the_machine_follows_and_new_staff_join_the_main_foreman(): void
+    {
+        $riyasat = Employee::factory()->foreman()->create(['name' => 'Riyasat Ali', 'code' => '786']);
+        Employee::factory()->count(2)->create(['foreman_id' => $riyasat->id]);
+        $this->get('/iclock/cdata?SN='.self::Serial);
+        AttendanceDevice::query()->sole()->update(['is_approved' => true]);
+
+        $this->push('OPERLOG', 'USER PIN=53	Name=NN-53
+', '1');
+        $worker = Employee::query()->where('device_code', '53')->sole();
+        $this->assertSame('Nn-53', $worker->name);
+        $this->assertSame($riyasat->id, $worker->foreman_id);
+
+        $this->push('OPERLOG', 'USER PIN=53	Name=SKHAWAT ALI
+', '2');
+        $this->assertSame('Skhawat Ali', $worker->refresh()->name);
+
+        // A name someone changed on the website is not overwritten by the machine.
+        $worker->update(['name' => 'Sakhawat Ali (press)']);
+        $this->push('OPERLOG', 'USER PIN=53	Name=SKHAWAT A
+', '3');
+        $this->assertSame('Sakhawat Ali (press)', $worker->refresh()->name);
+    }
+
+    public function test_attendance_lists_staff_by_number(): void
+    {
+        $owner = User::factory()->owner()->create();
+        foreach (['10' => 'Aslam', '2' => 'Zubair', '1' => 'Majid', '786' => 'Riyasat'] as $code => $name) {
+            Employee::factory()->create(['code' => $code, 'name' => $name]);
+        }
+
+        $this->actingAs($owner)->get(route('attendance.day'))->assertOk()->assertSeeInOrder(['Majid', 'Zubair', 'Aslam', 'Riyasat']);
+        $this->actingAs($owner)->get(route('attendance.index', ['month' => now()->format('Y-m')]))->assertOk()->assertSeeInOrder(['Majid', 'Zubair', 'Aslam', 'Riyasat']);
+    }
+
+    public function test_night_shift_and_staying_until_the_next_morning(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $this->get('/iclock/cdata?SN='.self::Serial);
+        AttendanceDevice::query()->sole()->update(['is_approved' => true]);
+        $night = Employee::factory()->create(['name' => 'Night Man', 'device_code' => '70', 'shift' => 'night']);
+        $stayer = Employee::factory()->create(['name' => 'Stayer', 'device_code' => '71']);
+
+        // Night shift: in 9:30 PM Wednesday, out 5:40 AM Thursday = one night on Wednesday, 40 minutes overtime.
+        $this->push('ATTLOG', "70\t2026-11-18 21:30:00\t0\t15\n70\t2026-11-19 05:40:00\t1\t15\n", '10');
+        $n = Attendance::query()->where('employee_id', $night->id)->sole();
+        $this->assertSame('2026-11-18', $n->date->toDateString());
+        $this->assertSame('night', $n->shift);
+        $this->assertSame(30, $n->lateMinutes());
+        $this->assertSame(40, $n->overtime_minutes);
+
+        // Day shift, in at 9 AM and only punching out at 9 AM the next morning: 16h overtime + 4h for sleep.
+        $this->push('ATTLOG', "71\t2026-11-17 09:00:00\t0\t15\n71\t2026-11-18 09:00:00\t1\t15\n", '11');
+        $s = Attendance::query()->where('employee_id', $stayer->id)->sole();
+        $this->assertSame('2026-11-17', $s->date->toDateString());
+        $this->assertSame((16 + 4) * 60, $s->overtime_minutes);
+        $this->assertSame(24 * 60, $s->workedMinutes());
+
+        // Working on Sunday: all of it is overtime, and nobody is late on a Sunday.
+        $this->assertSame(450, Attendance::overtimeFor('2026-11-15', '09:30', '17:00'));
+
+        // Ticked people move to the night shift together.
+        $others = Employee::factory()->count(2)->create();
+        $this->actingAs($owner)->post(route('attendance.move-shift'), ['employee_ids' => $others->pluck('id')->all(), 'shift' => 'night'])->assertSessionHasNoErrors();
+        $this->assertSame(2, Employee::query()->whereIn('id', $others->pluck('id'))->where('shift', 'night')->count());
+        $this->actingAs($owner)->get(route('attendance.day', ['date' => '2026-11-18']))->assertOk()->assertSee('Move to night shift')->assertSee('data-shift="night"', false);
+    }
 }

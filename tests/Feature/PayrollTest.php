@@ -66,9 +66,9 @@ class PayrollTest extends TestCase
     public function test_net_pay_rounds_to_the_nearest_ten(): void
     {
         $owner = User::factory()->owner()->create();
-        // Rs 31,000 ÷ 30 days = 1,033.33/day; one absence leaves 29,966.67 → 29,970.
+        // Rs 31,000 ÷ 30 days = 1,033.33/day; one absence (a Thursday, so no Sunday goes with it) leaves 29,966.67 → 29,970.
         $employee = Employee::factory()->create(['monthly_salary' => 31000]);
-        $this->mark($employee, 5, AttendanceStatus::Absent);
+        $this->mark($employee, 3, AttendanceStatus::Absent);
 
         $line = app(PayrollCalculator::class)->prepare($this->month, $owner)->lines->sole();
 
@@ -366,5 +366,30 @@ class PayrollTest extends TestCase
         $this->actingAs($owner)->get(route('salary-advances.index'))->assertViewHas('openTotal', 4000)
             ->assertViewHas('advances', fn ($advances) => $advances->total() === 2);
         $this->actingAs($owner)->get(route('employees.index'))->assertViewHas('employees', fn ($e) => (int) $e->sole()->open_advances === 4000);
+    }
+
+    public function test_sunday_is_paid_unless_the_saturday_or_monday_is_absent(): void
+    {
+        $owner = User::factory()->owner()->create();
+        // September 2026: Saturday 5, Sunday 6, Monday 7; Saturday 12, Sunday 13, Monday 14. 30,000 ÷ 30 = 1,000/day.
+        $one = Employee::factory()->create(['monthly_salary' => 30000]);
+        $both = Employee::factory()->create(['monthly_salary' => 30000]);
+        $worked = Employee::factory()->create(['monthly_salary' => 30000]);
+        $this->mark($one, 5, AttendanceStatus::Absent);           // Saturday: 2 days
+        $this->mark($both, 12, AttendanceStatus::Absent);         // Saturday and Monday: 3 days
+        $this->mark($both, 14, AttendanceStatus::Absent);
+        $this->mark($worked, 6, AttendanceStatus::Present, 480);  // worked Sunday, 8h overtime, but absent Monday
+        $this->mark($worked, 7, AttendanceStatus::Absent);
+
+        $run = app(PayrollCalculator::class)->prepare($this->month, $owner);
+        $line = fn (Employee $e) => $run->lines->firstWhere('employee_id', $e->id);
+
+        $this->assertSame(2.0, $line($one)->absent_days);
+        $this->assertSame(2000, $line($one)->absence_deduction);
+        $this->assertSame(3.0, $line($both)->absent_days);
+        $this->assertSame(3000, $line($both)->absence_deduction);
+        // Sunday's work is overtime, and the Sunday still counts absent because Monday was.
+        $this->assertSame(2.0, $line($worked)->absent_days);
+        $this->assertSame(8.0, $line($worked)->overtime_hours);
     }
 }

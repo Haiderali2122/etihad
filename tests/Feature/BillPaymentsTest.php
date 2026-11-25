@@ -10,6 +10,7 @@ use App\Models\InventoryItem;
 use App\Models\MaterialBill;
 use App\Models\PlateJob;
 use App\Models\PlatePurchase;
+use App\Models\ProcessorPayment;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleReceipt;
@@ -122,19 +123,61 @@ class BillPaymentsTest extends TestCase
 
         // Rs 3,000 to the processor: the old bill's Rs 2,000 first, then Rs 1,000 on the newer one.
         $this->actingAs($owner)->post(route('processors.pay', $old->party_id), ['amount' => 3000, 'paid_on' => today()->toDateString()])
-            ->assertSessionHasNoErrors()->assertSessionHas('status', fn ($s) => str_contains($s, 'Rs 1,000 still unpaid'));
+            ->assertSessionHasNoErrors()->assertSessionHas('status', fn ($s) => str_contains($s, 'Rs 1,000 still to pay'));
         $this->assertTrue($old->refresh()->isPaid());
         $this->assertSame(1000, $new->refresh()->unpaid());
-        $this->actingAs($owner)->post(route('processors.pay', $old->party_id), ['amount' => 5000, 'paid_on' => today()->toDateString()])->assertSessionHasErrors('amount');
 
-        $this->actingAs($owner)->get(route('processors.show', $old->party_id))->assertOk()->assertSee('Rs 1,000 unpaid')->assertSee('Pay all (Rs 1,000)');
-        $this->actingAs($owner)->get(route('plate-jobs.index'))->assertOk()->assertSee('Pay all (Rs 1,000)');
-
+        $this->actingAs($owner)->get(route('processors.show', $old->party_id))->assertOk()->assertSee('Rs 1,000');
         $this->actingAs($owner)->post(route('plate-jobs.pay-all'))->assertSessionHasNoErrors();
         $this->assertTrue($new->refresh()->isPaid());
+        // In Cash-out: Rs 1,000 + Rs 3,000 given + Rs 1,000; the parts of the Rs 3,000 on each bill are not counted twice.
         $this->assertSame(5000, (int) Expense::query()->sum('amount'));
         $this->assertSame(4, BillPayment::query()->count());
         $this->assertSame('Plate bill', BillPayment::query()->first()->cashOutSource());
+    }
+
+    public function test_money_given_to_a_processor_beyond_the_bills_is_kept_as_advance_and_used_on_the_next_bill(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->create(['name' => 'Faisal']);
+        CashFloat::factory()->create(['user_id' => $manager->id, 'amount' => 100000]);
+        $bill = PlateJob::factory()->create(['job_on' => today()->subDays(5), 'amount' => 4000]);
+        $name = $bill->processor->name;
+
+        // The Plates tab: stats, the payment form and the returns form, and rows without pay boxes.
+        $this->actingAs($owner)->get(route('plate-jobs.index'))->assertOk()
+            ->assertSee('Advance with processor')->assertSee('Remaining to pay')->assertSee('Pay processor / give advance')->assertSee('Plates returned')
+            ->assertDontSee('name="amount" min="1" max=', false);
+
+        // Rs 10,000: Rs 4,000 clears the bill, Rs 6,000 is kept as advance; Cash-out gets the Rs 10,000 once, off Faisal's cash.
+        $this->actingAs($owner)->post(route('plate-jobs.payments.store'), ['processor_name' => mb_strtoupper($name), 'amount' => 10000, 'paid_on' => today()->subDays(2)->toDateString()])
+            ->assertSessionHasNoErrors()->assertSessionHas('status', fn ($s) => str_contains($s, 'Rs 4,000 paid on plate bills') && str_contains($s, 'Rs 6,000 kept as advance'));
+        $this->assertTrue($bill->refresh()->isPaid());
+        $this->assertSame(90000, $manager->cashInHand());
+        $this->assertSame(10000, (int) Expense::query()->sum('amount'));
+        $this->actingAs($owner)->get(route('plate-jobs.index', ['processor' => $bill->party_id]))->assertOk()->assertSeeInOrder(['Advance with processor', 'Rs 6,000', 'Remaining to pay', 'Rs 0']);
+
+        // The next bill (Rs 7,500) uses the Rs 6,000 straight away; Rs 1,500 is left to pay.
+        $next = PlateJob::factory()->create(['party_id' => $bill->party_id, 'job_on' => today(), 'amount' => 7500]);
+        $this->assertSame(1500, $next->refresh()->unpaid());
+        $this->assertSame(10000, (int) Expense::query()->sum('amount'));
+
+        // Deleting the money given: both bills are unpaid again and it leaves Cash-out.
+        $payment = ProcessorPayment::query()->sole();
+        $this->actingAs($owner)->delete(route('records.destroy', ['processor-payment', $payment->id]))->assertSessionHasNoErrors();
+        $this->assertSame([4000, 7500], [$bill->refresh()->unpaid(), $next->refresh()->unpaid()]);
+        $this->assertSame(0, (int) Expense::query()->sum('amount'));
+        $this->assertSame(100000, $manager->cashInHand());
+
+        // Plates returned from the separate form: one line per processor and size, the oldest job first.
+        $bill->update(['plates' => 10, 'plate_size' => '28X40']);
+        $next->update(['plates' => 2, 'plate_size' => '28x40']);
+        $other = PlateJob::factory()->create(['party_id' => $bill->party_id, 'job_on' => today(), 'plates' => 5, 'plate_size' => '25X36']);
+        $out = fn (int $n) => "\u{2066}{$n}\u{2069} plates still out";
+        $this->actingAs($owner)->get(route('plate-jobs.index'))->assertOk()->assertSee($out(12), false)->assertSee($out(5), false)->assertDontSee($out(10), false);
+        $this->actingAs($owner)->post(route('plate-jobs.returns.store'), ['group' => $bill->party_id.'|28x40', 'returned_plates' => 11, 'returned_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame([0, 1, 5], [$bill->refresh()->platesHeld(), $next->refresh()->platesHeld(), $other->refresh()->platesHeld()]);
+        $this->actingAs($owner)->post(route('plate-jobs.returns.store'), ['group' => $bill->party_id.'|28x40', 'returned_plates' => 2, 'returned_on' => today()->toDateString()])->assertSessionHasErrors('returned_plates');
     }
 
     public function test_pay_all_takes_a_date_and_bill_forms_fill_the_last_rate(): void

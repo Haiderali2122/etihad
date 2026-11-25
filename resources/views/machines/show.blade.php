@@ -21,7 +21,7 @@
             <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Work') }}</th><th>{{ __('Vendor') }}</th><th class="r">{{ __('Bill') }}</th><th class="r">{{ __('Discount') }}</th><th class="r">{{ __('Paid') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($repairs as $r)
-                <tr>
+                <tr data-href="{{ route('records.show', ['machine-repair', $r->id]) }}">
                     <td>{{ $r->repaired_on->format('j M Y') }}</td>
                     <td><div class="main">{{ $r->description }}</div><div class="meta">{{ $r->kind->label() }}{{ $r->part ? ' · '.$r->part->name : '' }}{{ $r->invoice_no ? ' · '.__('Invoice :no', ['no' => $r->invoice_no]) : '' }}</div></td>
                     <td>{{ $r->vendor->name }}</td>

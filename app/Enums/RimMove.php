@@ -3,7 +3,7 @@
 namespace App\Enums;
 
 /**
- * What a line in Younus ka khata is for. Every line is rims × a rate per rim.
+ * What a line in Younus ka khata is for. Every line is a quantity (rims, bundles, books, trips …) × a rate.
  */
 enum RimMove: string
 {
@@ -12,6 +12,9 @@ enum RimMove: string
     case ToOutside = 'to_outside';
     case Printing = 'printing';
     case FromOutside = 'from_outside';
+    case IntoGodown = 'into_godown';
+    case TruckLoading = 'truck_loading';
+    case Other = 'other';
 
     public function label(): string
     {
@@ -21,6 +24,9 @@ enum RimMove: string
             self::ToOutside => __('Godown → outside press'),
             self::Printing => __('Outside printing charge'),
             self::FromOutside => __('Outside press → back for folding'),
+            self::IntoGodown => __('Rims into godown (from outside)'),
+            self::TruckLoading => __('Truck loading (dispatch)'),
+            self::Other => __('Other work'),
         };
     }
 

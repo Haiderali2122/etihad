@@ -115,5 +115,16 @@ class DeletionLogTest extends TestCase
         $this->actingAs($owner)->get(route('deletions.index'))->assertOk()
             ->assertSee('Cutter')->assertSee('Not used')->assertSee($owner->name);
         $this->actingAs($manager)->get(route('deletions.index'))->assertForbidden();
+
+        // Even a role given the deletion-log permission cannot open it: only the owner.
+        $allowed = User::factory()->create(['role_id' => Role::factory()->create(['permissions' => ['deletions.view', 'records.delete']])->id]);
+        $this->actingAs($allowed)->get(route('deletions.index'))->assertForbidden();
+
+        // Not in the sidebar, even for the owner: it is opened by typing /deletions.
+        $this->actingAs($owner)->get(route('dashboard'))->assertOk()->assertDontSee(route('deletions.index'), false);
+        $this->assertSame('/deletions', parse_url(route('deletions.index'), PHP_URL_PATH));
+
+        auth()->logout();
+        $this->get('/deletions')->assertRedirect(route('login'));
     }
 }

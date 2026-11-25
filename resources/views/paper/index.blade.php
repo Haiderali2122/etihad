@@ -64,7 +64,7 @@
                 <thead><tr><th>{{ __('Slip') }}</th><th>{{ __('Date') }}</th><th>{{ __('Party') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Truck') }}</th><th class="r">{{ __('Quantity') }}</th><th>{{ __('Received by') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($receipts as $r)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['paper-receipt', $r->id]) }}">
                         <td><b>{{ __('No.') }} {{ $r->slip_no }}</b></td>
                         <td>{{ $r->received_at->format('j M Y') }}<div class="meta">{{ $r->received_at->format('H:i') }}</div></td>
                         <td>{{ $r->party->name }}</td>
@@ -86,7 +86,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Type') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Party') }}</th><th>{{ __('Sent to') }}</th><th class="r">{{ __('Rims out') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
-                    <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
+                    <tr data-href="{{ route('records.show', ['paper-issue', $i->id]) }}" @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
                         <td>{{ $i->issued_on->format('j M Y') }}</td>
                         <td><x-badge :tone="$i->kind->tone()">{{ $i->kind->label() }}</x-badge></td>
                         <td><div class="main">{{ $i->reference ?: '—' }}</div><div class="meta">{{ $i->book_name }}@if ($i->copies) · {{ __(':n copies', ['n' => number_format($i->copies)]) }}@endif</div></td>
@@ -126,7 +126,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Paper') }}</th><th>{{ __('Owed by') }}</th><th>{{ __('Taken from') }}</th><th class="r">{{ __('Rims') }}</th><th>{{ __('Settled') }}</th></tr></thead>
                 <tbody>
                 @forelse ($loans as $loan)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['paper-loan', $loan->id]) }}">
                         <td>{{ $loan->borrowed_on->format('j M Y') }}</td>
                         <td>{{ $loan->paperType->label() }}</td>
                         <td><b>{{ $loan->borrower->name }}</b></td>

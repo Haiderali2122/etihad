@@ -653,7 +653,6 @@ class CashOutApprovalsE2ETest extends TestCase
             'advance' => SalaryAdvance::factory()->create($by),
             'foreman-sheet' => ForemanSheet::factory()->create($by),
             'loan' => Loan::factory()->create($by),
-            'work-order' => WorkOrder::factory()->create($by + ['paper_type_id' => $receipt->paper_type_id, 'party_id' => $receipt->party_id, 'rims_needed' => 200]),
             'contractor-payment' => ContractorPayment::factory()->create($by),
         ];
 
@@ -662,7 +661,7 @@ class CashOutApprovalsE2ETest extends TestCase
         }
 
         $page = $this->actingAs($this->owner)->get(route('approvals.index'))->assertOk()
-            ->assertSee('<span class="count">9</span>', false);
+            ->assertSee('<span class="count">8</span>', false);
         foreach ($items as $type => $model) {
             $page->assertSee(route('approvals.update', [$type, $model->id]));
         }
@@ -673,7 +672,6 @@ class CashOutApprovalsE2ETest extends TestCase
             $this->assertSame(ApprovalStatus::Approved, $model->refresh()->status, "$type not approved");
         }
 
-        $this->assertNotNull($items['work-order']->refresh()->paper_issue_id);
         $this->get(route('approvals.index'))->assertSee('All clear');
     }
 
@@ -687,7 +685,6 @@ class CashOutApprovalsE2ETest extends TestCase
             'advance' => SalaryAdvance::factory()->create($by),
             'foreman-sheet' => ForemanSheet::factory()->create($by),
             'loan' => Loan::factory()->create($by),
-            'work-order' => WorkOrder::factory()->create($by),
             'contractor-payment' => ContractorPayment::factory()->create($by),
         ];
 
@@ -697,43 +694,14 @@ class CashOutApprovalsE2ETest extends TestCase
                 ->assertSessionHasNoErrors();
             $this->assertSame(ApprovalStatus::Rejected, $model->refresh()->status, "$type not rejected");
         }
-
-        $this->assertNull($items['work-order']->refresh()->paper_issue_id);
     }
 
-    public function test_work_order_blocker_stops_approval_but_not_rejection(): void
+    public function test_work_orders_do_not_wait_for_approval(): void
     {
-        $order = WorkOrder::factory()->create(['created_by' => $this->manager->id, 'rims_needed' => 500]);
+        $order = WorkOrder::factory()->create(['created_by' => $this->manager->id]);
 
-        $this->actingAs($this->owner)->get(route('approvals.index'))->assertOk();
-        $this->from(route('approvals.index'))->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'approve'])
-            ->assertRedirect(route('approvals.index'))
-            ->assertSessionHasErrors('decision');
-        $this->assertTrue($order->refresh()->isPending());
-        $this->assertNull($order->paper_issue_id);
-
-        $this->from(route('approvals.index'))->followingRedirects()
-            ->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'approve'])
-            ->assertOk()->assertSee('Only 0 rims of this paper are in stock');
-
-        $this->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'reject', 'note' => 'No paper'])
-            ->assertSessionHasNoErrors();
-        $this->assertSame(ApprovalStatus::Rejected, $order->refresh()->status);
-    }
-
-    public function test_work_order_blocker_boundary_exact_stock_passes(): void
-    {
-        $receipt = PaperReceipt::factory()->create(['created_by' => $this->owner->id, 'quantity' => 300]);
-        $exact = WorkOrder::factory()->create(['created_by' => $this->manager->id, 'paper_type_id' => $receipt->paper_type_id, 'party_id' => $receipt->party_id, 'rims_needed' => 300]);
-        $next = WorkOrder::factory()->create(['created_by' => $this->manager->id, 'paper_type_id' => $receipt->paper_type_id, 'party_id' => $receipt->party_id, 'rims_needed' => 1]);
-
-        $this->actingAs($this->owner)->patch(route('approvals.update', ['work-order', $exact->id]), ['decision' => 'approve'])
-            ->assertSessionHasNoErrors();
-        $this->assertNotNull($exact->refresh()->paper_issue_id);
-
-        $this->patch(route('approvals.update', ['work-order', $next->id]), ['decision' => 'approve'])
-            ->assertSessionHasErrors('decision');
-        $this->assertTrue($next->refresh()->isPending());
+        $this->assertFalse($order->refresh()->isPending());
+        $this->actingAs($this->owner)->get(route('approvals.index'))->assertOk()->assertDontSee(route('approvals.update', ['work-order', $order->id]));
     }
 
     public function test_foreman_sheet_advances_are_hidden_from_queue_and_follow_the_sheet(): void

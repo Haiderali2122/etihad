@@ -61,9 +61,8 @@ class ProductionTest extends TestCase
         return app(PaperStock::class)->available($this->paper->id, $this->party->id);
     }
 
-    public function test_a_manager_order_waits_and_paper_leaves_stock_on_approval(): void
+    public function test_a_manager_order_is_issued_on_save_without_waiting_for_the_owner(): void
     {
-        $owner = User::factory()->owner()->create();
         $manager = User::factory()->create();
 
         $this->actingAs($manager)->post(route('work-orders.store'), $this->order())->assertSessionHasNoErrors();
@@ -72,20 +71,12 @@ class ProductionTest extends TestCase
         // 10 forms × 18,000 ÷ 500 = 360 rims + 3% = 371
         $this->assertSame(371, $order->rims_needed);
         $this->assertSame('WO-1001', $order->number);
-        $this->assertSame(WorkOrderStage::Waiting, $order->stage);
-        $this->assertSame(1000, $this->balance());
-
-        $this->actingAs($owner)->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'approve'])->assertSessionHasNoErrors();
-
-        $order->refresh();
+        $this->assertSame(ApprovalStatus::Approved, $order->status);
         $this->assertSame(WorkOrderStage::Printing, $order->stage);
-        $this->assertNotNull($order->paper_issue_id);
         $this->assertSame(629, $this->balance());
         $this->assertSame('WO-1001', $order->paperIssue->reference);
-        // The order was approved, so its paper issue does not wait a second time.
         $this->assertSame(ApprovalStatus::Approved, $order->paperIssue->status);
-        $this->assertSame($owner->id, $order->paperIssue->reviewed_by);
-        $this->assertSame(0, app(ApprovalController::class)->pendingItems()->where('type', 'paper-issue')->count());
+        $this->assertSame(0, app(ApprovalController::class)->pendingItems()->whereIn('type', ['work-order', 'paper-issue'])->count());
     }
 
     public function test_an_owner_order_issues_paper_straight_away(): void
@@ -102,24 +93,6 @@ class ProductionTest extends TestCase
             ->assertSessionHasErrors('paper_type_id');
 
         $this->assertDatabaseCount('work_orders', 0);
-    }
-
-    public function test_approval_is_blocked_if_stock_ran_out_meanwhile(): void
-    {
-        $owner = User::factory()->owner()->create();
-        $this->actingAs(User::factory()->create())->post(route('work-orders.store'), $this->order());
-        $order = WorkOrder::query()->sole();
-        // Someone else takes the paper before the owner approves.
-        $this->actingAs($owner)->post(route('paper-issues.store'), [
-            'issued_on' => today()->toDateString(), 'kind' => 'in_house', 'party_id' => $this->party->id,
-            'paper_type_id' => $this->paper->id, 'issued_to' => 'Machine P-01', 'quantity' => 900,
-        ]);
-
-        $this->actingAs($owner)->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'approve'])
-            ->assertSessionHasErrors('decision');
-
-        $this->assertSame(ApprovalStatus::Pending, $order->refresh()->status);
-        $this->assertNull($order->paper_issue_id);
     }
 
     public function test_orders_move_through_the_stages(): void

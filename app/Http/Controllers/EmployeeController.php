@@ -85,6 +85,33 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Takes the person off attendance and payroll, keeping their records under "Left / inactive". "left" also saves
+     * today as the leaving date (pay up to today); "inactive" saves none. A foreman's team is left without a foreman
+     * until one is chosen.
+     */
+    public function leave(Request $request, Employee $employee): RedirectResponse
+    {
+        $hasLeft = $request->validate(['reason' => ['required', 'in:left,inactive']])['reason'] === 'left';
+
+        $employee->team()->update(['foreman_id' => null]);
+        $employee->update(['is_active' => false, 'left_on' => $hasLeft ? ($employee->left_on ?? today()) : null]);
+
+        return back()->with('status', $hasLeft
+            ? __(':name marked as left. Their records are kept under Left / inactive.', ['name' => $employee->name])
+            : __(':name marked as inactive. Their records are kept under Left / inactive.', ['name' => $employee->name]));
+    }
+
+    /**
+     * Brings someone who left back onto the attendance sheet and payroll.
+     */
+    public function rejoin(Employee $employee): RedirectResponse
+    {
+        $employee->update(['is_active' => true, 'left_on' => null]);
+
+        return back()->with('status', __(':name is active again.', ['name' => $employee->name]));
+    }
+
+    /**
      * Only a record with no attendance, advances, loans or payroll can be deleted; otherwise mark the person as left.
      */
     public function destroy(Employee $employee): RedirectResponse

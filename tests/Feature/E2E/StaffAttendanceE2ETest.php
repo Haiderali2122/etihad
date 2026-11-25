@@ -192,7 +192,7 @@ class StaffAttendanceE2ETest extends TestCase
             ->assertSee('1 absent, 0 leave')
             ->assertDontSee('Delete employee');
 
-        $this->actingAs($this->owner)->get(route('attendance.index'))->assertOk()->assertSee('26: Present · OT 2.5 h', false);
+        $this->actingAs($this->owner)->get(route('attendance.index', ['month' => '2026-10']))->assertOk()->assertSee('26: Present · 09:00–20:00 · OT 2h 30m', false);
 
         // History exists, so delete is refused; the person is marked as left instead.
         $this->actingAs($this->owner)->from(route('employees.show', $employee))->delete(route('employees.destroy', $employee), ['delete_note' => 'Test reason'])
@@ -287,6 +287,42 @@ class StaffAttendanceE2ETest extends TestCase
         $this->actingAs($this->owner)->get(route('employees.show', $worker))->assertOk();
     }
 
+    public function test_marking_an_employee_as_left_keeps_their_records_and_moves_them_to_the_left_tab(): void
+    {
+        $foreman = Employee::factory()->create(['name' => 'Foreman Fazal', 'is_foreman' => true]);
+        $employee = Employee::factory()->create(['name' => 'Leaving Lateef', 'foreman_id' => $foreman->id]);
+        $teamMember = Employee::factory()->create(['foreman_id' => $foreman->id]);
+        Attendance::factory()->create(['employee_id' => $employee->id, 'date' => '2026-10-20', 'status' => AttendanceStatus::Present]);
+
+        $this->actingAs($this->owner)->from(route('employees.index'))->patch(route('employees.leave', $employee), ['reason' => 'left'])->assertRedirect(route('employees.index'));
+        $this->actingAs($this->owner)->patch(route('employees.leave', $foreman), ['reason' => 'inactive'])->assertRedirect();
+
+        $employee->refresh();
+        $this->assertFalse($employee->is_active);
+        $this->assertSame('2026-10-27', $employee->left_on->toDateString());
+        $this->assertSame(1, $employee->attendances()->count());
+        $this->assertNull($teamMember->fresh()->foreman_id);
+        $this->assertFalse($foreman->fresh()->is_active);
+        $this->assertNull($foreman->fresh()->left_on);
+        $this->actingAs($this->owner)->patch(route('employees.leave', $teamMember), ['reason' => 'fired'])->assertSessionHasErrors('reason');
+        $this->actingAs($this->owner)->get(route('employees.index'))->assertDontSee('Leaving Lateef');
+        $this->actingAs($this->owner)->get(route('employees.index', ['status' => 'inactive']))->assertSee('Leaving Lateef')->assertSee('Active again');
+        $this->actingAs($this->owner)->get(route('employees.index'))->assertSee('Left — pay stops today')->assertSee('Inactive — no leaving date');
+
+        $this->actingAs($this->owner)->patch(route('employees.rejoin', $employee))->assertRedirect();
+        $employee->refresh();
+        $this->assertTrue($employee->is_active);
+        $this->assertNull($employee->left_on);
+    }
+
+    public function test_marking_an_employee_as_left_needs_the_manage_staff_permission(): void
+    {
+        $employee = Employee::factory()->create();
+
+        $this->actingAs($this->userWith(['staff.view']))->patch(route('employees.leave', $employee), ['reason' => 'left'])->assertForbidden();
+        $this->assertTrue($employee->fresh()->is_active);
+    }
+
     public function test_employee_with_no_history_can_be_deleted_from_the_profile(): void
     {
         $employee = Employee::factory()->create();
@@ -366,6 +402,7 @@ class StaffAttendanceE2ETest extends TestCase
     {
         $employee = Employee::factory()->create();
 
+        // A day still to come cannot be marked.
         $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-28', 'rows' => [$employee->id => ['status' => 'present']]])
             ->assertSessionHasErrors('date');
         $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-27'])->assertSessionHasErrors('rows');
@@ -373,7 +410,7 @@ class StaffAttendanceE2ETest extends TestCase
             ->assertSessionHasErrors("rows.{$employee->id}.status");
         $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-27', 'rows' => [$employee->id => ['status' => 'present', 'check_in' => '25:00']]])
             ->assertSessionHasErrors("rows.{$employee->id}.check_in");
-        $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-27', 'rows' => [$employee->id => ['status' => 'present', 'overtime_hours' => 17]]])
+        $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-27', 'rows' => [$employee->id => ['status' => 'present', 'overtime_hours' => 49]]])
             ->assertSessionHasErrors("rows.{$employee->id}.overtime_hours");
         $this->actingAs($this->owner)->put(route('attendance.save-day'), ['date' => '2026-10-27', 'rows' => [$employee->id => ['status' => 'present', 'overtime_hours' => -1]]])
             ->assertSessionHasErrors("rows.{$employee->id}.overtime_hours");
@@ -459,7 +496,7 @@ class StaffAttendanceE2ETest extends TestCase
             ->assertSee('1 absent, 0 leave');
 
         $this->actingAs($this->owner)->get(route('attendance.index', ['month' => '2026-10']))->assertOk()
-            ->assertSee('31: Present · OT 1 h', false)
+            ->assertSee('31: Present · OT 1h 00m', false)
             ->assertSee('1: Absent', false);
 
         // Looked at mid-month (on the 31st, ?month=2026-09 overflows into October; see the month-grid bug test).
@@ -486,7 +523,7 @@ class StaffAttendanceE2ETest extends TestCase
         Employee::factory()->create(['name' => 'Still Here']);
         Employee::factory()->create(['name' => 'Long Gone', 'is_active' => false]);
 
-        $this->actingAs($this->owner)->get(route('attendance.index'))->assertOk()
+        $this->actingAs($this->owner)->get(route('attendance.index', ['month' => '2026-10']))->assertOk()
             ->assertSee('Still Here')->assertDontSee('Long Gone')
             ->assertSee(route('attendance.index', ['month' => '2026-09']), false)
             ->assertDontSee(route('attendance.index', ['month' => '2026-11']), false);
@@ -523,7 +560,8 @@ class StaffAttendanceE2ETest extends TestCase
         $this->assertSame('device', $day->source);
         $this->assertSame('08:58', substr($day->check_in, 0, 5));
         $this->assertSame('21:04', substr($day->check_out, 0, 5));
-        $this->assertSame(246, $day->overtime_minutes);
+        // Out at 21:04 on a 9-to-5 shift: everything after 5 pm counts once past the 15-minute grace.
+        $this->assertSame(244, $day->overtime_minutes);
 
         $this->actingAs($this->owner)->get(route('attendance.import'))->assertOk();
     }

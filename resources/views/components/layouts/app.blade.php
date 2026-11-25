@@ -31,12 +31,11 @@
         ['route' => 'employees.index', 'match' => ['employees.*', 'designations.*'], 'icon' => 'users', 'label' => __('Staff'), 'can' => 'staff.view'],
         ['route' => 'attendance.index', 'match' => 'attendance.*', 'icon' => 'fingerprint', 'label' => __('Attendance'), 'can' => 'staff.view'],
         ['route' => 'foreman-cash.index', 'match' => 'foreman-cash.*', 'icon' => 'wallet', 'label' => __('Foreman cash'), 'can' => 'staff.view'],
-        ['route' => 'salary-advances.index', 'match' => ['salary-advances.*', 'foreman-sheets.*', 'loans.*'], 'icon' => 'wallet', 'label' => __('Advances & loans'), 'can' => 'staff.view'],
+        ['route' => 'salary-advances.index', 'match' => ['salary-advances.*', 'foreman-sheets.*', 'loans.*'], 'icon' => 'wallet', 'label' => __('Salaries calculation'), 'can' => 'staff.view'],
         ['route' => 'payroll.index', 'match' => 'payroll.*', 'icon' => 'cal', 'label' => __('Payroll'), 'can' => 'staff.view'],
         ['group' => __('Records')],
         ['route' => 'parties.index', 'match' => 'parties.*', 'icon' => 'users', 'label' => __('Parties & suppliers'), 'can' => 'parties.manage'],
         ['route' => 'users.index', 'match' => ['users.*', 'roles.*'], 'icon' => 'shield', 'label' => __('Users & roles'), 'can' => 'users.manage'],
-        ['route' => 'deletions.index', 'match' => 'deletions.*', 'icon' => 'x', 'label' => __('Deletion log'), 'can' => 'deletions.view'],
     ];
     $nav = array_values(array_filter($nav, fn ($item) => ! isset($item['can']) || $user->can($item['can'])));
     $nav = array_values(array_filter($nav, fn ($item, $i) => ! isset($item['group']) || (isset($nav[$i + 1]) && ! isset($nav[$i + 1]['group'])), ARRAY_FILTER_USE_BOTH));
@@ -239,6 +238,13 @@
         document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) { toggle(false); } });
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { toggle(false); btn.focus(); } });
     })();
+</script>
+<script>
+    document.addEventListener('click', e => {
+        const row = e.target.closest('tr[data-href]');
+        if (!row || e.target.closest('a, button, input, select, textarea, label, form, summary, details')) { return; }
+        if (e.ctrlKey || e.metaKey) { window.open(row.dataset.href, '_blank'); } else { location.href = row.dataset.href; }
+    });
 </script>
 @stack('scripts')
 </body>

@@ -3,6 +3,13 @@
         <x-slot:actions>@can('expense-heads.manage')<a class="btn" href="{{ route('expense-heads.index') }}"><x-icon name="file" />{{ __('Expense heads') }}</a>@endcan @can('expenses.create')<a class="btn primary" href="{{ route('expenses.create') }}"><x-icon name="plus" />{{ __('Add expense') }}</a>@endcan</x-slot:actions>
     </x-page-head>
 
+    <div class="grid g4">
+        <x-kpi icon="wallet" tone="warn" :label="__('Cash with manager')" :foot="__('Given minus spent from it')">Rs {{ number_format($cashGiven - $cashSpent) }}</x-kpi>
+        <x-kpi icon="download" :label="__('Total given')">Rs {{ number_format($cashGiven) }}</x-kpi>
+        <x-kpi icon="send" :label="__('Total spent')" :foot="__('Rs :cash from manager\'s cash · Rs :owner paid by owner', ['cash' => number_format($cashSpent), 'owner' => number_format($totalSpent - $cashSpent)])">Rs {{ number_format($totalSpent) }}</x-kpi>
+        <x-kpi icon="shield" tone="good" :label="__('Spent today')" :foot="$dailyLimit ? __('Manager Rs :n of daily limit Rs :limit', ['n' => number_format($todayFromCash), 'limit' => number_format($dailyLimit)]) : __('No daily limit set — every spend needs approval')">Rs {{ number_format($todaySpent) }}</x-kpi>
+    </div>
+
     {{-- Where the money went: search one thing (e.g. nut bolts) across all receipts, or pick from the list, biggest first. --}}
     <div class="card" id="spending">
         <div class="card-h"><div><h3>{{ __('Where the money went') }}</h3><div class="sub">{{ __('Search any item, head or person paid. Each receipt line counts on its own, even on receipts mixed with other expenses.') }}</div></div></div>
@@ -10,7 +17,7 @@
             <form method="GET" action="{{ route('expenses.index') }}#spending" id="spendForm" style="display:flex;flex-direction:column;gap:10px">
                 @if ($headId)<input type="hidden" name="head" value="{{ $headId }}">@endif
                 <div style="display:flex;gap:8px">
-                    <input class="select" type="search" name="q" value="{{ $search }}" list="spentOnList" placeholder="{{ __('Search e.g. nut bolts') }}" aria-label="{{ __('Search spending') }}" style="flex:1;min-width:0;height:46px;font-size:16px;padding:0 14px">
+                    <input class="select" type="search" name="q" id="spendSearch" value="{{ $search }}" list="spentOnList" placeholder="{{ __('Search e.g. nut bolts') }}" aria-label="{{ __('Search spending') }}" style="flex:1;min-width:0;height:46px;font-size:16px;padding:0 14px">
                     <datalist id="spentOnList">@foreach ($spentOn as $row)<option value="{{ $row['name'] }}">@endforeach</datalist>
                     <button class="btn primary" type="submit" style="height:46px"><x-icon name="search" />{{ __('Search') }}</button>
                 </div>
@@ -36,7 +43,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Item') }}</th><th>{{ __('Head') }}</th><th>{{ __('Paid to') }}</th><th class="r">{{ __('Amount') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($found as $l)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['expense', $l['expense']->id]) }}">
                         <td>{{ $l['date']->format('j M Y') }}</td>
                         <td>{{ $l['description'] ?: $l['name'] }}@if ($l['quantity'] !== null && $l['rate'] !== null)<div class="meta">{{ rtrim(rtrim((string) $l['quantity'], '0'), '.') }} × {{ number_format((float) $l['rate'], 2) }}</div>@endif</td>
                         <td>{{ $l['head'] }}</td>
@@ -51,8 +58,8 @@
                 @if ($found->isNotEmpty())<tfoot><tr><td colspan="4" style="font-weight:700">{{ __('Total') }}</td><td class="r num"><b>Rs {{ number_format($foundTotal) }}</b></td><td></td></tr></tfoot>@endif
             </table></div>
         @else
-            {{-- The biggest spending in the period; click a row to see its entries. --}}
-            <div class="tbl-wrap"><table>
+            {{-- The biggest spending in the period, shown once the search box is clicked; click a row to see its entries. --}}
+            <div class="tbl-wrap" id="spendTop" hidden><table>
                 <thead><tr><th>{{ __('Spent on') }}</th><th class="r">{{ __('Entries') }}</th><th class="r">{{ __('Total') }}</th></tr></thead>
                 <tbody>
                 @forelse (array_slice($spentOn, 0, 10) as $row)
@@ -63,13 +70,6 @@
                 </tbody>
             </table></div>
         @endif
-    </div>
-
-    <div class="grid g4">
-        <x-kpi icon="wallet" tone="warn" :label="__('Cash with manager')" :foot="__('Given minus spent from it')">Rs {{ number_format($cashGiven - $cashSpent) }}</x-kpi>
-        <x-kpi icon="download" :label="__('Total given')">Rs {{ number_format($cashGiven) }}</x-kpi>
-        <x-kpi icon="send" :label="__('Total spent')" :foot="__('Rs :cash from manager\'s cash · Rs :owner paid by owner', ['cash' => number_format($cashSpent), 'owner' => number_format($totalSpent - $cashSpent)])">Rs {{ number_format($totalSpent) }}</x-kpi>
-        <x-kpi icon="shield" tone="good" :label="__('Spent today')" :foot="$dailyLimit ? __('Manager Rs :n of daily limit Rs :limit', ['n' => number_format($todayFromCash), 'limit' => number_format($dailyLimit)]) : __('No daily limit set — every spend needs approval')">Rs {{ number_format($todaySpent) }}</x-kpi>
     </div>
 
     <div class="grid g-main">
@@ -87,7 +87,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Head') }}</th><th>{{ __('Paid to') }}</th><th>{{ __('Reason') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($expenses as $e)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['expense', $e->id]) }}">
                         <td>{{ $e->spent_on->format('j M') }}<div class="meta">{{ $e->user->name }}</div></td>
                         @php $lineHeads = $e->items->map(fn ($i) => $i->head ?? $e->head)->unique('id')->values(); @endphp
                         <td>@foreach ($lineHeads->isNotEmpty() ? $lineHeads : collect([$e->head]) as $h)<span class="who"><i style="width:10px;height:10px;border-radius:3px;background:{{ $h->color }};display:inline-block"></i>{{ $h->localName() }}</span>@endforeach</td>
@@ -139,4 +139,16 @@
             </div>
         </div>
     </div>
+    @push('scripts')
+        <script>
+            (() => {
+                // Clicking the search box opens the list of what the money went on, biggest first.
+                const box = document.getElementById('spendSearch'), top = document.getElementById('spendTop');
+                if (!box || !top) { return; }
+                const open = () => { top.hidden = false; };
+                box.addEventListener('focus', open);
+                box.addEventListener('click', open);
+            })();
+        </script>
+    @endpush
 </x-layouts.app>

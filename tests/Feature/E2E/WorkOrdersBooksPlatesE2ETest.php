@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Enums\ContractorJobKind;
 use App\Enums\PartyKind;
 use App\Enums\WorkOrderStage;
+use App\Http\Controllers\ApprovalController;
 use App\Models\Book;
 use App\Models\BookFormat;
 use App\Models\ContractorJob;
@@ -13,6 +14,7 @@ use App\Models\Godown;
 use App\Models\Machine;
 use App\Models\OutsidePrintReceipt;
 use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\PaperType;
 use App\Models\Party;
@@ -123,7 +125,6 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 500]))->assertSessionHasNoErrors();
         $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 600]))->assertSessionHasNoErrors();
         [$inHouse, $outsource, $pending, $rejected] = WorkOrder::query()->orderBy('id')->get()->all();
-        $this->decide($rejected, 'reject', 'Wrong book')->assertSessionHasNoErrors();
         $plate = PlateJob::factory()->create(['work_order_id' => $inHouse->id]);
 
         $this->actingAs($this->owner);
@@ -132,8 +133,9 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->get(route('work-orders.create', ['format' => $this->format->id]))->assertOk();
         $this->get(route('work-orders.show', $inHouse))->assertOk()->assertSee('371')->assertSee('Printing done')->assertSee('Printed copies')->assertSee('Kitab Ghar');
         $this->get(route('work-orders.show', $outsource))->assertOk()->assertSee('Outside printing')->assertSee('Record printed work received')->assertSee('Al-Noor Press');
-        $this->get(route('work-orders.show', $pending))->assertOk()->assertSee('Waiting for the owner')->assertDontSee('Move to');
-        $this->get(route('work-orders.show', $rejected))->assertOk()->assertSee('Sent back')->assertSee('Wrong book');
+        // Orders entered by the manager go straight to printing: nothing waits for the owner.
+        $this->get(route('work-orders.show', $pending))->assertOk()->assertDontSee('Waiting for the owner')->assertSee('Printing done');
+        $this->get(route('work-orders.show', $rejected))->assertOk()->assertDontSee('Sent back');
 
         $book = $this->format->book;
         $this->get(route('books.index'))->assertOk()->assertSee('Urdu Reader Class 5');
@@ -166,7 +168,7 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->get(route('work-orders.create'))->assertOk();
         $this->get(route('work-orders.show', $order))->assertOk()->assertSee('پرنٹنگ');
         $this->get(route('work-orders.show', $outsource))->assertOk();
-        $this->get(route('work-orders.show', $pending))->assertOk()->assertSee('مالک کی منظوری کا انتظار۔');
+        $this->get(route('work-orders.show', $pending))->assertOk()->assertSee('پرنٹنگ');
         $this->get(route('books.index'))->assertOk();
         $this->get(route('books.create'))->assertOk();
         $this->get(route('books.show', $this->format->book))->assertOk();
@@ -261,37 +263,25 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
     {
         $this->assertSame(1000, $this->stock());
 
+        // Saved by the manager: approved at once, paper issued, printing starts. Nothing waits for the owner.
         $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order())
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('status', 'WO-1001 saved and sent for approval. Paper is issued once it is approved.');
+            ->assertSessionHas('status', 'WO-1001 saved; 371 rims issued from stock.');
         $order = WorkOrder::query()->sole();
-        $this->assertSame(ApprovalStatus::Pending, $order->status);
-        $this->assertSame(WorkOrderStage::Waiting, $order->stage);
+        $this->assertSame(ApprovalStatus::Approved, $order->status);
+        $this->assertSame(WorkOrderStage::Printing, $order->stage);
         $this->assertSame(371, $order->rims_needed);
         $this->assertSame('10.00', $order->forms);
-        $this->assertNull($order->paper_issue_id);
-        $this->assertSame(1000, $this->stock(), 'A waiting order must not touch stock.');
-
-        // A waiting order cannot be moved on.
-        $this->actingAs($this->manager)->patch(route('work-orders.advance', $order))->assertStatus(409);
-
-        // The manager cannot approve; the order shows in the owner's queue.
-        $this->actingAs($this->manager)->patch(route('approvals.update', ['work-order', $order->id]), ['decision' => 'approve'])->assertForbidden();
-        $this->actingAs($this->owner)->get(route('approvals.index'))->assertOk()->assertSee('WO-1001');
-
-        $this->decide($order, 'approve')->assertSessionHasNoErrors()->assertRedirect(route('approvals.index'));
-        $order->refresh();
-        $this->assertSame(ApprovalStatus::Approved, $order->status);
-        $this->assertSame($this->owner->id, $order->reviewed_by);
-        $this->assertSame(WorkOrderStage::Printing, $order->stage);
+        $this->assertNotNull($order->paper_issue_id);
         $this->assertSame(629, $this->stock());
+        $this->assertSame(0, app(ApprovalController::class)->pendingItems()->whereIn('type', ['work-order', 'paper-issue'])->count());
 
         $issue = PaperIssue::query()->sole();
         $this->assertSame(371, $issue->quantity);
         $this->assertSame('WO-1001', $issue->reference);
         $this->assertSame('Urdu Reader Class 5', $issue->book_name);
         $this->assertSame('Machine P-01', $issue->issued_to);
-        $this->assertSame($this->owner->id, $issue->created_by);
+        $this->assertSame($this->manager->id, $issue->created_by);
 
         // Deciding again is refused and nothing more is issued.
         $this->decide($order, 'approve')->assertStatus(409);
@@ -345,57 +335,47 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->actingAs($this->owner)->flushSession()->get(route('approvals.index'))->assertOk()->assertDontSee('WO-1001');
     }
 
-    public function test_rejected_order_leaves_stock_and_cannot_be_approved_later(): void
+    public function test_an_order_needs_its_paper_in_stock_when_it_is_saved(): void
     {
-        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order())->assertSessionHasNoErrors();
-        $order = WorkOrder::query()->sole();
+        // 10 forms × 30,000 ÷ 500 = 600 rims, no wastage: the first takes 600 of 1,000; the second is refused.
+        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 30000, 'wastage_percent' => 0]))->assertSessionHasNoErrors();
+        $this->assertSame(400, $this->stock());
+        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 30000, 'wastage_percent' => 0]))
+            ->assertSessionHasErrors(['paper_type_id' => 'This order needs 600 rims but only 400 are in stock for this paper and party.']);
+        $this->assertSame(1, WorkOrder::query()->count());
 
-        $this->decide($order, 'reject')->assertSessionHasErrors('note');
-        $this->assertTrue($order->refresh()->isPending());
-
-        $this->decide($order, 'reject', 'Check the copies')->assertSessionHasNoErrors();
-        $order->refresh();
-        $this->assertSame(ApprovalStatus::Rejected, $order->status);
-        $this->assertSame(WorkOrderStage::Waiting, $order->stage);
-        $this->assertNull($order->paper_issue_id);
-        $this->assertSame(1000, $this->stock());
-
-        // There is no way to re-submit: a sent-back order stays sent back.
-        $this->decide($order, 'approve')->assertStatus(409);
-        $this->assertSame(1000, $this->stock());
-        $this->actingAs($this->manager)->patch(route('work-orders.advance', $order))->assertStatus(409);
-
-        $this->actingAs($this->owner)->get(route('work-orders.show', $order))->assertOk()->assertSee('Check the copies');
-
-        // A sent-back order can be deleted since nothing left the godown.
-        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $order), ['delete_note' => 'Test reason'])->assertRedirect(route('work-orders.index'));
-        $this->assertModelMissing($order);
-        $this->assertSame(1000, $this->stock());
+        // Once more paper arrives it can be saved.
+        $this->receive(200);
+        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 30000, 'wastage_percent' => 0]))->assertSessionHasNoErrors();
+        $this->assertSame(0, $this->stock());
     }
 
-    public function test_approval_is_blocked_when_stock_runs_short_and_allowed_once_paper_arrives(): void
+    public function test_an_order_short_of_paper_takes_the_rest_from_another_stock_and_it_is_owed(): void
     {
-        // 10 forms × 30,000 ÷ 500 = 600 rims, no wastage; both pass the save-time check against 1000.
-        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 30000, 'wastage_percent' => 0]))->assertSessionHasNoErrors();
-        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 30000, 'wastage_percent' => 0]))->assertSessionHasNoErrors();
-        [$first, $second] = WorkOrder::query()->orderBy('id')->get()->all();
-        $this->assertSame(['WO-1001', 'WO-1002'], [$first->number, $second->number]);
+        // 10 forms × 60,000 ÷ 500 = 1,200 + 3% = 1,236 rims; the party has 1,000, so 236 are short.
+        $press = Party::factory()->create(['name' => 'Etihad press stock']);
+        $this->receive(500, $this->paper, $press);
 
-        $this->decide($first, 'approve')->assertSessionHasNoErrors();
-        $this->assertSame(400, $this->stock());
+        $this->actingAs($this->owner)->get(route('work-orders.create'))->assertOk()->assertSee('Take the rest from');
+        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 60000]))->assertSessionHasErrors('paper_type_id');
+        $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 60000, 'shortage_stock' => $this->paper->id.'-'.$press->id]))
+            ->assertSessionHasNoErrors()->assertSessionHas('status', fn ($s) => str_contains($s, '236 rims were short and came from Etihad press stock'));
 
-        $this->decide($second, 'approve')->assertRedirect(route('approvals.index'))
-            ->assertSessionHasErrors(['decision' => 'Only 400 rims of this paper are in stock for Ilmi Kutub Khana; the order needs 600.']);
-        $this->assertTrue($second->refresh()->isPending());
-        $this->assertNull($second->paper_issue_id);
-        $this->assertSame(400, $this->stock());
-
-        // Rejecting is still possible while blocked.
-        // Instead, more paper arrives and the owner approves.
-        $this->receive(200);
-        $this->decide($second, 'approve')->assertSessionHasNoErrors();
-        $this->assertSame(WorkOrderStage::Printing, $second->refresh()->stage);
+        $order = WorkOrder::query()->sole();
+        $this->assertSame(WorkOrderStage::Printing, $order->stage);
         $this->assertSame(0, $this->stock());
+        $this->assertSame(264, app(PaperStock::class)->available($this->paper->id, $press->id));
+        $this->assertSame([1000, 236], PaperIssue::query()->where('reference', $order->number)->orderBy('id')->pluck('quantity')->all());
+        $loan = PaperLoan::query()->sole();
+        $this->assertSame(236, $loan->rims);
+        $this->assertSame($this->party->id, $loan->borrower_party_id);
+        $this->actingAs($this->owner)->get(route('paper.index', ['tab' => 'owed']))->assertOk()->assertSee('Etihad press stock')->assertSee('236');
+
+        // Deleting the order (nothing recorded on it yet) puts every rim back and drops the shortage.
+        $this->actingAs($this->owner)->delete(route('work-orders.destroy', $order), ['delete_note' => 'Wrong copies'])->assertRedirect(route('work-orders.index'));
+        $this->assertSame(1000, $this->stock());
+        $this->assertSame(500, app(PaperStock::class)->available($this->paper->id, $press->id));
+        $this->assertSame(0, PaperLoan::query()->count());
     }
 
     public function test_paper_of_another_party_or_type_does_not_cover_an_order(): void
@@ -411,24 +391,26 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->assertSame(1000, $this->stock());
     }
 
-    public function test_deleting_orders_only_before_paper_leaves(): void
+    public function test_an_order_can_be_deleted_until_work_is_recorded_and_its_rims_go_back(): void
     {
         $this->actingAs($this->owner)->post(route('work-orders.store'), $this->order())->assertSessionHasNoErrors();
         $this->actingAs($this->manager)->post(route('work-orders.store'), $this->order(['copies' => 100]))->assertSessionHasNoErrors();
-        [$issued, $pending] = WorkOrder::query()->orderBy('id')->get()->all();
-        PlateJob::factory()->create(['work_order_id' => $pending->id]);
+        [$printed, $mistake] = WorkOrder::query()->orderBy('id')->get()->all();
+        PlateJob::factory()->create(['work_order_id' => $mistake->id]);
+        $before = $this->stock();
 
-        $this->actingAs($this->owner)->get(route('work-orders.show', $issued))->assertDontSee('Delete WO-1001');
-        $this->delete(route('work-orders.destroy', $issued), ['delete_note' => 'Test reason'])->assertStatus(409);
-        $this->assertModelExists($issued);
-        $this->assertSame(629, $this->stock());
-
-        // A waiting order with plate history can go; the plate bill stays, unlinked.
-        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $pending), ['delete_note' => 'Test reason'])
+        // Entered by mistake, nothing recorded yet: it can go, its rims return, the plate bill stays unlinked.
+        $this->actingAs($this->owner)->get(route('work-orders.show', $mistake))->assertSee('Delete');
+        $this->actingAs($this->manager)->delete(route('work-orders.destroy', $mistake), ['delete_note' => 'Entered twice'])
             ->assertRedirect(route('work-orders.index'))->assertSessionHas('status', 'WO-1002 deleted.');
-        $this->assertModelMissing($pending);
+        $this->assertModelMissing($mistake);
         $this->assertNull(PlateJob::query()->sole()->work_order_id);
-        $this->assertSame(629, $this->stock());
+        $this->assertSame($before + $mistake->rims_needed, $this->stock());
+
+        // Once printing is recorded it stays.
+        $printed->forceFill(['printed_copies' => 18000])->save();
+        $this->actingAs($this->owner)->delete(route('work-orders.destroy', $printed), ['delete_note' => 'Test'])->assertStatus(409);
+        $this->assertModelExists($printed);
     }
 
     public function test_there_is_no_way_to_edit_an_order_after_it_is_saved(): void
@@ -496,13 +478,9 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
 
     public function test_leftover_rims_returned_by_a_manager_wait_for_approval_but_count_in_stock(): void
     {
+        // The order itself is issued on save; the leftover rims a manager brings back still go to the owner.
         $this->actingAs($this->manager)->post(route('work-orders.store'), $this->outsourceOrder())->assertSessionHasNoErrors();
         $order = WorkOrder::query()->sole();
-
-        // Not issued yet: receiving printed work is refused.
-        $this->actingAs($this->manager)->post(route('work-orders.outside-receipts.store', $order), ['received_on' => today()->toDateString(), 'printed_copies' => 1])->assertStatus(409);
-
-        $this->decide($order, 'approve')->assertSessionHasNoErrors();
         $this->assertSame(629, $this->stock());
 
         $this->actingAs($this->manager)->post(route('work-orders.outside-receipts.store', $order), [
@@ -739,15 +717,16 @@ class WorkOrdersBooksPlatesE2ETest extends TestCase
         $this->assertSame($this->manager->id, $job->created_by);
 
         $this->get(route('plate-jobs.index'))->assertOk()->assertSee('Lahore Plates')->assertSee('WO-1001');
-        $this->get(route('plate-jobs.index', ['show' => 'paid']))->assertOk()->assertDontSee('Lahore Plates');
+        $this->get(route('plate-jobs.index', ['show' => 'paid']))->assertOk()->assertDontSee('WO-1001');
         $this->get(route('work-orders.show', $order))->assertOk()->assertSee('Lahore Plates')->assertSee('Unpaid');
 
         $this->from(route('plate-jobs.index'))->patch(route('plate-jobs.pay', $job), [])->assertSessionHasErrors('paid_on');
         $this->from(route('plate-jobs.index'))->patch(route('plate-jobs.pay', $job), ['paid_on' => today()->toDateString(), 'payment_note' => 'Cash'])
             ->assertRedirect(route('plate-jobs.index'))->assertSessionHas('status', 'Rs 38 paid; the bill is cleared.');
         $this->assertTrue($job->refresh()->isPaid());
-        $this->get(route('plate-jobs.index', ['show' => 'paid']))->assertOk()->assertSee('Lahore Plates')->assertSee('Cash');
-        $this->get(route('plate-jobs.index'))->assertOk()->assertDontSee('Lahore Plates');
+        $this->get(route('plate-jobs.index', ['show' => 'paid']))->assertOk()->assertSee('Lahore Plates')->assertSee('WO-1001');
+        $this->get(route('records.show', ['plate-job', $job->id]))->assertOk()->assertSee('Cash');
+        $this->get(route('plate-jobs.index'))->assertOk()->assertDontSee('WO-1001');
         $this->get(route('work-orders.show', $order))->assertOk()->assertSee('Paid');
     }
 

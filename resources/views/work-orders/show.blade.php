@@ -21,8 +21,8 @@
             <x-badge :tone="$order->status->value === 'rejected' ? 'bad' : $order->stage->tone()">{{ $order->status->value === 'rejected' ? __('Sent back') : $order->stage->label() }}</x-badge>
             <a class="btn" href="{{ route('work-orders.index') }}">{{ __('Back') }}</a>
             @can('orders.manage')
-                @if (! $order->paper_issue_id)
-                    <x-delete-button :action="route('work-orders.destroy', $order)" :confirm="__('Delete :n?', ['n' => $order->number])" :label="__('Delete')" />
+                @if ($order->canBeDeleted())
+                    <x-delete-button :action="route('work-orders.destroy', $order)" :confirm="__('Delete :n? Its :r rims go back into stock.', ['n' => $order->number, 'r' => number_format($order->rims_needed)])" :label="__('Delete')" />
                 @endif
             @endcan
         </x-slot:actions>
@@ -64,22 +64,8 @@
                         @endforeach
                     @else
                         @can('orders.manage')
-                            <form method="POST" action="{{ route('work-orders.younus-paper', $order) }}" class="form" style="margin-bottom:14px" data-younus @if ($outside) data-printing-rate="{{ (float) $order->printing_rate }}" @endif>
-                                @csrf
-                                <div class="field full"><b>{{ $outside ? __('Younus: godown → :press', ['press' => $order->press?->name ?? __('outside press')]) : __('Younus: godown → our press') }}</b></div>
-                                <x-field name="younus_rims" type="number" step="0.5" min="0.5" :label="__('Rims carried')" :value="$order->rims_needed" required data-rims />
-                                <x-field name="younus_rate" type="number" step="0.01" min="0" :label="__('Rate per rim (Rs)')" :value="$rate($outside ? RimMove::ToOutside : RimMove::ToPress)" required data-rate />
-                                @if ($outside && $order->printing_rate === null)
-                                    <x-field name="printing_rate" type="number" step="0.01" min="0" :label="__('Printing rate per rim (Rs)')" required data-print-rate />
-                                @endif
-                                <x-field name="carried_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                                <div class="field full"><div class="calc" style="padding:10px 14px">
-                                    <div class="stat-line"><span>{{ __('Younus carrying: rims × rate') }}</span><b class="num" data-labour>Rs 0</b></div>
-                                    @if ($outside)<div class="stat-line"><span>{{ __('Printing charge: rims × :r', ['r' => $order->printing_rate !== null ? $qty($order->printing_rate) : __('printing rate')]) }}</span><b class="num" data-printing>Rs 0</b></div>@endif
-                                    <div class="stat-line"><span><b>{{ __('To pay Younus') }}</b></span><b class="num" data-total>Rs 0</b></div>
-                                </div></div>
-                                <div class="field full"><button class="btn" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Add to Younus ka khata') }}</button></div>
-                            </form>
+                            {{-- Younus's work is entered on his khata; this opens it with the order filled in. --}}
+                            <a class="btn" style="margin-bottom:14px" href="{{ route('rim-loadings.index', ['order' => $order->id, 'kind' => ($outside ? RimMove::ToOutside : RimMove::ToPress)->value]) }}"><x-icon name="truck" />{{ $outside ? __('Add Younus work: godown → outside press') : __('Add Younus work: godown → our press') }}</a>
                         @endcan
                     @endif
 
@@ -117,15 +103,8 @@
                         <div class="stat-line"><span>{{ __('Younus') }} · {{ $l->kind->label() }} · {{ $l->loaded_on->format('j M') }}</span><b>{{ $qty($l->rims) }} × {{ $qty($l->rate_per_rim) }} = Rs {{ number_format($l->amount) }}</b></div>
                     @empty
                         @can('orders.manage')
-                            <form method="POST" action="{{ route('rim-loadings.store', $order) }}" class="form" data-younus>
-                                @csrf
-                                <div class="field full"><b>{{ $outside ? __('Younus: outside press → back for folding') : __('Younus: our press → folding') }}</b></div>
-                                <x-field name="rims" type="number" step="0.5" min="0.5" :label="__('Rims carried')" :value="$order->rimsUsed()" required data-rims />
-                                <x-field name="rate_per_rim" type="number" step="0.01" min="0" :label="__('Rate per rim (Rs)')" :value="$last !== null ? $qty($last) : null" required data-rate />
-                                <x-field name="loaded_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
-                                <div class="field"><label>{{ __('To pay Younus') }}</label><div class="calc" style="padding:10px 14px"><div class="big num" data-total style="font-size:22px">Rs 0</div><div class="meta">{{ __('rims × rate per rim') }}</div></div></div>
-                                <div class="field full"><button class="btn primary" type="submit" style="justify-content:center"><x-icon name="truck" />{{ __('Add to Younus ka khata') }}</button></div>
-                            </form>
+                            {{-- Entered on Younus ka khata; saving it there also finishes this step. --}}
+                            <a class="btn primary" href="{{ route('rim-loadings.index', ['order' => $order->id, 'kind' => $kind->value]) }}"><x-icon name="truck" />{{ $outside ? __('Add Younus work: outside press → back for folding') : __('Add Younus work: our press → folding') }}</a>
                         @endcan
                     @endforelse
                     @break

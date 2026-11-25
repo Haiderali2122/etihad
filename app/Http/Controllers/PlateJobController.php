@@ -8,6 +8,7 @@ use App\Models\Book;
 use App\Models\Party;
 use App\Models\PlateJob;
 use App\Models\PlatePurchase;
+use App\Models\ProcessorPayment;
 use App\Models\WorkOrder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,20 +19,84 @@ use Illuminate\View\View;
 
 class PlateJobController extends Controller
 {
+    /**
+     * Like Younus's khata: what the processors billed, what was given (and is kept as advance), and what is left;
+     * then the forms (money given, plates returned), then the records as plain rows. One processor or all.
+     */
     public function index(Request $request): View
     {
         $show = in_array($request->query('show'), ['unpaid', 'paid', 'all'], true) ? $request->query('show') : 'unpaid';
+        $processors = Party::query()->where('kind', PartyKind::PlateProcessor)
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('plateJobs'))->orderBy('name')->get();
+        $processor = $processors->firstWhere('id', $request->integer('processor'));
+        $forProcessor = fn ($q) => $q->when($processor, fn ($q) => $q->where('party_id', $processor->id));
+
+        $jobs = PlateJob::query()->tap($forProcessor);
+        $payments = ProcessorPayment::query()->with(['processor', 'billPayments'])->tap($forProcessor)->latest('paid_on')->latest('id')->get();
 
         return view('plate-jobs.index', [
-            'jobs' => PlateJob::query()->with(['processor', 'workOrder', 'returns', 'payments'])
+            'jobs' => PlateJob::query()->with(['processor', 'workOrder', 'returns', 'payments'])->tap($forProcessor)
                 ->when($show === 'unpaid', fn ($q) => $q->whereNull('paid_on'))
                 ->when($show === 'paid', fn ($q) => $q->whereNotNull('paid_on'))
                 ->latest('job_on')->latest('id')->paginate(30)->withQueryString(),
-            'unpaidTotal' => (int) PlateJob::query()->whereNull('paid_on')->sum(DB::raw('amount - paid_amount')),
-            'monthPlates' => (int) PlateJob::query()->where('job_on', '>=', now()->startOfMonth())->sum('plates'),
-            'monthAmount' => (int) PlateJob::query()->where('job_on', '>=', now()->startOfMonth())->sum('amount'),
+            'billed' => (int) (clone $jobs)->sum('amount'),
+            'paid' => (int) (clone $jobs)->sum('paid_amount'),
+            'unpaidTotal' => (int) (clone $jobs)->whereColumn('paid_amount', '<', 'amount')->sum(DB::raw('amount - paid_amount')),
+            'advance' => (int) $payments->sum(fn (ProcessorPayment $p) => max(0, $p->amount - $p->billPayments->sum('amount'))),
+            'payments' => $payments->take(40),
+            // Plates still with a processor, for the "Plates returned" form.
+            'held' => PlateJob::query()->with('processor')->tap($forProcessor)->whereColumn('returned_plates', '<', 'plates')->orderBy('job_on')->get(),
+            'processors' => $processors,
+            'processor' => $processor,
             'show' => $show,
         ]);
+    }
+
+    /**
+     * Plates returned, from the form on the Plates tab: the job is picked from those with plates still out.
+     */
+    public function returnPicked(Request $request): RedirectResponse
+    {
+        if ($request->filled('plate_job_id')) {
+            $request->validate(['plate_job_id' => ['exists:plate_jobs,id']]);
+
+            return $this->returnPlates($request, PlateJob::query()->findOrFail($request->integer('plate_job_id')));
+        }
+
+        // A processor and plate size: the plates come off their oldest jobs first (each job given on or before the date).
+        $data = $request->validate([
+            'group' => ['required', 'string', 'regex:/^\d+\|/'],
+            'returned_plates' => ['required', 'integer', 'min:1'],
+            'returned_on' => ['required', 'date', 'before_or_equal:today'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ], ['group.required' => __('Pick the processor and size.')]);
+        [$partyId, $size] = explode('|', $data['group'], 2);
+        $jobs = PlateJob::query()->with('processor')->where('party_id', (int) $partyId)
+            ->whereColumn('returned_plates', '<', 'plates')->whereDate('job_on', '<=', $data['returned_on'])
+            ->orderBy('job_on')->orderBy('id')->get()
+            ->filter(fn (PlateJob $j) => mb_strtolower(trim((string) $j->plate_size)) === $size)->values();
+        $out = $jobs->sum(fn (PlateJob $j) => $j->platesHeld());
+        if ($jobs->isEmpty() || $data['returned_plates'] > $out) {
+            return back()->withInput()->withErrors(['returned_plates' => __('Only :n of these plates were out on :date.', ['n' => number_format($out), 'date' => Carbon::parse($data['returned_on'])->format('j M')])]);
+        }
+
+        $left = (int) $data['returned_plates'];
+        DB::transaction(function () use ($jobs, &$left, $data, $request): void {
+            foreach ($jobs as $job) {
+                if ($left <= 0) {
+                    break;
+                }
+                $part = min($left, $job->platesHeld());
+                $job->returns()->create(['returned_on' => $data['returned_on'], 'plates' => $part, 'note' => $data['note'] ?? null, 'created_by' => $request->user()->id]);
+                $left -= $part;
+            }
+        });
+        $first = $jobs->first();
+
+        return back()->with('status', __(':n plates returned on :date; :held still with :name.', [
+            'n' => $data['returned_plates'], 'date' => Carbon::parse($data['returned_on'])->format('j M'),
+            'held' => $out - (int) $data['returned_plates'], 'name' => $first->processor->name,
+        ]));
     }
 
     public function create(Request $request): View

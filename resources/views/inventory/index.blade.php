@@ -79,7 +79,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Slip') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Total') }}</th><th>{{ __('Received') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($sales as $s)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['sale', $s->id]) }}">
                         <td>{{ $s->sold_on->format('j M Y') }}<div class="meta">{{ $s->creator?->name }}</div></td>
                         <td>{{ $s->receiptNumber() }}</td>
                         <td>{{ $s->items->pluck('description')->implode(', ') }}</td>
@@ -118,7 +118,7 @@
                     <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Total') }}</th><th>{{ __('Payments') }}</th><th></th></tr></thead>
                     <tbody>
                     @forelse ($bills as $bill)
-                        <tr>
+                        <tr data-href="{{ route('records.show', ['material-bill', $bill->id]) }}">
                             <td>{{ $bill->bill_on->format('j M Y') }}<div class="meta">{{ $bill->receiptNumber() }}@if ($bill->supplier) · {{ $bill->supplier }}@endif</div></td>
                             <td>@foreach ($bill->items as $line)<div>{{ $line->description }} <span class="meta">{{ InventoryItem::qty($line->quantity) }} × {{ number_format((float) $line->rate, 2) }} = Rs {{ number_format($line->amount) }}</span></div>@endforeach</td>
                             <td class="r num"><b>Rs {{ number_format($bill->total) }}</b>@if ($bill->paid_amount > 0 && $bill->unpaid() > 0)<div class="meta">{{ __('Paid Rs :n', ['n' => number_format($bill->paid_amount)]) }}</div>@endif</td>
@@ -137,7 +137,7 @@
                     <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                     <tbody>
                     @forelse ($materialPayments as $p)
-                        <tr @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
+                        <tr data-href="{{ route('records.show', ['expense', $p->id]) }}" @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
                             <td>{{ $p->spent_on->format('j M Y') }}<div class="meta">{{ $p->user->name }}</div></td>
                             <td>{{ $p->reason }}@if (! $p->isLinked() && $p->paid_to && $p->paid_to !== '—')<div class="meta">{{ $p->paid_to }}</div>@endif @if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                             <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
@@ -155,7 +155,7 @@
                 <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Items') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($materialPayments as $p)
-                    <tr @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
+                    <tr data-href="{{ route('records.show', ['expense', $p->id]) }}" @if ($p->status->value === 'rejected') style="opacity:.55" @endif>
                         <td>{{ $p->spent_on->format('j M Y') }}<div class="meta">{{ $p->user->name }}</div></td>
                         <td>{{ $p->reason }}@if (! $p->isLinked() && $p->paid_to && $p->paid_to !== '—')<div class="meta">{{ $p->paid_to }}</div>@endif @if ($p->isLinked())<div class="meta">{{ __('Purchase bill') }}@if ($p->paid_to && $p->paid_to !== '—') · {{ $p->paid_to }}@endif</div>@endif</td>
                         <td class="r num"><b>Rs {{ number_format($p->amount) }}</b></td>
@@ -231,7 +231,7 @@
                 <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th>{{ __('Supplier') }}</th><th class="r">{{ __('Qty') }}</th><th class="r">{{ __('Rate') }}</th><th class="r">{{ __('Amount') }}</th><th>{{ __('Status') }}</th><th>{{ __('Payments') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($purchases as $p)
-                    <tr>
+                    <tr data-href="{{ route('records.show', ['purchase', $p->id]) }}">
                         <td><a class="main" href="{{ route('inventory-items.show', $p->item) }}" style="color:inherit;text-decoration:none">{{ $p->item->localName() }}</a><div class="meta">{{ $p->item->category->localName() }}</div></td>
                         <td>{{ $p->purchased_on->format('j M Y') }}<div class="meta">{{ $p->bill_no ? __('Bill :no', ['no' => $p->bill_no]) : '' }}</div></td>
                         <td>{{ $p->party->name }}</td>
@@ -253,7 +253,7 @@
                 <thead><tr><th>{{ __('Item') }}</th><th>{{ __('Date') }}</th><th class="r">{{ __('Qty') }}</th><th>{{ __('Sent to') }}</th><th>{{ __('Reference') }}</th><th>{{ __('Status') }}</th><th>{{ __('End of shift') }}</th><th></th></tr></thead>
                 <tbody>
                 @forelse ($issues as $i)
-                    <tr @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
+                    <tr data-href="{{ route('records.show', ['inventory-issue', $i->id]) }}" @if ($i->status->value === 'rejected') style="opacity:.55" @endif>
                         <td><a class="main" href="{{ route('inventory-items.show', $i->item) }}" style="color:inherit;text-decoration:none">{{ $i->item->localName() }}</a><div class="meta">{{ $i->item->category->localName() }}</div></td>
                         <td>{{ $i->issued_on->format('j M Y') }}</td>
                         <td class="r num"><b>{{ InventoryItem::qty($i->quantity) }}</b> {{ $i->item->unit }}</td>

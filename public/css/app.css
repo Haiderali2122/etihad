@@ -577,3 +577,17 @@ tr.row-link:hover .main{color:var(--royal)}
 .att-filters .kpi{cursor:pointer;transition:box-shadow .15s,transform .15s}
 .att-filters .kpi:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(30,40,90,.08)}
 .att-filters .kpi.on{box-shadow:0 0 0 2px var(--indigo)}
+.shift-tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:rgba(245,158,11,.16);color:#92400E;vertical-align:middle}
+.shift-tag.night{background:rgba(67,56,202,.14);color:#3730A3}
+tr[data-href]{cursor:pointer}
+tr[data-href]:hover td{background:#F5F7FF}
+.detail-list{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:10px 18px;margin:0}
+.detail-list dt{color:var(--slate);font-size:13px}
+.detail-list dd{margin:0;font-weight:600;word-break:break-word}
+.khata-entry{border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#FCFCFE}
+.ke-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ke-line + .ke-line{margin-top:8px}
+.ke-no{width:22px;text-align:center;font-weight:700;color:var(--slate)}
+.ke-sug:not(:empty){margin:6px 0 0 30px}
+.week-split{cursor:pointer}
+.week-split td{border-top:3px solid var(--indigo);background:#EEF1FB;padding-top:10px;padding-bottom:10px}

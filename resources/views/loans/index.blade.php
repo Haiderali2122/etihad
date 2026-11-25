@@ -22,7 +22,7 @@
             <thead><tr><th>{{ __('Employee') }}</th><th>{{ __('Issued') }}</th><th class="r">{{ __('Loan') }}</th><th class="r">{{ __('Instalment') }}</th><th class="r">{{ __('Repaid') }}</th><th class="r">{{ __('Balance') }}</th><th style="min-width:120px">{{ __('Progress') }}</th><th>{{ __('Status') }}</th></tr></thead>
             <tbody>
             @forelse ($loans as $l)
-                <tr>
+                <tr data-href="{{ route('records.show', ['loan', $l->id]) }}">
                     <td><a class="main" href="{{ route('loans.show', $l) }}" style="color:inherit;text-decoration:none">{{ $l->employee->localName() }}</a><div class="meta">{{ $l->employee->code }}</div></td>
                     <td>{{ $l->issued_on->format('j M Y') }}<div class="meta">{{ __('from :month', ['month' => $l->first_instalment_month->translatedFormat('M Y')]) }}</div></td>
                     <td class="r num">Rs {{ number_format($l->amount) }}</td>

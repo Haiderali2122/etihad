@@ -43,7 +43,7 @@
         <x-kpi icon="check" tone="warn" :label="__('Net to pay')" :foot="__('Rounded to the nearest Rs 10')">Rs {{ number_format($totals['net']) }}</x-kpi>
     </div>
 
-    <form method="POST" action="{{ route('payroll.lines.update', $run) }}" class="card">
+    <form method="POST" action="{{ route('payroll.lines.update', $run) }}" class="card" id="linesForm">
         @csrf @method('PUT')
         <div class="toolbar">
             <span class="muted">{{ __('Overtime: daily rate ÷ :d × :m per hour · normal day :h hours', ['d' => $rules['ot_divisor'] ?? 6, 'm' => $rules['ot_multiplier'] ?? 1, 'h' => $rules['standard_hours'] ?? 8]) }}</span>
@@ -97,7 +97,11 @@
                         @endif
                     </td>
                     <td class="r num"><b data-give>Rs {{ number_format($line->giveNow()) }}</b></td>
-                    <td class="r"><a class="btn sm" href="{{ route('payroll.slips', [$run, 'line' => $line->id]) }}" aria-label="{{ __('Salary slip') }}"><x-icon name="printer" /></a></td>
+                    <td class="r" style="white-space:nowrap">
+                        {{-- Saves what was typed (e.g. what he already took) and opens his slip to hand over. --}}
+                        @if ($editable)<button class="btn sm" type="submit" name="slip" value="{{ $line->id }}"><x-icon name="printer" />{{ __('Save & slip') }}</button>
+                        @else<a class="btn sm" href="{{ route('payroll.slips', [$run, 'line' => $line->id]) }}"><x-icon name="printer" />{{ __('Slip') }}</a>@endif
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="14"><div class="empty"><b>{{ __('No staff on the books this month') }}</b></div></td></tr>
@@ -138,6 +142,29 @@
                         const t = document.getElementById('giveTotal'); if (t) { t.textContent = fmt(total); }
                     };
                     document.addEventListener('input', e => { if (e.target.closest('form')) { refresh(); } });
+                    // The sheet saves itself once something is typed (on leaving the box, or after a short pause).
+                    const linesForm = document.getElementById('linesForm');
+                    if (linesForm && linesForm.querySelector('input[name^="lines"]')) {
+                        const status = document.createElement('span');
+                        status.className = 'meta'; status.setAttribute('aria-live', 'polite'); status.style.marginInlineStart = '10px';
+                        linesForm.querySelector('.toolbar, .card-h')?.appendChild(status);
+                        let timer;
+                        const saveSheet = async () => {
+                            status.style.color = ''; status.textContent = @js(__('Saving…'));
+                            try {
+                                const res = await fetch(linesForm.action, { method: 'POST', body: new FormData(linesForm), headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                                const json = await res.json().catch(() => ({}));
+                                status.style.color = res.ok ? 'var(--good, #2f855a)' : 'var(--bad)';
+                                status.textContent = res.ok ? '✓ ' + @js(__('Saved')) : (json.message || @js(__('Not saved')));
+                            } catch (e) { status.style.color = 'var(--bad)'; status.textContent = @js(__('Not saved — check the internet')); }
+                        };
+                        const queue = wait => { clearTimeout(timer); timer = setTimeout(saveSheet, wait); };
+                        linesForm.querySelectorAll('input[name^="lines"]').forEach(input => {
+                            input.addEventListener('input', () => queue(1500));
+                            input.addEventListener('change', () => queue(0));
+                            input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); queue(0); } });
+                        });
+                    }
                     refresh();
                 })();
             </script>

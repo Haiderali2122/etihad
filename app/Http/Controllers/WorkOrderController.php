@@ -13,6 +13,8 @@ use App\Models\BookFormat;
 use App\Models\Godown;
 use App\Models\Machine;
 use App\Models\OutsidePrintReceipt;
+use App\Models\PaperIssue;
+use App\Models\PaperLoan;
 use App\Models\PaperReceipt;
 use App\Models\Party;
 use App\Models\RimLoading;
@@ -52,6 +54,9 @@ class WorkOrderController extends Controller
             'number' => WorkOrder::nextNumber(),
             'books' => Book::query()->active()->whereHas('formats')->with('formats')->orderBy('name')->get(),
             'balances' => $stock->balances()->filter(fn (array $row) => $row['balance'] > 0)->values(),
+            // Every stock with rims, for covering a shortage from another party's (or the press's) paper.
+            'covers' => $stock->balances()->filter(fn (array $row) => $row['balance'] > 0)
+                ->map(fn (array $row) => ['type' => $row['paper_type']->id, 'party' => $row['party']->id, 'name' => $row['party']->name, 'paper' => $row['paper_type']->label(), 'balance' => $row['balance']])->values(),
             'machines' => Machine::query()->where('type', 'printing')->orderBy('code')->get(),
             'presses' => Party::query()->active()->where('kind', PartyKind::Press)->orderBy('name')->get(),
             'buyers' => Party::query()->active()->where('kind', PartyKind::Buyer)->orderBy('name')->get(),
@@ -66,7 +71,7 @@ class WorkOrderController extends Controller
         $format = BookFormat::query()->findOrFail($data['book_format_id']);
         $isOutsource = $data['mode'] === PrintMode::Outsource->value;
 
-        $order = WorkOrder::create(array_merge($data, [
+        $order = new WorkOrder(array_merge(collect($data)->except('shortage_stock')->all(), [
             'number' => WorkOrder::nextNumber(),
             'forms' => $format->forms,
             'rims_needed' => $request->rimsNeeded(),
@@ -76,10 +81,15 @@ class WorkOrderController extends Controller
             'stage' => WorkOrderStage::Waiting,
             'created_by' => $request->user()->id,
         ]));
+        $order->shortageStock = $request->shortageStock();
+        $order->save();
 
-        return redirect()->route('work-orders.show', $order)->with('status', $order->isPending()
-            ? __(':number saved and sent for approval. Paper is issued once it is approved.', ['number' => $order->number])
-            : __(':number saved; :rims rims issued from stock.', ['number' => $order->number, 'rims' => number_format($order->rims_needed)]));
+        $message = __(':number saved; :rims rims issued from stock.', ['number' => $order->number, 'rims' => number_format($order->rims_needed)]);
+        if ($loan = PaperLoan::query()->where('note', $order->number)->latest('id')->first()) {
+            $message .= ' '.__(':short rims were short and came from :lender; :party owes them (see Paper owed).', ['short' => $loan->rims, 'lender' => $loan->lender->name, 'party' => $loan->borrower->name]);
+        }
+
+        return redirect()->route('work-orders.show', $order)->with('status', $message);
     }
 
     /**
@@ -201,9 +211,16 @@ class WorkOrderController extends Controller
      */
     public function destroy(WorkOrder $workOrder): RedirectResponse
     {
-        abort_if($workOrder->paper_issue_id, 409, __('Paper has already been issued for this order.'));
+        abort_unless($workOrder->canBeDeleted(), 409, __('Work has already been recorded on this order, so it cannot be deleted.'));
 
-        $workOrder->delete();
+        // Its paper goes back into stock.
+        DB::transaction(function () use ($workOrder): void {
+            // All the paper it took goes back, and a shortage it caused is no longer owed.
+            $issues = PaperIssue::query()->where('reference', $workOrder->number)->get();
+            PaperLoan::query()->whereIn('paper_issue_id', $issues->pluck('id'))->delete();
+            $workOrder->delete();
+            $issues->each->delete();
+        });
 
         return redirect()->route('work-orders.index')->with('status', __(':number deleted.', ['number' => $workOrder->number]));
     }

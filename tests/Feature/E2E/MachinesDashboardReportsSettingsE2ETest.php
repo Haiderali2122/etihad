@@ -7,6 +7,7 @@ use App\Enums\MachineStatus;
 use App\Enums\PaperIssueKind;
 use App\Enums\PartyKind;
 use App\Enums\RepairKind;
+use App\Http\Controllers\RecordDetailController;
 use App\Models\CashFloat;
 use App\Models\Expense;
 use App\Models\ExpenseHead;
@@ -569,7 +570,7 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $this->assertSame('5000', (string) Setting::get(Setting::ManagerDailyLimit));
         $this->assertSame([
             'ot_divisor' => 8.0, 'ot_multiplier' => 1.5, 'standard_hours' => 9.0, 'unmarked_as' => 'absent',
-            'mid_month_day' => 15, 'mid_month_percent' => 40.0, 'pay_day' => 7, 'shift_start' => '09:00', 'shift_end' => '17:00', 'late_grace' => 20, 'early_grace' => 15, 'overtime_grace' => 15,
+            'mid_month_day' => 15, 'mid_month_percent' => 40.0, 'pay_day' => 7, 'shift_start' => '09:00', 'shift_end' => '17:00', 'night_start' => '21:00', 'night_end' => '05:00', 'late_grace' => 20, 'early_grace' => 15, 'overtime_grace' => 15,
         ], Setting::payrollRules());
 
         $this->actingAs($owner)->get(route('settings.edit'))->assertOk()
@@ -579,6 +580,36 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
         $this->actingAs($owner)->put(route('settings.update'), $this->settingsPayload(['manager_daily_limit' => 0]))->assertSessionHasNoErrors();
         $this->assertSame(1, Setting::query()->where('key', Setting::ManagerDailyLimit)->count());
         $this->assertSame(0, (int) Setting::get(Setting::ManagerDailyLimit));
+    }
+
+    public function test_with_approvals_switched_off_the_managers_entries_are_approved_as_saved(): void
+    {
+        $owner = $this->owner();
+        $manager = $this->manager();
+        $head = ExpenseHead::factory()->create();
+        $this->actingAs($owner)->get(route('settings.edit'))->assertOk()->assertViewHas('approvalsRequired', true);
+
+        $this->actingAs($owner)->put(route('settings.update'), $this->settingsPayload(['manager_daily_limit' => 0, 'approvals_required' => '0']))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('settings.edit'))->assertViewHas('approvalsRequired', false);
+
+        $this->actingAs($manager)->post(route('expenses.store'), [
+            'spent_on' => '2026-10-27', 'expense_head_id' => $head->id, 'paid_to' => 'Chai wala', 'amount' => 900, 'reason' => 'Tea',
+        ])->assertSessionHasNoErrors();
+
+        $expense = Expense::query()->latest('id')->firstOrFail();
+        $this->assertSame(ApprovalStatus::Approved, $expense->status);
+        $this->assertSame($manager->id, $expense->reviewed_by);
+
+        // An edit by the manager stays approved too.
+        $expense->markEditedBy($manager)->save();
+        $this->assertSame(ApprovalStatus::Approved, $expense->fresh()->status);
+
+        // Switched back on, the manager's entries wait again.
+        $this->actingAs($owner)->put(route('settings.update'), $this->settingsPayload(['manager_daily_limit' => 0, 'approvals_required' => '1']))->assertSessionHasNoErrors();
+        $this->actingAs($manager)->post(route('expenses.store'), [
+            'spent_on' => '2026-10-27', 'expense_head_id' => $head->id, 'paid_to' => 'Chai wala', 'amount' => 900, 'reason' => 'Tea',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(ApprovalStatus::Pending, Expense::query()->latest('id')->firstOrFail()->status);
     }
 
     public function test_daily_limit_drives_manager_expense_auto_approval(): void
@@ -691,6 +722,21 @@ class MachinesDashboardReportsSettingsE2ETest extends TestCase
 
             $params = [];
             $names = $route->parameterNames();
+            if ($route->getName() === 'records.show') {
+                // Any record's detail page: one of each type that has records.
+                if ($withParameters) {
+                    foreach (RecordDetailController::Types as $type => [$class]) {
+                        if ($model = $class::query()->first()) {
+                            $status = $this->actingAs($user)->get(route('records.show', [$type, $model->getKey()]))->baseResponse->getStatusCode();
+                            if ($status >= 500) {
+                                $failures[] = "records.show {$type} -> {$status}";
+                            }
+                        }
+                    }
+                }
+
+                continue;
+            }
             if ($names !== []) {
                 if (! $withParameters) {
                     continue;

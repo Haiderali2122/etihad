@@ -30,7 +30,7 @@ class AttendanceController extends Controller
         $month = $this->month($request->query('month'));
         $end = $month->copy()->endOfMonth();
 
-        $employees = Employee::query()->active()->orderBy('name')
+        $employees = Employee::query()->active()->byNumber()
             ->with(['attendances' => fn ($q) => $q->whereBetween('date', [$month, $end])])
             ->get();
 
@@ -40,6 +40,24 @@ class AttendanceController extends Controller
             'days' => range(1, $month->daysInMonth),
             'lastDay' => $month->isSameMonth(today()) ? today()->day : $month->daysInMonth,
         ]);
+    }
+
+    /**
+     * Moves the ticked people to the day or the night shift. Days already recorded keep the shift they were worked on.
+     */
+    public function moveShift(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'employee_ids' => ['required', 'array', 'min:1'],
+            'employee_ids.*' => ['integer', 'exists:employees,id'],
+            'shift' => ['required', Rule::in([Attendance::DayShift, Attendance::NightShift])],
+        ], ['employee_ids.required' => __('Tick the people to move first.')]);
+
+        $moved = Employee::query()->whereIn('id', $data['employee_ids'])->update(['shift' => $data['shift']]);
+
+        return back()->with('status', trans_choice($data['shift'] === Attendance::NightShift
+            ? ':count person moved to the night shift.|:count people moved to the night shift.'
+            : ':count person moved to the day shift.|:count people moved to the day shift.', $moved));
     }
 
     /**
@@ -67,7 +85,7 @@ class AttendanceController extends Controller
             $date = today();
         }
 
-        $employees = Employee::query()->active()->orderBy('name')->get();
+        $employees = Employee::query()->active()->byNumber()->get();
 
         return view('attendance.day', [
             'date' => $date,
@@ -78,6 +96,7 @@ class AttendanceController extends Controller
             'statuses' => AttendanceStatus::cases(),
             'standardHours' => Setting::payrollRules()['standard_hours'],
             'shift' => Attendance::shift(),
+            'shifts' => [Attendance::DayShift => Attendance::shift(Attendance::DayShift), Attendance::NightShift => Attendance::shift(Attendance::NightShift)],
         ]);
     }
 
@@ -89,7 +108,7 @@ class AttendanceController extends Controller
             'rows.*.status' => ['nullable', Rule::enum(AttendanceStatus::class)],
             'rows.*.check_in' => ['nullable', 'date_format:H:i'],
             'rows.*.check_out' => ['nullable', 'date_format:H:i'],
-            'rows.*.overtime_hours' => ['nullable', 'numeric', 'min:0', 'max:16'],
+            'rows.*.overtime_hours' => ['nullable', 'numeric', 'min:0', 'max:48'],
             'rows.*.note' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -106,6 +125,9 @@ class AttendanceController extends Controller
             }
             $present = $row['status'] === AttendanceStatus::Present->value;
             $day = Attendance::forDay($id, $date);
+            if (! $day->exists) {
+                $day->shift = Employee::query()->whereKey($id)->value('shift') ?: Attendance::DayShift;
+            }
             $day->fill([
                 'status' => $row['status'],
                 'check_in' => $present ? ($row['check_in'] ?? null) : null,

@@ -6,6 +6,7 @@ use App\Models\ForemanCash;
 use App\Models\PayrollRun;
 use App\Support\ForemanTeams;
 use App\Support\PayrollCalculator;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -83,7 +84,7 @@ class PayrollRunController extends Controller
     /**
      * Hand edits on a draft: this month's loan instalment, bonus, other deductions and a note.
      */
-    public function updateLines(Request $request, PayrollRun $payrollRun, PayrollCalculator $calculator): RedirectResponse
+    public function updateLines(Request $request, PayrollRun $payrollRun, PayrollCalculator $calculator): RedirectResponse|JsonResponse
     {
         abort_unless($payrollRun->isDraft(), 409, __('This payroll is finalized. Reopen it to make changes.'));
 
@@ -108,6 +109,10 @@ class PayrollRunController extends Controller
             $taken[$foremanId] = max(0, $kept);
         }
         if ($errors) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => reset($errors), 'errors' => $errors], 422);
+            }
+
             return redirect()->route('payroll.show', $payrollRun)->withErrors($errors)->withInput();
         }
 
@@ -134,9 +139,24 @@ class PayrollRunController extends Controller
             $line->save();
         }
 
+        // The sheet saving itself as it is typed: each line's new figures, or why a line was not saved.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $errors ? reset($errors) : __('Saved'),
+                'errors' => $errors,
+                'lines' => $payrollRun->lines()->get()->mapWithKeys(fn ($l) => [$l->id => ['net' => (int) $l->net_pay, 'give' => (int) $l->net_pay - (int) $l->taken_from_foreman]]),
+            ], $errors ? 422 : 200);
+        }
         $redirect = redirect()->route('payroll.show', $payrollRun);
+        if ($errors) {
+            return $redirect->withErrors($errors)->withInput();
+        }
+        // Saved from a person's "Save & slip": straight to their slip, with what was just typed.
+        if ($slip = $request->integer('slip')) {
+            return redirect()->route('payroll.slips', [$payrollRun, 'line' => $slip])->with('status', __('Saved.'));
+        }
 
-        return $errors ? $redirect->withErrors($errors) : $redirect->with('status', __('Payroll saved.'));
+        return $redirect->with('status', __('Payroll saved.'));
     }
 
     public function recalculate(Request $request, PayrollRun $payrollRun, PayrollCalculator $calculator): RedirectResponse
@@ -176,7 +196,7 @@ class PayrollRunController extends Controller
     {
         $lines = $payrollRun->lines()->with('employee')
             ->when($request->integer('line'), fn ($q, $id) => $q->whereKey($id))
-            ->get()->sortBy('employee.name')->values();
+            ->get()->sortBy(fn ($row) => (string) $row->employee?->code, SORT_NATURAL | SORT_FLAG_CASE)->values();
 
         return view('payroll.slips', ['run' => $payrollRun, 'lines' => $lines]);
     }

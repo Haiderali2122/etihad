@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A member of press staff. Employees are records, not logins.
  * The code matches the employee's number on the biometric device.
  */
-#[Fillable(['code', 'device_code', 'name', 'name_ur', 'father_name', 'cnic', 'phone', 'designation', 'foreman_id', 'is_foreman', 'monthly_salary', 'joined_on', 'left_on', 'is_active', 'notes'])]
+#[Fillable(['code', 'device_code', 'name', 'name_ur', 'father_name', 'cnic', 'phone', 'designation', 'shift', 'foreman_id', 'is_foreman', 'monthly_salary', 'joined_on', 'left_on', 'is_active', 'notes'])]
 class Employee extends Model
 {
     /** @use HasFactory<EmployeeFactory> */
@@ -35,6 +35,16 @@ class Employee extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true);
+    }
+
+    /**
+     * By employee no. as a number (1, 2 … 10, not 1, 10, 2); codes that are not a plain number come after.
+     */
+    public function scopeByNumber(Builder $query): void
+    {
+        $int = $query->getConnection()->getDriverName() === 'mysql' ? 'UNSIGNED' : 'INTEGER';
+        $query->orderByRaw("CASE WHEN CAST(code AS {$int}) > 0 THEN 0 ELSE 1 END")
+            ->orderByRaw("CAST(code AS {$int})")->orderBy('code')->orderBy('name');
     }
 
     /**

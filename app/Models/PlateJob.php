@@ -49,6 +49,17 @@ class PlateJob extends Model
                 $job->paid_on = $job->fullyPaidOn();
             }
         });
+        // Money already given to the processor (an advance) pays a new or bigger bill straight away.
+        static::saved(function (self $job) {
+            if ($job->wasRecentlyCreated || $job->wasChanged(['amount', 'party_id'])) {
+                ProcessorPayment::applyFor((int) $job->party_id);
+                if ($job->wasChanged('party_id') && $job->getOriginal('party_id')) {
+                    ProcessorPayment::applyFor((int) $job->getOriginal('party_id'));
+                }
+            }
+        });
+        // Deleted: what was paid on it from an advance goes back to the advance and on to other unpaid bills.
+        static::deleted(fn (self $job) => ProcessorPayment::applyFor((int) $job->party_id));
     }
 
     /**

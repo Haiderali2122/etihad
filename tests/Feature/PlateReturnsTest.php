@@ -61,7 +61,9 @@ class PlateReturnsTest extends TestCase
         $this->assertSame(9, $job->returned_plates);
         $this->assertSame(3, $job->platesHeld());
         $this->assertSame([5, 4], $job->returns->pluck('plates')->all());
-        $this->actingAs($owner)->get(route('plate-jobs.index', ['show' => 'all']))->assertSee(today()->subDays(4)->format('j M').': 5')->assertSee(today()->format('j M').': 4');
+        // The row shows the totals; its record page lists each return with its date.
+        $this->actingAs($owner)->get(route('plate-jobs.index', ['show' => 'all']))->assertSeeInOrder(['12', '9', '3']);
+        $this->actingAs($owner)->get(route('records.show', ['plate-job', $job->id]))->assertOk()->assertSeeInOrder([today()->subDays(4)->format('j M Y'), '5', today()->format('j M Y'), '4']);
 
         // Deleting a return puts those plates back with the processor.
         $this->actingAs($owner)->from(route('plate-jobs.edit', $job))->delete(route('records.destroy', ['plate-return', $job->returns->first()->id]))->assertSessionHasNoErrors();

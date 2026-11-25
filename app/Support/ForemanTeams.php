@@ -17,15 +17,15 @@ class ForemanTeams
      */
     public static function ordered(Collection $employees): Collection
     {
-        $foremen = $employees->where('is_foreman', true)->sortBy('name');
+        $foremen = $employees->where('is_foreman', true)->sortBy(fn (Employee $e) => $e->code, SORT_NATURAL | SORT_FLAG_CASE);
         $placed = collect();
 
         foreach ($foremen as $foreman) {
             $placed->push($foreman);
-            $employees->where('foreman_id', $foreman->id)->where('is_foreman', false)->sortBy('name')->each(fn (Employee $e) => $placed->push($e));
+            $employees->where('foreman_id', $foreman->id)->where('is_foreman', false)->sortBy(fn (Employee $e) => $e->code, SORT_NATURAL | SORT_FLAG_CASE)->each(fn (Employee $e) => $placed->push($e));
         }
 
-        return $placed->concat($employees->whereNotIn('id', $placed->pluck('id'))->sortBy('name'))->values();
+        return $placed->concat($employees->whereNotIn('id', $placed->pluck('id'))->sortBy(fn (Employee $e) => $e->code, SORT_NATURAL | SORT_FLAG_CASE))->values();
     }
 
     /**

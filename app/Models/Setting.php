@@ -15,6 +15,9 @@ class Setting extends Model
 
     public const DefaultWastagePercent = 'default_wastage_percent';
 
+    /** "1" when the manager's entries wait for the owner's approval, "0" when they are approved as entered. */
+    public const ApprovalsRequired = 'approvals_required';
+
     /** Overtime hourly rate = (salary ÷ days in month) ÷ divisor × multiplier. */
     public const OvertimeDivisor = 'payroll_ot_divisor';
 
@@ -36,6 +39,11 @@ class Setting extends Model
     public const ShiftStart = 'attendance_shift_start';
 
     public const ShiftEnd = 'attendance_shift_end';
+
+    /** The night shift (H:i); it ends the next morning. */
+    public const NightShiftStart = 'attendance_night_start';
+
+    public const NightShiftEnd = 'attendance_night_end';
 
     /** Minutes after the shift start that still count as on time. */
     public const LateGraceMinutes = 'attendance_late_grace';
@@ -63,6 +71,8 @@ class Setting extends Model
             'pay_day' => (int) static::get(self::PayDay, 10),
             'shift_start' => (string) static::get(self::ShiftStart, '09:00'),
             'shift_end' => (string) static::get(self::ShiftEnd, '17:00'),
+            'night_start' => (string) static::get(self::NightShiftStart, '21:00'),
+            'night_end' => (string) static::get(self::NightShiftEnd, '05:00'),
             'late_grace' => (int) static::get(self::LateGraceMinutes, 20),
             'early_grace' => (int) static::get(self::EarlyGraceMinutes, 15),
             'overtime_grace' => (int) static::get(self::OvertimeGraceMinutes, 15),

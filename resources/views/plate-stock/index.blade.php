@@ -37,7 +37,7 @@
             <thead><tr><th>{{ __('Date') }}</th><th>{{ __('Supplier') }}</th><th>{{ __('Plate size') }}</th><th class="r">{{ __('Plates') }}</th><th class="r">{{ __('Rate') }}</th><th class="r">{{ __('Total') }}</th><th>{{ __('Payments') }}</th><th></th></tr></thead>
             <tbody>
             @forelse ($purchases as $p)
-                <tr>
+                <tr data-href="{{ route('records.show', ['plate-purchase', $p->id]) }}">
                     <td>{{ $p->purchased_on->format('j M Y') }}@if ($p->bill_no)<div class="meta">{{ __('Bill :no', ['no' => $p->bill_no]) }}</div>@endif</td>
                     <td>{{ $p->supplier ?: '—' }}</td>
                     <td><b>{{ $p->plate_size }}</b></td>

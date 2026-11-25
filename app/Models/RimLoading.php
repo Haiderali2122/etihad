@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * press, outside press → back) or the outside printing charge he takes to the press. Amount = rims × rate per rim.
  * Once paid it shows in Cash-out.
  */
-#[Fillable(['work_order_id', 'kind', 'loaded_on', 'rims', 'rate_per_rim', 'amount', 'loaded_by', 'paid_on', 'note', 'created_by'])]
+#[Fillable(['work_order_id', 'paper_receipt_id', 'kind', 'work_type', 'details', 'loaded_on', 'rims', 'unit', 'rate_per_rim', 'amount', 'loaded_by', 'paid_on', 'note', 'created_by'])]
 class RimLoading extends Model
 {
     /** @use HasFactory<RimLoadingFactory> */
@@ -65,6 +65,22 @@ class RimLoading extends Model
     }
 
     /**
+     * What the work was: the typed name, or the kind's name.
+     */
+    public function workLabel(): string
+    {
+        return $this->work_type ?: ($this->kind?->label() ?? __('Other work'));
+    }
+
+    /**
+     * @return BelongsTo<PaperReceipt, $this>
+     */
+    public function paperReceipt(): BelongsTo
+    {
+        return $this->belongsTo(PaperReceipt::class);
+    }
+
+    /**
      * @return BelongsTo<WorkOrder, $this>
      */
     public function workOrder(): BelongsTo
@@ -98,8 +114,8 @@ class RimLoading extends Model
             'amount' => (int) $this->amount,
             'date' => $this->paid_on,
             'paid_to' => $this->loaded_by,
-            'reason' => $this->kind->label().' for '.$this->workOrder?->number.' ('.rtrim(rtrim(number_format((float) $this->rims, 2), '0'), '.').' rims)',
-            'head' => $this->kind->head(),
+            'reason' => $this->workLabel().($this->workOrder ? ' for '.$this->workOrder->number : '').' ('.rtrim(rtrim(number_format((float) $this->rims, 2), '0'), '.').' '.$this->unit.')',
+            'head' => $this->kind?->head() ?? 'Loading labour',
         ];
     }
 
@@ -113,8 +129,14 @@ class RimLoading extends Model
         return $this->isPaid() ? __('A paid loading cannot be deleted.') : null;
     }
 
+    protected static function booted(): void
+    {
+        // Rims brought into the godown leave stock again when their line is removed.
+        static::deleted(fn (self $line) => $line->paperReceipt?->delete());
+    }
+
     public function deletionLabel(): string
     {
-        return $this->kind->label().' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' rims, Rs '.number_format($this->amount).')';
+        return $this->workLabel().' — '.($this->workOrder?->number ?? '').' ('.$this->rims.' '.$this->unit.', Rs '.number_format($this->amount).')';
     }
 }

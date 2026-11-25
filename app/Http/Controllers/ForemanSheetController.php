@@ -16,11 +16,11 @@ class ForemanSheetController extends Controller
 {
     public function create(Request $request): View
     {
-        $foremen = Employee::query()->active()->where('is_foreman', true)->with(['team' => fn ($q) => $q->active()->orderBy('name')])->orderBy('name')->get();
+        $foremen = Employee::query()->active()->where('is_foreman', true)->with(['team' => fn ($q) => $q->active()->byNumber()])->orderBy('name')->get();
 
         return view('foreman-sheets.create', [
             'foremen' => $foremen,
-            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'employees' => Employee::query()->active()->byNumber()->get(),
             'foremanId' => $request->integer('foreman') ?: $foremen->first()?->id,
         ]);
     }
@@ -83,7 +83,7 @@ class ForemanSheetController extends Controller
         return view('foreman-sheets.create', [
             'sheet' => $foremanSheet,
             'foremen' => $foremen,
-            'employees' => Employee::query()->active()->orderBy('name')->get(),
+            'employees' => Employee::query()->active()->byNumber()->get(),
             'foremanId' => $foremanSheet->foreman_id,
             'lines' => $foremanSheet->advances()->where('employee_id', '!=', $foremanSheet->foreman_id)->get()
                 ->map(fn (SalaryAdvance $a) => ['employee_id' => $a->employee_id, 'amount' => $a->amount])->values()->all(),

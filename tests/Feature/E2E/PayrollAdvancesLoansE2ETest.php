@@ -227,7 +227,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->assertSame(2.0, $a->present_days);
         $this->assertSame(1.0, $a->absent_days);
         $this->assertSame(1.0, $a->leave_days);
-        $this->assertSame(26, $a->unmarked_days);
+        $this->assertSame(22, $a->unmarked_days); // 30 days − 4 marked − 4 Sundays (paid holidays)
         // Paid for days present only: the absent day and the leave day are unpaid.
         $this->assertSame(3000, $a->absence_deduction);
         $this->assertSame(6.5, $a->overtime_hours);
@@ -242,7 +242,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->assertSame(20490, $b->net_pay); // 31,000 − 1,030 + 520 − 10,000
 
         $this->actingAs($this->owner)->get(route('payroll.show', $sep))->assertOk()->assertSee('13,130')->assertSee('20,490')->assertSee('33,620')
-            ->assertSee('54 days have no attendance.');
+            ->assertSee('46 days have no attendance.');
 
         // Hand edits: lower loan instalment this month, bonus, other deduction.
         $this->actingAs($this->owner)->put(route('payroll.lines.update', $sep), ['lines' => [
@@ -275,7 +275,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $oct = $this->prepare('2026-10');
         $ao = $this->lineFor($oct, $aslam);
         $this->assertSame(31, $ao->days_in_month);
-        $this->assertSame(31, $ao->unmarked_days);
+        $this->assertSame(27, $ao->unmarked_days); // 31 days − 4 Sundays (paid holidays)
         $this->assertSame(0, $ao->absence_deduction);
         $this->assertSame(0, $ao->advances_deducted);
         $this->assertSame(5000, $ao->loan_deducted);
@@ -474,11 +474,12 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $this->assertSame(2, $feb->lines()->count(), 'Only the regular and the joiner are on the books in February.');
         $r = $this->lineFor($feb, $regular);
         $this->assertSame(28, $r->days_in_month);
-        $this->assertSame(1.0, $r->absent_days);
-        $this->assertSame(1000, $r->absence_deduction);
+        // Absent on Saturday 31 January, so Sunday 1 February is absent too; with the 27th that is 2 days.
+        $this->assertSame(2.0, $r->absent_days);
+        $this->assertSame(2000, $r->absence_deduction);
         $this->assertSame(1000, $r->overtime_amount);
-        $this->assertSame(26, $r->unmarked_days);
-        $this->assertSame(28000, $r->net_pay);
+        $this->assertSame(22, $r->unmarked_days); // 28 − 2 marked − 4 Sundays
+        $this->assertSame(27000, $r->net_pay);
 
         // Joined on the last day: paid 1 of 28 days + 3h OT at 166.67 = 500.
         $j = $this->lineFor($feb, $joiner);
@@ -492,7 +493,7 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $jan = $this->prepare('2026-01');
         $l = $this->lineFor($jan, $leaver);
         $this->assertSame(31, $l->days_in_month);
-        $this->assertSame(15, $l->unmarked_days);
+        $this->assertSame(13, $l->unmarked_days); // 1-15 January less Sundays 4 and 11
         $this->assertSame(16000, $l->absence_deduction);
         $this->assertSame(15000, $l->net_pay);
         $this->assertSame(27100, $this->lineFor($jan, $regular)->net_pay); // 28,000 − 903.23 (one absence in a 31-day month)
@@ -578,7 +579,8 @@ class PayrollAdvancesLoansE2ETest extends TestCase
         $run = $this->prepare('2026-09');
         $line = $this->lineFor($run, $employee);
 
-        $this->assertSame(8, $line->unmarked_days);
+        // 23rd-30th unmarked: 7 working days, and Sunday 27th goes absent with them (Saturday 26th was absent).
+        $this->assertSame(7, $line->unmarked_days);
         $this->assertSame(8.0, $line->absent_days);
         // Paid for the 20 days present only: the off day, leave day and 8 unmarked days are unpaid.
         $this->assertSame(10000, $line->absence_deduction);

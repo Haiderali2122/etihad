@@ -39,8 +39,10 @@ use App\Http\Controllers\PayrollRunController;
 use App\Http\Controllers\PlateJobController;
 use App\Http\Controllers\PlatePurchaseController;
 use App\Http\Controllers\ProcessorController;
+use App\Http\Controllers\ProcessorPaymentController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\RecordDeletionController;
+use App\Http\Controllers\RecordDetailController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RimLoadingController;
 use App\Http\Controllers\RoleController;
@@ -91,12 +93,16 @@ Route::middleware('auth')->group(function () {
         Route::post('work-orders/{workOrder}/outside-receipts', [WorkOrderController::class, 'receiveOutside'])->name('work-orders.outside-receipts.store');
         Route::post('work-orders/{workOrder}/rim-loadings', [RimLoadingController::class, 'store'])->name('rim-loadings.store');
         Route::post('rim-loadings/pay-all', [RimLoadingController::class, 'payAll'])->name('rim-loadings.pay-all');
+        Route::post('rim-loadings', [RimLoadingController::class, 'storeLine'])->name('rim-loadings.store-line');
+        Route::post('rim-loadings/advance', [RimLoadingController::class, 'advance'])->name('rim-loadings.advance');
+        Route::post('rim-loadings/settle', [RimLoadingController::class, 'settle'])->name('rim-loadings.settle');
         Route::patch('rim-loadings/{rimLoading}/pay', [RimLoadingController::class, 'pay'])->name('rim-loadings.pay');
         Route::get('rim-loadings/{rimLoading}/edit', [RimLoadingController::class, 'edit'])->name('rim-loadings.edit');
         Route::put('rim-loadings/{rimLoading}', [RimLoadingController::class, 'update'])->name('rim-loadings.update');
         Route::delete('rim-loadings/{rimLoading}', [RimLoadingController::class, 'destroy'])->name('rim-loadings.destroy');
     });
     Route::get('rim-loadings', [RimLoadingController::class, 'index'])->middleware('can:orders.view')->name('rim-loadings.index');
+    Route::get('rim-loadings/receipt', [RimLoadingController::class, 'receipt'])->middleware('can:orders.view')->name('rim-loadings.receipt');
 
     Route::resource('contractors', ContractorController::class)
         ->middlewareFor(['index', 'show'], 'can:orders.view')
@@ -120,7 +126,10 @@ Route::middleware('auth')->group(function () {
         Route::post('plate-jobs', [PlateJobController::class, 'store'])->name('plate-jobs.store');
         Route::patch('plate-jobs/{plateJob}/pay', [BillPaymentController::class, 'payPlate'])->name('plate-jobs.pay');
         Route::post('plate-jobs/pay-all', [BillPaymentController::class, 'payAllPlates'])->name('plate-jobs.pay-all');
-        Route::post('processors/{processor}/pay', [BillPaymentController::class, 'payProcessor'])->name('processors.pay');
+        // Money to a processor: clears the oldest bills; anything more is kept as an advance.
+        Route::post('processors/{processor}/pay', [ProcessorPaymentController::class, 'store'])->name('processors.pay');
+        Route::post('plate-jobs/payments', [ProcessorPaymentController::class, 'store'])->name('plate-jobs.payments.store');
+        Route::post('plate-jobs/returns', [PlateJobController::class, 'returnPicked'])->name('plate-jobs.returns.store');
         Route::patch('plate-jobs/{plateJob}/return', [PlateJobController::class, 'returnPlates'])->name('plate-jobs.return');
         Route::get('plate-jobs/{plateJob}/edit', [PlateJobController::class, 'edit'])->name('plate-jobs.edit');
         Route::put('plate-jobs/{plateJob}', [PlateJobController::class, 'update'])->name('plate-jobs.update');
@@ -198,12 +207,15 @@ Route::middleware('auth')->group(function () {
     Route::resource('employees', EmployeeController::class)
         ->middlewareFor(['index', 'show'], 'can:staff.view')
         ->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'can:staff.manage');
+    Route::patch('employees/{employee}/leave', [EmployeeController::class, 'leave'])->middleware('can:staff.manage')->name('employees.leave');
+    Route::patch('employees/{employee}/rejoin', [EmployeeController::class, 'rejoin'])->middleware('can:staff.manage')->name('employees.rejoin');
     Route::resource('designations', DesignationController::class)->except('show')->middleware('can:staff.manage');
 
     Route::get('attendance', [AttendanceController::class, 'index'])->middleware('can:staff.view')->name('attendance.index');
     Route::middleware('can:attendance.manage')->group(function () {
         Route::get('attendance/day', [AttendanceController::class, 'day'])->name('attendance.day');
         Route::put('attendance/day', [AttendanceController::class, 'saveDay'])->name('attendance.save-day');
+        Route::post('attendance/shift', [AttendanceController::class, 'moveShift'])->name('attendance.move-shift');
         Route::get('attendance/import', [AttendanceController::class, 'importForm'])->name('attendance.import');
         Route::get('attendance/machine', [AttendanceMachineController::class, 'index'])->name('attendance.machine');
         Route::patch('attendance/machine/{device}', [AttendanceMachineController::class, 'approve'])->name('attendance.machine.approve');
@@ -217,6 +229,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('salary-advances/mid-month', [SalaryAdvanceController::class, 'midMonth'])->middleware('can:advances.create')->name('salary-advances.mid-month');
     Route::post('salary-advances/mid-month', [SalaryAdvanceController::class, 'storeMidMonth'])->middleware('can:advances.create')->name('salary-advances.mid-month.store');
+    Route::get('salary-advances/mid-month/slip/{employee}', [SalaryAdvanceController::class, 'midMonthSlip'])->middleware('can:advances.create')->name('salary-advances.mid-month.slip');
     Route::resource('salary-advances', SalaryAdvanceController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update'])
         ->middlewareFor(['index', 'show'], 'can:staff.view')
         ->middlewareFor(['create', 'store', 'edit', 'update'], 'can:advances.create');
@@ -270,6 +283,9 @@ Route::middleware('auth')->group(function () {
         Route::resource('roles', RoleController::class)->except('show');
     });
 
-    Route::get('deletions', [DeletionController::class, 'index'])->middleware('can:deletions.view')->name('deletions.index');
+    // Owner only, and not in the sidebar: opened by typing /deletions.
+    Route::get('deletions', [DeletionController::class, 'index'])->name('deletions.index');
     Route::delete('records/{type}/{id}', [RecordDeletionController::class, 'destroy'])->whereNumber('id')->name('records.destroy');
+    // Any record's details, read only; opened by clicking its row.
+    Route::get('records/{type}/{id}', [RecordDetailController::class, 'show'])->whereNumber('id')->name('records.show');
 });

@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Enums\ApprovalStatus;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -54,6 +55,29 @@ trait RequiresApproval
                 $model->reviewed_at = now();
             }
         });
+
+        // With approvals switched off in Settings, nothing waits: an entry that would go to the owner is approved.
+        static::creating(fn (self $model) => $model->approveWhenApprovalsAreOff());
+        static::updating(fn (self $model) => $model->approveWhenApprovalsAreOff());
+    }
+
+    /**
+     * Whether the manager's entries wait for the owner. Switched in Settings; on unless turned off.
+     */
+    public static function approvalsRequired(): bool
+    {
+        return (bool) Setting::get(Setting::ApprovalsRequired, true);
+    }
+
+    private function approveWhenApprovalsAreOff(): void
+    {
+        if ($this->status !== ApprovalStatus::Pending || static::approvalsRequired()) {
+            return;
+        }
+
+        $this->status = ApprovalStatus::Approved;
+        $this->reviewed_by ??= auth()->id() ?? $this->created_by;
+        $this->reviewed_at ??= now();
     }
 
     /**

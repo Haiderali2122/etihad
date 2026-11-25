@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  * - Daily rate = monthly salary ÷ days in the month.
  * - Pay is for days present only: daily rate × days present (e.g. 45,000 ÷ 31 × 26). Leave, off days and
  *   absences are unpaid; days with no attendance mark count as present unless the setting says absent.
+ * - Sunday is a paid holiday unless the Saturday before or the Monday after is absent; then it is absent too.
+ *   Time worked on a Sunday is all overtime.
  * - Overtime hourly rate = daily rate ÷ divisor × multiplier (default ÷ 6, × 1).
  * - Approved advances not yet deducted, and this month's instalments on approved loans, come off.
  *   Advances and loans still waiting for the owner are left out until approved.
@@ -85,13 +87,49 @@ class PayrollCalculator
         $to = $employee->left_on && $employee->left_on->lt($end) ? $employee->left_on->copy() : $end->copy();
         $employedDays = $from->lte($to) ? (int) $from->diffInDays($to) + 1 : 0;
 
-        $records = Attendance::query()->where('employee_id', $employee->id)
-            ->whereBetween('date', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])->get();
+        // The day before and after the month too: a Sunday on the 1st or last depends on the Saturday / Monday.
+        $all = Attendance::query()->where('employee_id', $employee->id)
+            ->whereBetween('date', [$from->copy()->subDay()->startOfDay(), $to->copy()->addDay()->endOfDay()])->get()
+            ->keyBy(fn (Attendance $a) => $a->date->toDateString());
+        $records = $all->filter(fn (Attendance $a) => $a->date->between($from->copy()->startOfDay(), $to->copy()->endOfDay()));
         $count = fn (AttendanceStatus $status) => $records->where('status', $status)->count();
 
-        $unmarked = max(0, $employedDays - $records->count());
-        $absent = $count(AttendanceStatus::Absent) + ($rules['unmarked_as'] === 'absent' ? $unmarked : 0);
-        $paidDays = $count(AttendanceStatus::Present) + ($rules['unmarked_as'] === 'absent' ? 0 : $unmarked);
+        // Absent: marked absent, or no mark when unmarked days count as absent (only days already past).
+        $isAbsent = function (Carbon $day) use ($all, $rules, $employee): bool {
+            $record = $all->get($day->toDateString());
+            if ($record) {
+                return $record->status === AttendanceStatus::Absent;
+            }
+            $onBooks = (! $employee->joined_on || $day->gte($employee->joined_on)) && (! $employee->left_on || $day->lte($employee->left_on));
+
+            return $onBooks && $day->lt(today()) && ! $day->isSunday() && $rules['unmarked_as'] === 'absent';
+        };
+
+        // Sunday is a paid holiday, unless the Saturday before or the Monday after is absent: then the Sunday is
+        // absent too (absent on Saturday = 2 days, on Saturday and Monday = 3). Work done on a Sunday is overtime.
+        $paidDays = 0;
+        $absent = 0;
+        $unmarked = 0;
+        for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
+            $record = $records->get($day->toDateString());
+            if ($day->isSunday()) {
+                if ($isAbsent($day->copy()->subDay()) || $isAbsent($day->copy()->addDay())) {
+                    $absent++;
+                } else {
+                    $paidDays++;
+                }
+
+                continue;
+            }
+            if (! $record) {
+                $unmarked++;
+                $rules['unmarked_as'] === 'absent' ? $absent++ : $paidDays++;
+            } elseif ($record->status === AttendanceStatus::Present) {
+                $paidDays++;
+            } elseif ($record->status === AttendanceStatus::Absent) {
+                $absent++;
+            }
+        }
 
         $dailyRate = $employee->monthly_salary / $daysInMonth;
         $overtimeHours = round($records->sum('overtime_minutes') / 60, 2);
@@ -207,7 +245,7 @@ class PayrollCalculator
             ->where(fn ($q) => $q->whereNull('joined_on')->orWhere('joined_on', '<=', $end))
             ->where(fn ($q) => $q->whereNull('left_on')->orWhere('left_on', '>=', $start))
             ->where(fn ($q) => $q->where('is_active', true)->orWhereNotNull('left_on'))
-            ->orderBy('name')
+            ->byNumber()
             ->get();
     }
 }

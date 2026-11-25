@@ -47,7 +47,7 @@ class WorkOrder extends Model
     }
 
     /**
-     * Once approved (by the owner, or on save when the owner enters it), issue the paper and start printing.
+     * Saved work orders are approved at once (they do not wait for the owner); the paper is issued and printing starts.
      */
     protected static function booted(): void
     {
@@ -57,6 +57,12 @@ class WorkOrder extends Model
             }
         };
 
+        // Work orders do not wait for the owner: saved is approved, so the paper is issued straight away.
+        static::creating(function (self $order): void {
+            $order->status = ApprovalStatus::Approved;
+            $order->reviewed_by ??= $order->created_by;
+            $order->reviewed_at ??= now();
+        });
         static::created($start);
         static::updated($start);
     }
@@ -79,12 +85,22 @@ class WorkOrder extends Model
         ];
     }
 
+    /**
+     * Set before saving a new order whose paper falls short: [paper type id, party id] of the stock that covers the
+     * rest. Not stored on the order; the shortage is kept as a PaperLoan.
+     *
+     * @var array{0: int, 1: int}|null
+     */
+    public ?array $shortageStock = null;
+
     public function issuePaperAndStart(): void
     {
         // Paper (and Younus's line for carrying it) is issued once per order.
         if ($this->paper_issue_id) {
             return;
         }
+        $available = app(PaperStock::class)->available((int) $this->paper_type_id, (int) $this->party_id);
+        $short = $this->shortageStock ? max(0, (int) $this->rims_needed - $available) : 0;
 
         // The order itself was approved, so its paper issue is too.
         $issue = (new PaperIssue)->forceFill([
@@ -95,7 +111,7 @@ class WorkOrder extends Model
             'kind' => $this->mode === PrintMode::Outsource ? PaperIssueKind::Outsource : PaperIssueKind::InHouse,
             'party_id' => $this->party_id,
             'paper_type_id' => $this->paper_type_id,
-            'quantity' => $this->rims_needed,
+            'quantity' => $short > 0 ? $available : $this->rims_needed,
             'reference' => $this->number,
             'book_format_id' => $this->book_format_id,
             'book_name' => $this->bookName(),
@@ -105,9 +121,28 @@ class WorkOrder extends Model
             'wastage_percent' => $this->wastage_percent,
             'created_by' => $this->reviewed_by ?? $this->created_by,
         ]);
-        $issue->save();
+        if ($short === 0 || $available > 0) {
+            $issue->save();
+        }
 
-        $this->forceFill(['paper_issue_id' => $issue->id, 'stage' => WorkOrderStage::Printing])->saveQuietly();
+        if ($short > 0) {
+            // The rest from the picked stock; the order's party owes those rims until it pays them back.
+            [$coverType, $coverParty] = $this->shortageStock;
+            $cover = $issue->replicate()->forceFill([
+                'party_id' => $coverParty, 'paper_type_id' => $coverType, 'quantity' => $short,
+                'note' => __('Shortage of :n rims for :party', ['n' => $short, 'party' => $this->party?->name]),
+            ]);
+            $cover->save();
+            PaperLoan::create([
+                'borrowed_on' => now()->toDateString(), 'paper_type_id' => $coverType, 'rims' => $short,
+                'borrower_party_id' => $this->party_id, 'lender_party_id' => $coverParty,
+                'paper_issue_id' => $issue->exists ? $issue->id : $cover->id, 'cover_issue_id' => $cover->id,
+                'note' => $this->number, 'created_by' => $this->created_by,
+            ]);
+            $issue = $issue->exists ? $issue : $cover;
+        }
+
+        $this->forceFill(['paper_issue_id' => $issue->id, 'stage' => $this->stage === WorkOrderStage::Waiting || $this->stage === null ? WorkOrderStage::Printing : $this->stage])->saveQuietly();
     }
 
     /**
@@ -192,7 +227,7 @@ class WorkOrder extends Model
                 ? __('Record the printed work received from the outside press first.')
                 : null,
             WorkOrderStage::ToFolding => $this->rimLoadings()->whereIn('kind', [RimMove::ToFolding, RimMove::FromOutside])->doesntExist()
-                ? __('Record the rims loaded to folding (Younus ka khata) first.')
+                ? __('Add the loading to folding on Younus ka khata first; saving it there moves the order on.')
                 : null,
             WorkOrderStage::Folding => $jobsDone(ContractorJobKind::Folding),
             WorkOrderStage::Binding => $jobsDone(ContractorJobKind::Binding),
@@ -249,6 +284,20 @@ class WorkOrder extends Model
     public function buyer(): BelongsTo
     {
         return $this->belongsTo(Party::class, 'buyer_id');
+    }
+
+    /**
+     * Until printing is recorded (and nothing else is), an order entered by mistake can be deleted; its rims go back.
+     */
+    public function canBeDeleted(): bool
+    {
+        return in_array($this->stage, [WorkOrderStage::Waiting, WorkOrderStage::Printing], true)
+            && ! $this->printed_copies
+            && $this->outsideReceipts()->doesntExist()
+            && $this->rimLoadings()->doesntExist()
+            && $this->wasteEntries()->doesntExist()
+            && $this->contractorJobs()->doesntExist()
+            && $this->dispatches()->doesntExist();
     }
 
     /**

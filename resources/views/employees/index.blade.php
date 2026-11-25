@@ -42,7 +42,15 @@
                     <td class="r" style="white-space:nowrap">
                         <a class="btn sm" href="{{ route('employees.show', $e) }}"><x-icon name="eye" />{{ __('View') }}</a>
                         @can('staff.manage')<a class="btn sm" href="{{ route('employees.edit', $e) }}" aria-label="{{ __('Edit :name', ['name' => $e->name]) }}"><x-icon name="edit" /></a>@endcan
-                        @can('staff.manage')<x-delete-button :action="route('employees.destroy', $e)" :confirm="__('Delete :name?', ['name' => $e->name])" :label="''" small aria-label="{{ __('Delete') }}" />@endcan
+                        @can('staff.manage')
+                            @if ($e->is_active)
+                                <button type="button" class="btn sm" style="color:var(--bad)" data-leave="{{ route('employees.leave', $e) }}" data-name="{{ $e->name }}" title="{{ __('Left or inactive') }}" aria-label="{{ __('Mark :name as left or inactive', ['name' => $e->name]) }}"><x-icon name="x" /></button>
+                            @else
+                                <form method="POST" action="{{ route('employees.rejoin', $e) }}" style="display:inline" onsubmit="return confirm(@js(__('Make :name active again?', ['name' => $e->name])))">@csrf @method('PATCH')
+                                    <button type="submit" class="btn sm"><x-icon name="check" />{{ __('Active again') }}</button>
+                                </form>
+                            @endif
+                        @endcan
                     </td>
                 </tr>
             @empty
@@ -51,4 +59,6 @@
             </tbody>
         </table></div>
     </div>
+
+    @can('staff.manage')@include('employees._leave-dialog')@endcan
 </x-layouts.app>
