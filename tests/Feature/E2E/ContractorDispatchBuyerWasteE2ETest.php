@@ -224,6 +224,58 @@ class ContractorDispatchBuyerWasteE2ETest extends TestCase
 
     // ---------------------------------------------------------------- contractor jobs & formulas
 
+    public function test_ticked_extra_work_is_added_to_the_job_bill(): void
+    {
+        $contractor = Contractor::factory()->create(['name' => 'Azeem Daftri']);
+        $this->actingAs($this->owner);
+        $this->get(route('contractor-jobs.create'))->assertOk()
+            ->assertSee('Sticker pasting')->assertSee('Numbering')->assertSee('Pinning')
+            ->assertSee('value="200"', false)->assertSee('value="65"', false);
+
+        $job = fn (array $extra) => $this->post(route('contractor-jobs.store'), $extra + [
+            'contractor_id' => $contractor->id, 'kind' => 'binding', 'job_on' => today()->toDateString(),
+            'forms' => 13, 'copies' => 20500, 'form_rate' => 115, 'copy_rate' => 510,
+            'has_sticker' => '0', 'sticker_rate' => 200, 'has_numbering' => '0', 'numbering_rate' => 65, 'has_pinning' => '0', 'pinning_rate' => '',
+        ]);
+
+        // Nothing ticked: binding only, (13 × 115 + 510) × 20.5 = 41,102.5 → Rs 41,100; the filled-in rates are not charged.
+        $job([])->assertSessionHasNoErrors();
+        $plain = ContractorJob::query()->latest('id')->firstOrFail();
+        $this->assertSame(41100, $plain->amount);
+        $this->assertNull($plain->sticker_rate);
+        $this->assertNull($plain->numbering_rate);
+
+        // Stickers and numbering ticked: + (200 + 65) × 20.5 = 5,432.5 → 46,535 → Rs 46,540.
+        $job(['has_sticker' => '1', 'has_numbering' => '1'])->assertSessionHasNoErrors();
+        $extras = ContractorJob::query()->latest('id')->firstOrFail();
+        $this->assertSame(46540, $extras->amount);
+        $this->assertSame('200.00', $extras->sticker_rate);
+        $this->assertSame('65.00', $extras->numbering_rate);
+        $this->assertNull($extras->pinning_rate);
+        $this->assertStringContainsString('+ (200 + 65) × 20,500 ÷ 1000', $extras->formula());
+
+        // Pinning has no fixed rate: ticked, it needs one typed in.
+        $job(['has_pinning' => '1'])->assertSessionHasErrors('pinning_rate');
+
+        // On a folding job too: (10 × 12,000 ÷ 1000) × 35 = 4,200, + pinning 50 × 12 = 600 → Rs 4,800.
+        $this->post(route('contractor-jobs.store'), [
+            'contractor_id' => $contractor->id, 'kind' => 'folding', 'job_on' => today()->toDateString(), 'forms' => 10, 'copies' => 12000, 'folding_rate' => 35,
+            'has_pinning' => '1', 'pinning_rate' => 50,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(4800, ContractorJob::query()->latest('id')->firstOrFail()->amount);
+
+        // The contractor's page shows what was done; editing can untick it and the bill is worked out again.
+        $this->get(route('contractors.show', $contractor))->assertSee('Sticker pasting: Rs 200')->assertSee('Numbering: Rs 65');
+        $this->get(route('contractor-jobs.edit', $extras))->assertOk()->assertSee('Sticker pasting');
+        $this->put(route('contractor-jobs.update', $extras), [
+            'job_on' => today()->toDateString(), 'forms' => 13, 'copies' => 20500, 'form_rate' => 115, 'copy_rate' => 510,
+            'has_sticker' => '1', 'sticker_rate' => 200, 'has_numbering' => '0', 'numbering_rate' => 65, 'has_pinning' => '0',
+        ])->assertSessionHasNoErrors();
+        $extras->refresh();
+        $this->assertNull($extras->numbering_rate);
+        $this->assertSame(45200, $extras->amount); // 41,102.5 + 4,100 = 45,202.5
+    }
+
     public function test_folding_and_binding_jobs_follow_the_client_formulas(): void
     {
         $contractor = Contractor::factory()->create();

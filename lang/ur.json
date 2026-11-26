@@ -1864,5 +1864,15 @@
     "Left or inactive": "چھوڑ گیا یا غیر فعال",
     "Mark :name as left or inactive": ":name کو چھوڑ گیا یا غیر فعال کریں",
     "Approvals required — the manager's entries wait for the owner": "منظوری ضروری — مینیجر کے اندراج مالک کی منظوری کا انتظار کریں",
-    "Turn off to approve every entry as it is saved; nothing goes to Approvals.": "بند کرنے پر ہر اندراج محفوظ ہوتے ہی منظور ہو جائے گا؛ منظوری میں کچھ نہیں جائے گا۔"
+    "Turn off to approve every entry as it is saved; nothing goes to Approvals.": "بند کرنے پر ہر اندراج محفوظ ہوتے ہی منظور ہو جائے گا؛ منظوری میں کچھ نہیں جائے گا۔",
+    "Extra work": "اضافی کام",
+    "Tick only what was done on this job. Each is charged per 1,000 books.": "صرف وہی نشان لگائیں جو اس کام میں ہوا۔ ہر ایک فی 1,000 کتب کے حساب سے لگے گا۔",
+    "Sticker pasting": "اسٹیکر لگوائی",
+    "Numbering": "نمبر لگوائی",
+    "Pinning": "پن لگوائی",
+    "Rate per 1,000 books": "ریٹ فی 1,000 کتب",
+    ":work rate (per 1,000 books)": ":work ریٹ (فی 1,000 کتب)",
+    "Sticker Rate": "اسٹیکر لگوائی ریٹ",
+    "Numbering Rate": "نمبر لگوائی ریٹ",
+    "Pinning Rate": "پن لگوائی ریٹ"
 }

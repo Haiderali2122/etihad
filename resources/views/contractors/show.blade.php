@@ -66,7 +66,7 @@
                 <tr data-href="{{ route('records.show', ['contractor-job', $job->id]) }}">
                     <td>{{ $job->job_on->format('j M Y') }}</td>
                     <td>{{ $job->workOrder?->number ?? '—' }}</td>
-                    <td>{{ $job->kind->label() }}</td>
+                    <td>{{ $job->kind->label() }}@if ($extras = $job->extrasDone())<div class="meta">{{ implode(' · ', $extras) }}</div>@endif</td>
                     <td class="meta" dir="ltr">{{ $job->formula() }}</td>
                     <td class="r num"><b>Rs {{ number_format($job->amount) }}</b></td>
                     <td><x-badge :tone="$job->isDone() ? 'good' : 'info'">{{ $job->isDone() ? __('Done') : __('In progress') }}</x-badge></td>

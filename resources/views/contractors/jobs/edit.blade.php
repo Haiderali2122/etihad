@@ -12,6 +12,7 @@
             @else
                 <x-field name="folding_rate" type="number" step="0.01" min="0" :label="__('Folding rate (per 1,000 forms)')" :value="(float) $job->folding_rate" required />
             @endif
+            @include('contractors.jobs._extras', ['job' => $job])
             <x-field name="job_on" type="date" :label="__('Date')" :value="$job->job_on->toDateString()" required />
             <x-field name="note" :label="__('Note')" :value="$job->note" full />
         </div></div>

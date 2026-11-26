@@ -33,12 +33,12 @@ class ContractorJobController extends Controller
         $data = $request->validated();
         $kind = ContractorJobKind::from($data['kind']);
 
-        $job = ContractorJob::create($data + [
-            'amount' => ContractorJob::price($kind, (float) $data['forms'], (int) $data['copies'],
-                (float) ($data['folding_rate'] ?? 0), (float) ($data['form_rate'] ?? 0), (float) ($data['copy_rate'] ?? 0)),
+        $job = new ContractorJob(StoreContractorJobRequest::extraWorkRates($data) + $data + [
             'state' => 'in_progress',
             'created_by' => $request->user()->id,
         ]);
+        $job->amount = $job->workOutAmount();
+        $job->save();
 
         return redirect()->route($job->work_order_id ? 'work-orders.show' : 'contractors.show', $job->work_order_id ?? $job->contractor_id)
             ->with('status', __(':kind job given to :name: Rs :amount.', ['kind' => $kind->label(), 'name' => $job->contractor->name, 'amount' => number_format($job->amount)]));
@@ -79,12 +79,11 @@ class ContractorJobController extends Controller
             'form_rate' => [$binding ? 'required' : 'nullable', 'numeric', 'decimal:0,2', 'min:0'],
             'copy_rate' => [$binding ? 'required' : 'nullable', 'numeric', 'decimal:0,2', 'min:0'],
             'note' => ['nullable', 'string', 'max:255'],
-        ]);
+        ] + StoreContractorJobRequest::extraWorkRules());
 
-        $contractorJob->update($data + [
-            'amount' => ContractorJob::price($contractorJob->kind, (float) $data['forms'], (int) $data['copies'],
-                (float) ($data['folding_rate'] ?? 0), (float) ($data['form_rate'] ?? 0), (float) ($data['copy_rate'] ?? 0)),
-        ]);
+        $contractorJob->fill(StoreContractorJobRequest::extraWorkRates($data) + $data);
+        $contractorJob->amount = $contractorJob->workOutAmount();
+        $contractorJob->save();
 
         return redirect()->route('contractors.show', $contractorJob->contractor_id)->with('status', __('Job saved: Rs :amount.', ['amount' => number_format($contractorJob->amount)]));
     }

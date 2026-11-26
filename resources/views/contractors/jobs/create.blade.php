@@ -22,7 +22,9 @@
                 <x-field name="copies" type="number" min="1" :label="__('Total books (copies)')" :value="$order?->copies" required />
                 <x-field name="folding_rate" type="number" step="0.01" min="0" :label="__('Folding rate (per 1,000 forms)')" />
                 <x-field name="form_rate" type="number" step="0.01" min="0" :label="__('Binding rate per form (per 1,000 books)')" />
-                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate (per 1,000 books)')" />                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
+                <x-field name="copy_rate" type="number" step="0.01" min="0" :label="__('Binding rate (per 1,000 books)')" />
+                @include('contractors.jobs._extras', ['job' => null])
+                <x-field name="job_on" type="date" :label="__('Date')" :value="today()->toDateString()" required />
                 <div class="field full"><div class="calc"><div class="lbl">{{ __('Amount') }}</div><div class="big num" id="jobAmount">Rs 0</div><div class="eq" id="jobEq" dir="ltr"></div></div></div>
                 <x-field name="note" :label="__('Note')" full />
             </div></div>
@@ -48,17 +50,26 @@
                         perCopy.value = c.copy ?? perCopy.value;
                         calc();
                     };
+                    const extras = [...document.querySelectorAll('input[data-extra]')];
                     const calc = () => {
                         const f = +forms.value || 0, n = +copies.value || 0;
-                        const amount = kind.value === 'binding' ? r10((f * (+perForm.value || 0) + (+perCopy.value || 0)) * n / 1000) : r10(f * n / 1000 * (+fold.value || 0));
+                        // Ticked extra work (stickers, numbering, pinning): each rate × books ÷ 1000, on top of the work.
+                        const extraRates = extras.filter(box => box.checked).map(box => +$(`f_${box.dataset.extra}_rate`).value || 0);
+                        const work = kind.value === 'binding' ? (f * (+perForm.value || 0) + (+perCopy.value || 0)) * n / 1000 : f * n / 1000 * (+fold.value || 0);
+                        const amount = r10(work + extraRates.reduce((a, b) => a + b, 0) * n / 1000);
                         $('jobAmount').textContent = 'Rs ' + fmt(amount);
-                        $('jobEq').textContent = kind.value === 'binding'
+                        $('jobEq').textContent = (kind.value === 'binding'
                             ? `((${f} × ${perForm.value || 0}) + ${perCopy.value || 0}) × ${fmt(n)} ÷ 1000`
-                            : `(${f} × ${fmt(n)} ÷ 1000) × ${fold.value || 0}`;
+                            : `(${f} × ${fmt(n)} ÷ 1000) × ${fold.value || 0}`)
+                            + (extraRates.length ? ` + (${extraRates.join(' + ')}) × ${fmt(n)} ÷ 1000` : '');
                     };
                     order.addEventListener('change', fill); contractor.addEventListener('change', fill);
                     kind.addEventListener('change', () => { toggle(); calc(); });
                     [forms, copies, fold, perForm, perCopy].forEach(el => el.addEventListener('input', calc));
+                    extras.forEach(box => {
+                        box.addEventListener('change', calc);
+                        $(`f_${box.dataset.extra}_rate`).addEventListener('input', calc);
+                    });
                     // After a validation error keep what was typed; otherwise start from the order and contractor.
                     toggle();
                     @json(session()->hasOldInput()) ? calc() : fill();
